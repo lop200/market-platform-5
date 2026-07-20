@@ -1,0 +1,54 @@
+# Render Blueprint (Infrastructure-as-Code) for the Market Intelligence Platform.
+# Connect this repo to Render as a "Blueprint" and it provisions the web service + a
+# managed Postgres database in one step. Secrets (API keys, access code) are marked
+# `sync: false`, so Render asks you to type them in the dashboard — they are NEVER stored
+# in this file or the git repo (CLAUDE.md / SRS 18: secrets via env only).
+databases:
+  - name: market-platform-db
+    plan: free            # free Postgres (expires after 90 days on the free tier — upgrade later)
+    databaseName: market_platform
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: market-platform
+    runtime: python
+    plan: free            # free web service (spins down when idle; first request after idle is slow)
+    region: frankfurt     # closest Render region to the Gulf; change if you prefer
+    branch: main
+    healthCheckPath: /api/v1/health
+    buildCommand: "pip install -r requirements.txt -r requirements-postgres.txt"
+    # Migrations run on every deploy, then the server starts on Render's injected $PORT.
+    startCommand: "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: market-platform-db
+          property: connectionString
+      - key: MARKET_DATA_PROVIDER
+        value: alpaca
+      - key: LLM_PROVIDER
+        value: anthropic
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-4-5-20251001
+      - key: ENABLE_SELF_AUDIT_SCHEDULER
+        value: "true"
+      - key: DEFAULT_DAILY_CAP_USD
+        value: "1.00"
+      - key: DEFAULT_MONTHLY_CAP_USD
+        value: "20.00"
+      - key: COST_ANOMALY_CALLS_PER_MINUTE
+        value: "10"
+      # --- Secrets: you type these in the Render dashboard (sync:false = not in git) ---
+      - key: API_KEY                 # long random string; also signs the site-lock cookie
+        sync: false
+      - key: ACCESS_CODE_MAIN        # the main site-access code you hand out
+        sync: false
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_API_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

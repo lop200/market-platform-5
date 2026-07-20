@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     # --- Self-audit scheduler (SRS 15, M3) ---
     enable_self_audit_scheduler: bool = Field(default=True, alias="ENABLE_SELF_AUDIT_SCHEDULER")
 
+    # --- Site lock (deployment gate) ---
+    # When set, EVERY page/route (except /lock, the health check, and API-key-bearing
+    # API calls) requires a visitor access code entered on the /lock screen, which also
+    # carries the mandatory disclaimer consent checkbox. Unset locally -> no lock, so
+    # dev and the test suite are unaffected. Extra per-person codes live in the
+    # access_codes DB table, managed from /lock/admin (main code holders only).
+    access_code_main: str | None = Field(default=None, alias="ACCESS_CODE_MAIN")
+    site_lock_cookie_days: int = Field(default=30, alias="SITE_LOCK_COOKIE_DAYS")
+
     # --- Cache (SRS 17.1) ---
     # Shortened from 15 min to 1 min while the market is open (owner request, 2026-07-18)
     # so a re-analysis of the same symbol reflects a fresher price instead of a stale hit.

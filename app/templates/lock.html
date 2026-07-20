@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>الدخول — منصة الذكاء التحليلي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1420; --card: #171d2e; --border: #2a3346; --text: #e8ecf4; --muted: #97a2bd;
+    --accent: #4f8cff; --bad: #e5545e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Tajawal', sans-serif; background: var(--bg); color: var(--text);
+    margin: 0; padding: 24px; line-height: 1.7; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lock-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 28px; max-width: 460px; width: 100%;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 18px; }
+  .disclaimer-box {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; font-size: 0.82rem; color: var(--muted); margin-bottom: 16px;
+    max-height: 180px; overflow-y: auto;
+  }
+  label.consent { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 16px; cursor: pointer; }
+  label.consent input { margin-top: 5px; }
+  .code-row { display: flex; gap: 10px; }
+  input[type="password"] {
+    flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font-size: 1rem; font-family: inherit;
+  }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: 10px 22px; font-size: 1rem; font-family: inherit; cursor: pointer;
+  }
+  .error { color: var(--bad); font-size: 0.85rem; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <div class="lock-card">
+    <h1>🔒 منصة الذكاء التحليلي للأسهم والأوبشن</h1>
+    <div class="subtitle">الدخول برمز خاص فقط — أدخل رمزك ووافق على الإقرار أدناه.</div>
+
+    <form method="post" action="/lock">
+      <div class="disclaimer-box">{{ disclaimer }}</div>
+      <label class="consent">
+        <input type="checkbox" name="consent" value="yes" required>
+        <span>قرأت الإقرار أعلاه وأوافق عليه: هذه المنصة أداة تحليل <b>تعليمية</b> لدعم القرار، لا تقدّم توصيات استثمارية، والقرار ومسؤوليته عليّ وحدي.</span>
+      </label>
+      <div class="code-row">
+        <input type="password" name="code" placeholder="رمز الدخول" autocomplete="off" required autofocus>
+        <button type="submit">دخول</button>
+      </div>
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    </form>
+  </div>
+</body>
+</html>

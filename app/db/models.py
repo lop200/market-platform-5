@@ -227,6 +227,22 @@ class OptionWatchlistEvent(Base):
     item: Mapped["OptionWatchlistItem"] = relationship(back_populates="events")
 
 
+class AccessCode(Base):
+    """Per-person site-access codes for the deployment lock screen (owner request
+    2026-07-20). The MAIN code lives only in env (ACCESS_CODE_MAIN) — this table holds
+    the extra codes the owner hands to specific people, so any one of them can be
+    revoked without touching the others. Codes are stored as SHA-256 hashes."""
+
+    __tablename__ = "access_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    label: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class CacheEntry(Base):
     """جدول الكاش داخل Postgres/SQLite (بديل Redid للتوفير). SRS 17.2."""
 

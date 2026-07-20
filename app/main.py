@@ -13,10 +13,11 @@ logging.basicConfig(
     level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s"
 )
 
-from app.api import routes_analysis, routes_audit, routes_cost, routes_options, routes_screener, routes_web
+from app.api import routes_analysis, routes_audit, routes_cost, routes_lock, routes_options, routes_screener, routes_web
 from app.config import get_settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.providers.factory import get_market_data_provider
+from app.security.site_lock import SiteLockMiddleware
 
 
 @asynccontextmanager
@@ -37,6 +38,11 @@ app = FastAPI(
     title="US Stock & Options Decision Intelligence Platform", version="0.1.0", lifespan=lifespan
 )
 
+# Site-wide access lock (Phase 5, owner request 2026-07-20) — inert unless
+# ACCESS_CODE_MAIN is set in the environment (see app/security/site_lock.py).
+app.add_middleware(SiteLockMiddleware)
+
+app.include_router(routes_lock.router)
 app.include_router(routes_analysis.router)
 app.include_router(routes_audit.router)
 app.include_router(routes_cost.router)

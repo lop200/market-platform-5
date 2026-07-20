@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>إدارة رموز الدخول</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1420; --card: #171d2e; --border: #2a3346; --text: #e8ecf4; --muted: #97a2bd;
+    --accent: #4f8cff; --good: #2fbf71; --bad: #e5545e;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Tajawal', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px; line-height: 1.7; }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+  h1 { font-size: 1.2rem; margin: 0 0 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  .revoked { color: var(--muted); text-decoration: line-through; }
+  .active-badge { color: var(--good); }
+  input[type="text"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-family: inherit; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 18px; font-family: inherit; cursor: pointer; }
+  button.danger { background: var(--bad); padding: 5px 12px; font-size: 0.8rem; }
+  .new-code-box { background: #1d3a24; border: 1px solid var(--good); border-radius: 10px; padding: 14px; margin-bottom: 14px; font-size: 0.95rem; }
+  .new-code-box code { font-size: 1.2rem; letter-spacing: 1px; background: var(--bg); padding: 4px 10px; border-radius: 6px; }
+  .error { color: var(--bad); font-size: 0.85rem; margin-bottom: 10px; }
+  .muted { color: var(--muted); font-size: 0.82rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>🗝️ إدارة رموز الدخول</h1>
+    <div class="muted" style="margin-bottom:14px">الرمز الرئيسي محفوظ في إعدادات الخادم (ACCESS_CODE_MAIN) ولا يظهر هنا. الرموز أدناه لأشخاص محددين — إلغاء الرمز يقطع دخول صاحبه فوراً.</div>
+
+    {% if new_code %}
+    <div class="new-code-box">
+      رمز <b>{{ new_label }}</b> الجديد: <code>{{ new_code }}</code><br>
+      <span class="muted">انسخه الآن وأرسله لصاحبه — لن يظهر مرة أخرى (يُحفظ مشفَّراً).</span>
+    </div>
+    {% endif %}
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <form method="post" action="/lock/admin/add" style="display:flex; gap:10px; margin-bottom:18px">
+      <input type="text" name="label" placeholder="اسم الشخص (مثال: أبو فهد)" required>
+      <button type="submit">إنشاء رمز</button>
+    </form>
+
+    <table>
+      <tr><th>الاسم</th><th>الحالة</th><th>أُنشئ</th><th></th></tr>
+      {% for c in codes %}
+      <tr>
+        <td class="{{ '' if c.active else 'revoked' }}">{{ c.label }}</td>
+        <td>{% if c.active %}<span class="active-badge">فعّال</span>{% else %}<span class="muted">ملغى</span>{% endif %}</td>
+        <td class="muted">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
+        <td>
+          {% if c.active %}
+          <form method="post" action="/lock/admin/revoke" style="margin:0">
+            <input type="hidden" name="code_id" value="{{ c.id }}">
+            <button type="submit" class="danger">إلغاء</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">لا توجد رموز إضافية بعد.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="muted"><a href="/">→ العودة للمنصة</a></div>
+</div>
+</body>
+</html>
