@@ -16,6 +16,12 @@ apscheduler==3.11.0
 jinja2==3.1.5
 python-multipart==0.0.20
 
+# Postgres driver — installs automatically on the Render (Linux) deploy so DATABASE_URL
+# can point at a managed Postgres, but is skipped on local dev machines (Windows/macOS)
+# which use SQLite and have no prebuilt wheel on newer Python. No build-command change
+# needed: a plain `pip install -r requirements.txt` picks it up on the server.
+psycopg2-binary==2.9.10 ; platform_system == "Linux"
+
 pytest==8.3.4
 pytest-cov==6.0.0
 httpx==0.28.1

@@ -17,7 +17,9 @@ services:
     region: frankfurt     # closest Render region to the Gulf; change if you prefer
     branch: main
     healthCheckPath: /api/v1/health
-    buildCommand: "pip install -r requirements.txt -r requirements-postgres.txt"
+    # psycopg2-binary is in requirements.txt behind a Linux marker, so it installs here
+    # (Render is Linux) but is skipped on local Windows/macOS dev — no separate file needed.
+    buildCommand: "pip install -r requirements.txt"
     # Migrations run on every deploy, then the server starts on Render's injected $PORT.
     startCommand: "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:

@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     # Local dev default: SQLite file. Production: Postgres DSN via env (SRS AD-5).
     database_url: str = Field(default="sqlite:///./market_platform.db", alias="DATABASE_URL")
 
+    @property
+    def sqlalchemy_url(self) -> str:
+        """The DATABASE_URL, normalized for SQLAlchemy 2.x. Render (like Heroku) hands out
+        connection strings with the legacy `postgres://` scheme, but SQLAlchemy 2.x only
+        accepts `postgresql://` — so DATABASE_URL can be pasted from Render verbatim and
+        still work. Non-Postgres URLs (SQLite) pass through unchanged."""
+        url = self.database_url
+        if url.startswith("postgres://"):
+            return "postgresql://" + url[len("postgres://"):]
+        return url
+
     # --- Market data providers (SRS 5.3, 9) ---
     market_data_provider: str = Field(
         default="yfinance", alias="MARKET_DATA_PROVIDER"
