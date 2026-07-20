@@ -16,12 +16,17 @@ logging.basicConfig(
 from app.api import routes_analysis, routes_audit, routes_cost, routes_lock, routes_options, routes_screener, routes_web
 from app.config import get_settings
 from app.core.scheduler import start_scheduler, stop_scheduler
+from app.db.session import init_db
 from app.providers.factory import get_market_data_provider
 from app.security.site_lock import SiteLockMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Ensure the schema + cost_limits defaults exist before serving any request (fixes a
+    # fresh deploy where migrations were skipped). Idempotent, so it runs unconditionally.
+    init_db()
+
     # Skip during pytest (PYTEST_CURRENT_TEST is set automatically) so the test suite
     # never spins up a real background scheduler thread.
     settings = get_settings()
