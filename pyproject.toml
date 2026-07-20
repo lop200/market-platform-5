@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = [
+    "live: requires network access to a live provider (opt in with `pytest -m live`)",
+]
+
+[tool.coverage.run]
+source = ["app"]

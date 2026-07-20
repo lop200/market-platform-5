@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>منصة الذكاء التحليلي للأسهم</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg: #0f1420; --card: #171d2e; --border: #2a3346; --text: #e8ecf4; --muted: #97a2bd;
+    --accent: #4f8cff; --good: #2fbf71; --warn: #e8b93f; --bad: #e5545e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Tajawal', sans-serif; background: var(--bg); color: var(--text);
+    margin: 0; padding: 24px; line-height: 1.7;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+  .cost-bar {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 20px; font-size: 0.9rem; display: flex;
+    justify-content: space-between; align-items: center;
+  }
+  .cost-bar .pct { font-weight: 700; }
+  .cost-bar.warn-80 .pct { color: var(--warn); }
+  form.analyze-form {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; position: relative;
+  }
+  .autocomplete-wrap { position: relative; flex: 1; min-width: 160px; }
+  input[type=text] {
+    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: #0c111c; color: var(--text); font-family: inherit; font-size: 1rem;
+  }
+  .autocomplete-list {
+    position: absolute; top: calc(100% + 4px); right: 0; left: 0; background: #171d2e;
+    border: 1px solid var(--border); border-radius: 8px; max-height: 240px; overflow-y: auto;
+    z-index: 30; display: none; box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  }
+  .autocomplete-item { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; }
+  .autocomplete-item small { color: var(--muted); margin-inline-start: 8px; }
+  .autocomplete-item:hover, .autocomplete-item.active { background: #22304a; }
+  select {
+    padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: #0c111c; color: var(--text); font-family: inherit;
+  }
+  button {
+    padding: 10px 20px; border-radius: 8px; border: none; background: var(--accent);
+    color: white; font-family: inherit; font-size: 1rem; cursor: pointer; font-weight: 500;
+  }
+  button:hover { opacity: 0.9; }
+  .error-banner {
+    background: #3a1620; border: 1px solid var(--bad); color: #ffb3b8; border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 20px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; margin-bottom: 16px;
+  }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 500;
+  }
+  .badge-regime { background: #22304a; color: #9dc0ff; }
+  .badge-cache { background: #2a3d2f; color: var(--good); }
+  .badge-fallback { background: #3a3420; color: var(--warn); }
+  .badge-live { background: #1d3a24; color: var(--good); font-weight: 700; }
+  .badge-delayed { background: #3a3420; color: var(--warn); font-weight: 700; }
+  .badge-daily { background: #22304a; color: var(--muted); font-weight: 700; }
+  .price-row { display: flex; align-items: baseline; gap: 12px; margin: 6px 0 2px; flex-wrap: wrap; }
+  .price-big { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tldr {
+    font-size: 1.1rem; font-weight: 700; margin: 14px 0; padding: 12px 14px;
+    background: #0c111c; border-radius: 10px; border-inline-start: 4px solid var(--accent);
+  }
+  .tldr.loading { font-weight: 400; color: var(--muted); font-size: 0.9rem; }
+  .plain-summary {
+    background: #0c111c; border-radius: 10px; padding: 14px 16px; margin: 14px 0;
+    font-size: 1rem; line-height: 1.9;
+  }
+  .plain-summary p { margin: 0 0 6px; }
+  .plain-summary p:last-child { margin-bottom: 0; }
+  #live-change { font-weight: 700; font-size: 1.1rem; }
+  details.tech-details { margin: 16px 0; border-top: 1px solid var(--border); padding-top: 12px; }
+  details.tech-details summary { cursor: pointer; font-weight: 500; color: var(--accent); margin-bottom: 10px; }
+  .chart-container { margin: 16px 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .gauges-grid { display: flex; flex-wrap: wrap; gap: 18px; justify-content: space-around; margin: 18px 0; }
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100px; }
+  .gauge {
+    width: 84px; height: 84px; border-radius: 50%; position: relative;
+    background: conic-gradient(var(--gcolor) calc(var(--pct) * 1%), #0c111c 0);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gauge::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--card); }
+  .gauge-value { position: relative; z-index: 1; font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+  .gauge-label { font-size: 0.76rem; color: var(--muted); text-align: center; cursor: help; }
+  .indicator-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0; }
+  .indicator-card { background: #0c111c; border-radius: 10px; padding: 12px; text-align: center; }
+  .indicator-card .name { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; }
+  .indicator-card .big-number { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .indicator-card .arrow { font-size: 1.15rem; margin-inline-start: 4px; }
+  .arrow-up { color: var(--good); }
+  .arrow-down { color: var(--bad); }
+  .arrow-neutral { color: var(--muted); }
+  .indicator-card .sentence { font-size: 0.78rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .scenario-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+  @media (max-width: 680px) { .scenario-cards { grid-template-columns: 1fr; } }
+  .scenario-card { border-radius: 10px; padding: 14px; font-size: 0.84rem; line-height: 1.5; overflow: hidden; }
+  .scenario-card h4 { margin: 0 0 6px 0; font-size: 0.85rem; }
+  .scenario-bullish { background: #16281d; border: 1px solid var(--good); }
+  .scenario-bearish { background: #2e1418; border: 1px solid var(--bad); }
+  .scenario-neutral { background: #20263a; border: 1px solid var(--border); }
+  .options-btn { background: #22304a; color: #9dc0ff; border: 1px solid var(--accent); margin: 8px 0 4px; }
+  .options-panel { margin-top: 14px; display: none; }
+  .options-panel.open { display: block; }
+  .options-note {
+    background: #20263a; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; font-size: 0.88rem;
+  }
+  .options-note a { color: var(--accent); cursor: pointer; }
+  details.full-report { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .tab-bar a.tab-btn { text-decoration: none; }
+  .screener-banner {
+    background: #20263a; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font-size: 0.82rem; color: var(--muted); margin-bottom: 14px;
+  }
+  .screener-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; }
+  .screener-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .screener-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .screener-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .screener-score {
+    display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+    border-radius: 50%; background: var(--gcolor); color: #0c111c; font-weight: 700; font-size: 0.95rem;
+  }
+  .screener-price { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .screener-conclusion { font-size: 0.82rem; color: var(--text); line-height: 1.6; margin-bottom: 10px; }
+  .screener-levels { font-size: 0.78rem; color: var(--muted); display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+  .screener-reasons { margin: 0; padding-inline-start: 18px; font-size: 0.78rem; color: var(--text); }
+  .screener-reasons li { margin-bottom: 2px; }
+  details.full-report summary { cursor: pointer; font-weight: 500; color: var(--accent); margin-bottom: 10px; }
+  .data-source-note { font-size: 0.82rem; color: var(--muted); margin-bottom: 10px; }
+  .levels { display: flex; gap: 24px; flex-wrap: wrap; margin: 12px 0; font-size: 0.9rem; }
+  .levels .col b { display: block; margin-bottom: 4px; color: var(--muted); }
+  .report-text, .devils-text { white-space: pre-wrap; font-size: 0.95rem; }
+  .devils-box {
+    background: #241a12; border: 1px solid #6b4a1f; border-radius: 10px; padding: 14px 16px; margin-top: 14px;
+  }
+  .devils-box h3 { margin: 0 0 8px 0; font-size: 1rem; color: var(--warn); }
+  footer.disclaimer {
+    margin-top: 28px; font-size: 0.78rem; color: var(--muted); border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  .tab-bar { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    background: none; border: none; color: var(--muted); font-family: inherit; font-size: 0.95rem;
+    padding: 10px 6px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+  .tab-btn.snipe-btn { background: var(--accent); color: #fff; border-radius: 8px 8px 0 0; font-weight: 700; }
+  .tab-btn.snipe-btn.active { border-bottom-color: #fff; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .sub-tab-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+  .sub-tab-bar a.tab-btn {
+    font-size: 0.85rem; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px;
+  }
+  .sub-tab-bar a.tab-btn.active { background: #22304a; color: var(--text); border-color: var(--accent); }
+  .snipe-accuracy {
+    background: #0c111c; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 14px; font-size: 0.86rem; color: var(--text); line-height: 1.6;
+  }
+  .snipe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+  .snipe-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .snipe-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .risk-warning-badge {
+    background: #3a1620; border: 1px solid var(--bad); color: #ffb3b8; border-radius: 8px;
+    padding: 6px 10px; font-size: 0.78rem; font-weight: 700; margin-bottom: 10px; cursor: help;
+  }
+  .snipe-price-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+  .snipe-change-up { color: var(--good); font-weight: 700; }
+  .snipe-change-down { color: var(--bad); font-weight: 700; }
+  .snipe-bar-track {
+    position: relative; height: 8px; border-radius: 4px; margin: 10px 0 16px;
+    background: linear-gradient(90deg, var(--bad), var(--warn), var(--good));
+  }
+  .snipe-bar-marker {
+    position: absolute; top: -4px; width: 2px; height: 16px; background: #fff; transform: translateX(-50%);
+  }
+  .snipe-levels { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; margin-bottom: 10px; }
+  .snipe-level-row {
+    display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px;
+    border-radius: 8px; background: #0c111c; cursor: help;
+  }
+  .snipe-level-invalidation { border-inline-start: 3px solid var(--bad); }
+  .snipe-level-zone1 { border-inline-start: 3px solid var(--good); }
+  .snipe-level-zone2 { border-inline-start: 3px solid #4fd1ff; }
+  .snipe-reasons { margin: 0 0 10px; padding-inline-start: 18px; font-size: 0.78rem; color: var(--text); }
+  .snipe-reasons li { margin-bottom: 2px; }
+  .snipe-report-form button {
+    width: 100%; background: #22304a; color: #9dc0ff; border: 1px solid var(--accent); padding: 8px;
+  }
+  form.option-form {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;
+  }
+  input[type=file] { color: var(--text); font-family: inherit; flex: 1; min-width: 200px; }
+  .greeks-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; font-size: 0.85rem; }
+  .greeks-grid .g { background: #0c111c; border-radius: 8px; padding: 8px; text-align: center; }
+  .greeks-grid .g b { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 4px; }
+  .translated-levels { font-size: 0.9rem; margin: 12px 0; }
+  .translated-levels table { width: 100%; border-collapse: collapse; }
+  .translated-levels td, .translated-levels th { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); }
+
+  .watch-filters {
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.85rem;
+  }
+  .watch-filters label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .watch-filters input[type=number] {
+    width: 80px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: #0c111c; color: var(--text); font-family: inherit;
+  }
+  .dte-warning {
+    background: #3a1620; border: 1px solid var(--bad); color: #ffb3b8; border-radius: 8px;
+    padding: 8px 10px; font-size: 0.78rem; font-weight: 700; margin-bottom: 10px;
+  }
+  .watch-add-btn {
+    width: 100%; background: #22304a; color: #f0c96a; border: 1px solid var(--warn); padding: 8px;
+    margin-top: 8px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.85rem;
+  }
+  .watch-inline-form {
+    display: none; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: flex-end;
+    background: #0c111c; border-radius: 8px; padding: 10px;
+  }
+  .watch-inline-form.open { display: flex; }
+  .watch-inline-form label { font-size: 0.72rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  .watch-inline-form input {
+    width: 90px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: #171d2e; color: var(--text); font-family: inherit;
+  }
+  .watch-inline-form button { padding: 6px 14px; font-size: 0.8rem; }
+  .watch-inline-note { width: 100%; font-size: 0.72rem; color: var(--muted); }
+
+  .watchlist-section { margin-top: 24px; }
+  .watchlist-section h2 { font-size: 1.05rem; margin-bottom: 10px; }
+  .watch-empty { color: var(--muted); font-size: 0.85rem; }
+  .watch-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 10px; transition: box-shadow 0.3s;
+  }
+  .watch-item.tier-green { border-inline-start: 4px solid var(--good); }
+  .watch-item.tier-yellow { border-inline-start: 4px solid var(--warn); }
+  .watch-item.tier-orange { border-inline-start: 4px solid #e8843f; }
+  .watch-item.tier-red { border-inline-start: 4px solid var(--bad); }
+  .watch-item.tier-black { border-inline-start: 4px solid #666; background: #1a0f10; }
+  .watch-item.flash { box-shadow: 0 0 0 3px var(--bad); }
+  .watch-item-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .watch-status-badge { font-size: 0.95rem; font-weight: 700; }
+  .watch-item-meta { font-size: 0.78rem; color: var(--muted); margin: 4px 0; }
+  .watch-item-message { font-size: 0.88rem; margin: 6px 0; }
+  .watch-item-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .watch-item-actions button { padding: 5px 12px; font-size: 0.76rem; background: #22304a; color: var(--muted); border: 1px solid var(--border); }
+  .watch-log { display: none; margin-top: 8px; font-size: 0.76rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; }
+  .watch-log.open { display: block; }
+  .watch-log-row { padding: 3px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>منصة الذكاء التحليلي للأسهم والأوبشن</h1>
+  <div class="subtitle">تحليل تعليمي حتمي — لا توصيات استثمارية</div>
+
+  <div class="cost-bar {{ 'warn-80' if cost_today.pct >= 80 else '' }}">
+    <span>المصروف اليومي</span>
+    <span>{{ "%.3f"|format(cost_today.spent) }}$ من {{ "%.2f"|format(cost_today.cap) }}$ — <span class="pct">{{ cost_today.pct }}%</span></span>
+  </div>
+
+  <div class="tab-bar">
+    <a class="tab-btn snipe-btn {{ 'active' if active_tab in ['snipe-stocks', 'snipe-options'] else '' }}" href="/ui/screener/snipe/stocks">🎯 قنص اليوم</a>
+    <button type="button" class="tab-btn {{ 'active' if active_tab == 'stock' else '' }}" data-tab="tab-stock">تحليل سهم</button>
+    <button type="button" class="tab-btn {{ 'active' if active_tab == 'option' else '' }}" data-tab="tab-option">تحليل عقد أوبشن (صورة)</button>
+    <a class="tab-btn {{ 'active' if active_tab == 'screener-daily' else '' }}" href="/ui/screener/daily">📊 أبرز الإعدادات اليوم</a>
+    <a class="tab-btn {{ 'active' if active_tab == 'screener-weekly' else '' }}" href="/ui/screener/weekly">📅 الإعدادات الأسبوعية</a>
+    <a class="tab-btn {{ 'active' if active_tab == 'screener-options' else '' }}" href="/ui/screener/options">⚡ أوبشن بجاهزية عالية</a>
+  </div>
+
+  <div id="tab-stock" class="tab-panel {{ 'active' if active_tab == 'stock' else '' }}">
+    <form class="analyze-form" method="post" action="/ui/analyze" id="analyze-form" autocomplete="off">
+      <div class="autocomplete-wrap">
+        <input type="text" name="symbol" id="symbol-input" placeholder="رمز السهم أو اسم الشركة مثل NVDA" value="{{ symbol or '' }}" required>
+        <div class="autocomplete-list" id="autocomplete-list"></div>
+      </div>
+      <select name="lang">
+        <option value="ar" {{ "selected" if lang == "ar" else "" }}>العربية</option>
+        <option value="en" {{ "selected" if lang == "en" else "" }}>English</option>
+      </select>
+      <button type="submit" id="analyze-btn">تحليل</button>
+    </form>
+    <div id="loading-note" style="display:none; font-size:0.85rem; color:var(--muted); margin:-12px 0 20px;">
+      جارٍ التحليل... قد يستغرق حتى 40 ثانية لأول مرة لهذا الرمز، فضلاً لا تضغط الزر مرة أخرى.
+    </div>
+
+    {% if error %}
+    <div class="error-banner">{{ error }}</div>
+    {% endif %}
+
+    {% set v = result or partial %}
+    {% if v %}
+    {% set is_ar = lang == "ar" %}
+    {% set badge_map = {"intraday": ("badge-live", "مباشر ⚡"), "delayed_15m": ("badge-delayed", "مؤجل 15 دقيقة"), "daily_only": ("badge-daily", "بيانات يومية (إغلاق سابق)")} %}
+    {% set badge_cls, badge_txt = badge_map.get(v.data_quality, ("badge-daily", v.data_quality)) %}
+    {% set ps = v.plain_summary %}
+    <div class="card" data-symbol="{{ v.symbol }}" data-market-open="{{ 'true' if v.market_open else 'false' }}" data-open-price="{{ ps.open_price }}">
+      <div class="card-header">
+        <div>
+          <strong style="font-size:1.1rem">{{ v.symbol }}</strong>
+          <span class="badge badge-regime">{{ v.regime }}</span>
+          {% if result and result.from_cache %}<span class="badge badge-cache">من الكاش{% if result.cached_minutes_ago is not none %} — قبل {{ result.cached_minutes_ago }} دقيقة{% endif %}</span>{% endif %}
+        </div>
+        <div style="font-size:0.85rem;color:var(--muted)" id="live-cost">التكلفة: {{ "%.4f"|format(result.cost_usd) if result else "0.0000" }}$</div>
+      </div>
+
+      <div class="price-row">
+        <span class="badge {{ badge_cls }}">{{ badge_txt }}</span>
+        <span class="price-big" id="live-price">{{ "%.2f"|format(v.last_close) }}$</span>
+        <span id="live-change" class="{{ 'snipe-change-up' if ps.change_from_open_pct >= 0 else 'snipe-change-down' }}">{{ "%+.2f"|format(ps.change_from_open_pct) }}%</span>
+      </div>
+
+      <div class="data-source-note">
+        مصدر السعر:
+        <b>{{ {"yfinance": "Yahoo Finance (تطوير)", "alpaca": "Alpaca (IEX)"}.get(v.data_provider, v.data_provider) }}</b>
+        · بيانات حتى إغلاق: <b>{{ v.data_as_of }}</b>
+        {% if v.market_open %} (السوق مفتوح الآن — السعر يتحدث كل 15 ثانية){% else %} (السوق مغلق الآن){% endif %}
+      </div>
+
+      <div class="plain-summary">
+        <p>السهم فتح اليوم عند {{ "%.2f"|format(ps.open_price) }}$، حالياً عند {{ "%.2f"|format(ps.current_price) }}$ ({{ "%+.2f"|format(ps.change_from_open_pct) }}% من الفتح).</p>
+        <p>الوضع بكلمة: <b>{{ ps.state_label }}</b>.</p>
+        <p>من بداية الجلسة: {{ "صاعد" if ps.change_from_open_pct >= 0 else "هابط" }} بنسبة {{ "%.2f"|format(ps.change_from_open_pct|abs) }}%.</p>
+        <p>{{ ps.direction_text }}</p>
+      </div>
+
+      <div class="tldr loading" id="slot-tldr">{% if result %}{{ result.tldr_ar if is_ar else result.tldr_en }}{% else %}جارٍ تحضير الشرح والسيناريوهات...{% endif %}</div>
+
+      {% if v.chart_bars %}
+      <div class="chart-container" id="chart-container" data-bars='{{ v.chart_bars|chart_bars_json }}'
+           data-supports='{{ v.notable_levels.supports|tojson }}'
+           data-resistances='{{ v.notable_levels.resistances|tojson }}'
+           data-invalidation='{{ (v.notable_levels.invalidation if v.notable_levels.invalidation is not none else "null") }}'>
+      </div>
+      {% endif %}
+
+      <div class="gauges-grid">
+        {% for key, label, formula in [
+          ("technical", "الدرجة الفنية", "TS = 20×اتجاه المتوسطات + 15×RSI + 15×MACD + 20×القرب من الدعم/بعد المقاومة + 15×RVOL + 15×بنية القمم/القيعان"),
+          ("volatility", "درجة التقلب", "VS = النسبة المئوية لترتيب ATR% الحالي ضمن آخر 90 جلسة (معلومة محايدة)"),
+          ("liquidity", "درجة السيولة", "LS = 40×(Dollar Volume/50M) + 30×(AvgVol20/1M) + 30×(1−Spread%/0.5%)"),
+          ("risk", "درجة المخاطرة", "RS = 35×(VS/100) + 25×(بعد المسافة لمستوى الإبطال) + 20×(1−LS/100) + 20×(قرب حدث معلوم — غير مفحوص في MVP)"),
+          ("overall_confidence", "الثقة الإجمالية", "OC = TS × (1 − RS/200) × جودة_البيانات"),
+        ] %}
+        {% set value = v.scores[key] %}
+        {% set gcolor = 'var(--bad)' if (key=='risk' and value>60) or (key!='risk' and value<40) else ('var(--warn)' if value<70 else 'var(--good)') %}
+        <div class="gauge-wrap">
+          <div class="gauge" style="--pct:{{ value }}; --gcolor:{{ gcolor }};">
+            <span class="gauge-value">{{ "%.0f"|format(value) }}</span>
+          </div>
+          <span class="gauge-label" title="لماذا هذه الدرجة؟ {{ formula }}">{{ label }} ؟</span>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="font-size:0.78rem;color:var(--muted)">تفاصيل المعادلات: {{ v.score_formulas_ref }}</div>
+
+      <details class="tech-details">
+        <summary>تفاصيل فنية ▼</summary>
+        {% set rsi = v.indicators.rsi_14 %}
+        {% set rsi_dir = 'up' if rsi > 60 else ('down' if rsi < 40 else 'neutral') %}
+        {% set macd_hist = v.indicators.macd.histogram %}
+        {% set macd_dir = 'up' if macd_hist > 0 else ('down' if macd_hist < 0 else 'neutral') %}
+        {% set arrow_map = {"up": ("↑", "arrow-up"), "down": ("↓", "arrow-down"), "neutral": ("→", "arrow-neutral")} %}
+        <div class="indicator-cards">
+          {% for name, value, explanation, dir in [
+            ("RSI (14)", "%.1f"|format(rsi), "يقيس قوة الشراء مقابل البيع مؤخراً — فوق 70 تشبع شرائي، تحت 30 تشبع بيعي.", rsi_dir),
+            ("MACD", "%.3f"|format(macd_hist), "يقارن بين متوسطين متحركين ليكشف تغيّر الزخم — موجب ومتزايد يعني الزخم يتقوى صعوداً.", macd_dir),
+            ("ATR%", "%.2f"|format(v.indicators.atr_pct) + "%", "يقيس مدى تحرك السعر يومياً كنسبة منه — معلومة عن حدة التقلب فقط.", "neutral"),
+            ("ADX (14)", "%.1f"|format(v.indicators.adx_14), "يقيس قوة الاتجاه الحالي بغض النظر عن جهته — فوق 25 اتجاه قوي، تحت 20 سوق عرضي.", "neutral"),
+            ("Bollinger BW", "%.3f"|format(v.indicators.bollinger.bandwidth), "يقيس اتساع نطاق تذبذب السعر — معلومة عن الانضغاط أو الاتساع فقط.", "neutral"),
+          ] %}
+          {% set arrow_char, arrow_cls = arrow_map[dir] %}
+          <div class="indicator-card">
+            <div class="name">{{ name }}</div>
+            <div class="big-number">{{ value }}<span class="arrow {{ arrow_cls }}">{{ arrow_char }}</span></div>
+            <div class="sentence">{{ explanation }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+
+      {% if result %}
+      {% set scenario_bullish = result.scenario_bullish_ar if is_ar else result.scenario_bullish_en %}
+      {% set scenario_bearish = result.scenario_bearish_ar if is_ar else result.scenario_bearish_en %}
+      {% set scenario_neutral = result.scenario_neutral_ar if is_ar else result.scenario_neutral_en %}
+      <div class="scenario-cards" id="slot-scenarios">
+        <div class="scenario-card scenario-bullish"><h4>سيناريو صعودي</h4>{{ scenario_bullish or "—" }}</div>
+        <div class="scenario-card scenario-bearish"><h4>سيناريو هبوطي</h4>{{ scenario_bearish or "—" }}</div>
+        <div class="scenario-card scenario-neutral"><h4>سيناريو محايد</h4>{{ scenario_neutral or "—" }}</div>
+      </div>
+      {% else %}
+      <div class="scenario-cards" id="slot-scenarios" style="display:none"></div>
+      {% endif %}
+
+      <button type="button" class="options-btn" id="options-toggle-btn">عرض عقود الأوبشن 📊</button>
+      <div class="options-panel" id="options-panel">
+        <div class="options-note">
+          سلسلة عقود الأوبشن التفاعلية (تواريخ الانتهاء ← جدول العقود Calls/Puts ← تحليل العقد) تحتاج
+          اشتراكاً في مزود بيانات أوبشن مؤجل (مثل Tradier أو Polygon) لم يُفعَّل بعد بموافقة المالك.
+          بديل متاح الآن: ارفع لقطة شاشة لعقد من منصة الوساطة عبر
+          <a id="go-option-tab">تبويب "تحليل عقد أوبشن (صورة)"</a> وسيُستخرج منها Delta وTheta والمستويات الفنية للعقد تلقائياً.
+        </div>
+      </div>
+
+      <details class="full-report" id="narrative-root" data-analysis-id="{{ v.analysis_id }}" data-lang="{{ lang }}" data-needs-narrative="{{ 'false' if result else 'true' }}">
+        <summary>التفاصيل الكاملة ▼</summary>
+        <div class="levels">
+          <div class="col"><b>دعوم فنية ملحوظة</b>{{ v.notable_levels.supports|map("round", 2)|join(", ") if v.notable_levels.supports else "—" }}</div>
+          <div class="col"><b>مقاومات فنية ملحوظة</b>{{ v.notable_levels.resistances|map("round", 2)|join(", ") if v.notable_levels.resistances else "—" }}</div>
+          <div class="col"><b>مستوى الإبطال الفني</b>{{ "%.2f"|format(v.notable_levels.invalidation) if v.notable_levels.invalidation is not none else "—" }}</div>
+        </div>
+        <div class="report-text" id="slot-report-text">{% if result %}{{ result.report_ar if is_ar else result.report_en }}{% else %}جارٍ التحضير...{% endif %}</div>
+        <div class="devils-box">
+          <h3>لماذا هذه الدرجة؟ — المراجعة النقدية (Devil's Advocate)</h3>
+          <div class="devils-text" id="slot-devils-advocate">{% if result %}{{ result.devils_advocate_ar if is_ar else result.devils_advocate_en }}{% else %}جارٍ التحضير...{% endif %}</div>
+        </div>
+      </details>
+    </div>
+    {% endif %}
+  </div>
+
+  <div id="tab-option" class="tab-panel {{ 'active' if active_tab == 'option' else '' }}">
+    <form class="option-form" method="post" action="/ui/analyze-option" enctype="multipart/form-data" id="option-form">
+      <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required>
+      <button type="submit" id="option-btn">تحليل صورة العقد</button>
+    </form>
+    <div id="option-loading-note" style="display:none; font-size:0.85rem; color:var(--muted); margin:-12px 0 20px;">
+      جارٍ استخراج بيانات العقد وتحليلها... فضلاً لا تضغط الزر مرة أخرى.
+    </div>
+
+    {% if option_error %}
+    <div class="error-banner">{{ option_error }}</div>
+    {% endif %}
+
+    {% if option_result %}
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <strong style="font-size:1.1rem">{{ option_result.symbol }}</strong>
+          <span class="badge badge-regime">{{ "Call" if option_result.option_type == "call" else "Put" }} · إضراب {{ option_result.strike }}</span>
+          {% if option_result.extraction_confidence == "low" %}<span class="badge badge-fallback">ثقة استخراج منخفضة</span>{% endif %}
+        </div>
+        <div style="font-size:0.85rem;color:var(--muted)">التكلفة: {{ "%.4f"|format(option_result.cost_usd) }}$</div>
+      </div>
+
+      <div class="data-source-note">
+        انتهاء العقد: <b>{{ option_result.expiry }}</b> ({{ option_result.time_to_expiry_days }} يوماً) ·
+        سعر السهم الأم: <b>{{ option_result.underlying_price }}</b> ·
+        التقلب الضمني المستخرج: <b>{{ "%.1f"|format(option_result.implied_volatility * 100) }}%</b>
+      </div>
+
+      <div class="greeks-grid">
+        <div class="g"><b>Delta</b>{{ "%.3f"|format(option_result.greeks.delta) }}</div>
+        <div class="g"><b>Gamma</b>{{ "%.4f"|format(option_result.greeks.gamma) }}</div>
+        <div class="g"><b>Theta (يومي)</b>{{ "%.3f"|format(option_result.greeks.theta) }}$</div>
+        <div class="g"><b>Vega</b>{{ "%.3f"|format(option_result.greeks.vega) }}</div>
+      </div>
+
+      <div class="levels">
+        <div class="col"><b>الحركة المتوقعة (±1σ حتى الانتهاء)</b>{{ "%.2f"|format(option_result.expected_move.lower_bound) }} إلى {{ "%.2f"|format(option_result.expected_move.upper_bound) }}</div>
+        <div class="col"><b>مستوى الإبطال الفني للسهم الأم</b>{{ "%.2f"|format(option_result.invalidation_level) if option_result.invalidation_level is not none else "—" }}</div>
+      </div>
+
+      {% if option_result.translated_levels %}
+      <div class="translated-levels">
+        <table>
+          <thead><tr><th>المستوى الفني للسهم</th><th>سعر السهم</th><th>سعر العقد التقديري</th></tr></thead>
+          <tbody>
+          {% for lv in option_result.translated_levels %}
+            <tr><td>{{ lv.label }}</td><td>{{ "%.2f"|format(lv.stock_price) }}</td><td>{{ "%.2f"|format(lv.estimated_contract_price) }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      <div class="report-text">{{ option_result.report_text_ar }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% macro screener_card(c) %}
+  {% set gcolor = 'var(--good)' if c.score >= 70 else ('var(--warn)' if c.score >= 40 else 'var(--bad)') %}
+  <div class="screener-card">
+    <div class="screener-card-head">
+      <strong>{{ c.symbol }}</strong>
+      <span class="screener-score" style="--gcolor:{{ gcolor }}">{{ "%.0f"|format(c.score) }}</span>
+    </div>
+    <div class="screener-price">{{ "%.2f"|format(c.last_close) }}$</div>
+    <div class="screener-conclusion">{{ c.conclusion }}</div>
+    <div class="screener-levels">
+      {% if c.key_level is not none %}<div>مستوى فني مفصلي ({{ "دعم" if c.key_level_type == "support" else "مقاومة" }}): {{ "%.2f"|format(c.key_level) }}</div>{% endif %}
+      {% if c.invalidation is not none %}<div>مستوى الإبطال: {{ "%.2f"|format(c.invalidation) }}</div>{% endif %}
+      {% if c.nearest_resistance is not none %}<div>أقرب مقاومة: {{ "%.2f"|format(c.nearest_resistance) }}</div>{% endif %}
+    </div>
+    <ul class="screener-reasons">
+      {% for r in c.reasons %}<li>{{ r }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endmacro %}
+
+  {% macro snipe_card(c) %}
+  {% set gcolor = 'var(--good)' if c.readiness_score >= 70 else ('var(--warn)' if c.readiness_score >= 40 else 'var(--bad)') %}
+  {% set change_cls = 'snipe-change-up' if c.daily_change_pct >= 0 else 'snipe-change-down' %}
+  {% set prob_title = "احتمال 5 جلسات = 2×(1−Φ(|ln(المستوى/السعر)|/(الانحراف اليومي×√5))) — نموذج حركة عشوائية بلا انجراف" %}
+  <div class="snipe-card">
+    <div class="snipe-card-head">
+      <strong>{{ c.symbol }}</strong>
+      <span class="screener-score" style="--gcolor:{{ gcolor }}"
+            title="SnipeScore = 30×الزخم + 25×RVOL + 25×القرب من مستوى مفصلي + 20×توافق الفريمات">{{ "%.0f"|format(c.readiness_score) }}</span>
+    </div>
+    <div class="snipe-price-row">
+      <span class="screener-price" style="margin-bottom:0">{{ "%.2f"|format(c.last_close) }}$</span>
+      <span class="{{ change_cls }}">{{ "%+.2f"|format(c.daily_change_pct) }}%</span>
+    </div>
+
+    <div class="snipe-bar-track" title="موقع السعر بين مستوى الإبطال وأبعد منطقة فنية محسوبة">
+      <div class="snipe-bar-marker" style="left:{{ c.bar_price_pct }}%"></div>
+    </div>
+
+    <div class="snipe-levels">
+      <div class="snipe-level-row snipe-level-invalidation" title="{{ prob_title }}">
+        <span>🔴 مستوى الإبطال الفني</span>
+        <span>{{ "%.2f"|format(c.invalidation.price) }} ({{ "%.1f"|format(c.invalidation.distance_pct) }}%) · احتمال {{ "%.0f"|format(c.invalidation.touch_probability_5d * 100) }}%</span>
+      </div>
+      {% if c.zone1 %}
+      <div class="snipe-level-row snipe-level-zone1" title="{{ prob_title }}">
+        <span>🎯 المنطقة الفنية الأولى</span>
+        <span>{{ "%.2f"|format(c.zone1.price) }} ({{ "%.1f"|format(c.zone1.distance_pct) }}%) · احتمال {{ "%.0f"|format(c.zone1.touch_probability_5d * 100) }}%</span>
+      </div>
+      {% endif %}
+      {% if c.zone2 %}
+      <div class="snipe-level-row snipe-level-zone2" title="{{ prob_title }}">
+        <span>🎯🎯 المنطقة الفنية الثانية</span>
+        <span>{{ "%.2f"|format(c.zone2.price) }} ({{ "%.1f"|format(c.zone2.distance_pct) }}%) · احتمال {{ "%.0f"|format(c.zone2.touch_probability_5d * 100) }}%</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <ul class="snipe-reasons">
+      {% for r in c.reasons %}<li>{{ r }}</li>{% endfor %}
+    </ul>
+
+    <form class="snipe-report-form" method="post" action="/ui/analyze">
+      <input type="hidden" name="symbol" value="{{ c.symbol }}">
+      <input type="hidden" name="lang" value="ar">
+      <button type="submit">التقرير الكامل</button>
+    </form>
+  </div>
+  {% endmacro %}
+
+  <div id="tab-snipe-stocks" class="tab-panel {{ 'active' if active_tab == 'snipe-stocks' else '' }}">
+    <div class="screener-banner">{{ snipe_disclaimer }}</div>
+    <div class="sub-tab-bar">
+      <a class="tab-btn {{ 'active' if active_tab == 'snipe-stocks' else '' }}" href="/ui/screener/snipe/stocks">أسهم</a>
+      <a class="tab-btn {{ 'active' if active_tab == 'snipe-options' else '' }}" href="/ui/screener/snipe/options">أوبشن</a>
+    </div>
+    {% if snipe_error %}<div class="error-banner">{{ snipe_error }}</div>{% endif %}
+    {% if snipe_result %}
+    <div class="snipe-accuracy">
+      {% if snipe_result.accuracy.sample_size >= 5 %}
+      من آخر {{ snipe_result.accuracy.sample_size }} بطاقة مدقَّقة (أفق {{ snipe_result.accuracy.horizon_days }} جلسات):
+      المنطقة الأولى تحققت قبل الإبطال في {{ "%.0f"|format(snipe_result.accuracy.zone1_hit_rate * 100) }}%،
+      الثانية في {{ "%.0f"|format(snipe_result.accuracy.zone2_hit_rate * 100) }}%.
+      {% else %}
+      لا توجد بيانات كافية بعد لعرض دقة الماسح التاريخية ({{ snipe_result.accuracy.sample_size }} بطاقة مدقَّقة حتى الآن).
+      {% endif %}
+    </div>
+    <div class="screener-meta">
+      {% if snipe_result.from_cache %}آخر تحديث: قبل {{ snipe_result.cached_minutes_ago }} دقيقة (من الكاش){% else %}آخر تحديث: الآن{% endif %}
+      · تم مسح {{ snipe_result.scanned_count }} من {{ snipe_result.universe_size }} رمز متابَع
+      · أعلى {{ snipe_result.cards|length }} جاهزية ضمن أعلى 50 سهماً حجماً
+    </div>
+    <div class="snipe-grid">
+      {% for c in snipe_result.cards %}{{ snipe_card(c) }}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% macro snipe_option_card(c, generated_at) %}
+  {% set gcolor = 'var(--good)' if c.quality_score >= 70 else ('var(--warn)' if c.quality_score >= 40 else 'var(--bad)') %}
+  {% set score_title = "الدرجة المعروضة = 70%×جودة العقد الميكانيكية (35×سيولة + 25×(1−سبريد%) + 20×ملاءمة الدلتا + 20×مؤشر تقلب تقريبي) + 30%×توازن المخاطرة (احتمال المنطقة الأولى ÷ (احتمال المنطقة الأولى + احتمال الإبطال)). جودة العقد وحدها هنا: " ~ ("%.0f"|format(c.mechanical_quality_score)) %}
+  {% set prob_title = "احتمال 5 جلسات = 2×(1−Φ(|ln(المستوى/السعر)|/(الانحراف اليومي×√5))) — نفس احتمال السهم، مطبَّق على مستوى العقد المترجم" %}
+  <div class="snipe-card" data-symbol="{{ c.symbol }}" data-option-type="{{ c.option_type }}" data-strike="{{ c.strike }}"
+       data-expiry="{{ c.expiry }}" data-contract-price="{{ c.contract_price }}" data-is-zero-dte="{{ 'true' if c.is_0dte else 'false' }}"
+       data-invalidation="{{ c.invalidation.price if c.invalidation else '' }}">
+    <div class="snipe-card-head">
+      <strong>{{ c.symbol }}</strong>
+      <span class="screener-score" style="--gcolor:{{ gcolor }}" title="{{ score_title }}">{{ "%.0f"|format(c.quality_score) }}</span>
+    </div>
+    {% if c.risk_imbalanced %}
+    <div class="risk-warning-badge" title="احتمال لمس مستوى الإبطال قبل المنطقة الفنية الأولى أعلى من احتمال بلوغها — الدرجة أعلاه مخفَّضة بسبب هذا التوازن السلبي">
+      ⚠️ احتمال الإبطال أعلى من احتمال المنطقة الفنية الأولى
+    </div>
+    {% endif %}
+    {% if c.is_0dte %}
+    <div class="dte-warning">
+      ⚠️ عقد ينتهي اليوم — تآكل Theta بأقصى سرعته
+      {% if c.hours_to_expiry is not none %}
+      · الوقت المتبقي التقديري: {{ "%d"|format(c.hours_to_expiry) }} ساعة و{{ "%d"|format((c.hours_to_expiry % 1) * 60) }} دقيقة
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="snipe-price-row">
+      <span class="screener-price" style="margin-bottom:0">Call {{ "%.2f"|format(c.strike) }}</span>
+    </div>
+    <div class="data-source-note">
+      انتهاء العقد: <b>{{ c.expiry }}</b>
+      {% if c.is_0dte %}(<b>اليوم — 0DTE</b>){% else %}({{ c.dte_days }} يوم متبقٍ){% endif %}
+      · إغلاق تقديري {{ c.expiry_close_utc.strftime('%H:%M UTC') }} (≈16:00 بتوقيت نيويورك)
+    </div>
+    <div class="data-source-note">سعر العقد التقديري: <b>{{ "%.2f"|format(c.contract_price) }}$</b> · آخر تحديث بيانات: {{ generated_at.strftime('%H:%M UTC') }}</div>
+
+    <div class="greeks-grid">
+      <div class="g"><b>Delta</b>{{ "%.3f"|format(c.delta) }}</div>
+      <div class="g"><b>Gamma</b>{{ "%.4f"|format(c.gamma) }}</div>
+      <div class="g"><b>Theta (يومي)</b>{{ "%.3f"|format(c.theta) }}$</div>
+      <div class="g"><b>Vega</b>{{ "%.3f"|format(c.vega) }}</div>
+    </div>
+    {% if c.daily_theta_decay_pct is not none %}
+    <div class="data-source-note">تآكل Theta اليومي: {{ "%.2f"|format(c.daily_theta_decay_pct) }}% من سعر العقد</div>
+    {% endif %}
+
+    <div class="snipe-levels">
+      {% if c.invalidation %}
+      <div class="snipe-level-row snipe-level-invalidation" title="{{ prob_title }}">
+        <span>🔴 الإبطال (سعر عقد تقديري)</span>
+        <span>{{ "%.2f"|format(c.invalidation.price) }}$ · احتمال {{ "%.0f"|format(c.invalidation.touch_probability_5d * 100) }}%</span>
+      </div>
+      {% endif %}
+      {% if c.zone1 %}
+      <div class="snipe-level-row snipe-level-zone1" title="{{ prob_title }}">
+        <span>🎯 المنطقة الأولى (سعر عقد تقديري)</span>
+        <span>{{ "%.2f"|format(c.zone1.price) }}$ · احتمال {{ "%.0f"|format(c.zone1.touch_probability_5d * 100) }}%</span>
+      </div>
+      {% endif %}
+      {% if c.zone2 %}
+      <div class="snipe-level-row snipe-level-zone2" title="{{ prob_title }}">
+        <span>🎯🎯 المنطقة الثانية (سعر عقد تقديري)</span>
+        <span>{{ "%.2f"|format(c.zone2.price) }}$ · احتمال {{ "%.0f"|format(c.zone2.touch_probability_5d * 100) }}%</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <ul class="snipe-reasons">
+      {% for r in c.reasons %}<li>{{ r }}</li>{% endfor %}
+    </ul>
+
+    <button type="button" class="watch-add-btn">⭐ أضف للمراقبة (قراءة فقط)</button>
+    <div class="watch-inline-form">
+      <label>السعر المرجعي<input type="number" class="watch-ref-price" step="0.01" min="0" value="{{ "%.2f"|format(c.contract_price) }}"></label>
+      <label>نسبة التنبيه %<input type="number" class="watch-threshold" step="0.5" min="0.5" value="5"></label>
+      <button type="button" class="watch-confirm-btn">تأكيد</button>
+      <span class="watch-inline-note">يضيف العقد لقائمة "مراقب الحالة" أسفل الصفحة — قراءة وتنبيه فقط، بلا أي تنفيذ صفقات.</span>
+    </div>
+  </div>
+  {% endmacro %}
+
+  <div id="tab-snipe-options" class="tab-panel {{ 'active' if active_tab == 'snipe-options' else '' }}">
+    <div class="screener-banner">{{ snipe_disclaimer }}</div>
+    <div class="sub-tab-bar">
+      <a class="tab-btn {{ 'active' if active_tab == 'snipe-stocks' else '' }}" href="/ui/screener/snipe/stocks">أسهم</a>
+      <a class="tab-btn {{ 'active' if active_tab == 'snipe-options' else '' }}" href="/ui/screener/snipe/options">أوبشن</a>
+    </div>
+    {% if snipe_options_error %}<div class="error-banner">{{ snipe_options_error }}</div>{% endif %}
+    {% if snipe_options_result %}
+    <div class="options-note">{{ snipe_options_result.data_source_note }}</div>
+    <div class="screener-meta">
+      آخر تحديث: {{ snipe_options_result.generated_at.strftime('%H:%M UTC') }}
+      {% if snipe_options_result.from_cache %}(قبل {{ snipe_options_result.cached_minutes_ago }} دقيقة — من الكاش){% endif %}
+      · عقود مختارة: {{ snipe_options_result.cards|length }}
+      {% if snipe_options_result.skipped_symbols %}· بلا عقد مناسب: {{ snipe_options_result.skipped_symbols|join(", ") }}{% endif %}
+    </div>
+    {% if snipe_options_result.cards %}
+    <div class="watch-filters">
+      <label><input type="checkbox" id="filter-0dte"> انتهاء اليوم فقط (0DTE)</label>
+      <label>سعر أقصى للعقد $<input type="number" id="filter-max-price" step="0.05" min="0" value="1.00"></label>
+      <label><input type="checkbox" id="filter-max-price-on" checked> تفعيل فلتر السعر</label>
+    </div>
+    <div class="snipe-grid" id="snipe-options-grid">
+      {% for c in snipe_options_result.cards %}{{ snipe_option_card(c, snipe_options_result.generated_at) }}{% endfor %}
+    </div>
+    {% else %}
+    <div class="options-note">لم يُعثر على عقود مناسبة الآن ضمن أعلى 10 أسهم القنص.</div>
+    {% endif %}
+    {% endif %}
+
+    <div class="watchlist-section">
+      <h2>⭐ مراقب الحالة — قراءة وتنبيه فقط (بلا تنفيذ صفقات)</h2>
+      <div id="watchlist-container"><div class="watch-empty">جارٍ تحميل قائمة المراقبة...</div></div>
+    </div>
+  </div>
+
+  <div id="tab-screener-daily" class="tab-panel {{ 'active' if active_tab == 'screener-daily' else '' }}">
+    <div class="screener-banner">{{ screener_disclaimer }}</div>
+    {% if screener_error %}<div class="error-banner">{{ screener_error }}</div>{% endif %}
+    {% if screener_result and screener_result.kind == 'daily_readiness' %}
+    <div class="screener-meta">
+      {% if screener_result.from_cache %}آخر تحديث: قبل {{ screener_result.cached_minutes_ago }} دقيقة (من الكاش){% else %}آخر تحديث: الآن{% endif %}
+      · تم مسح {{ screener_result.scanned_count }} من {{ screener_result.universe_size }} رمز متابَع
+      · أعلى {{ screener_result.cards|length }} جاهزية ضمن أعلى 50 سهماً حجماً
+    </div>
+    <div class="screener-grid">
+      {% for c in screener_result.cards %}{{ screener_card(c) }}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div id="tab-screener-weekly" class="tab-panel {{ 'active' if active_tab == 'screener-weekly' else '' }}">
+    <div class="screener-banner">{{ screener_disclaimer }}</div>
+    {% if screener_error %}<div class="error-banner">{{ screener_error }}</div>{% endif %}
+    {% if screener_result and screener_result.kind == 'weekly_structure' %}
+    <div class="screener-meta">
+      {% if screener_result.from_cache %}آخر تحديث: قبل {{ screener_result.cached_minutes_ago }} دقيقة (من الكاش){% else %}آخر تحديث: الآن{% endif %}
+      · تم مسح {{ screener_result.scanned_count }} من {{ screener_result.universe_size }} رمز متابَع
+    </div>
+    <div class="screener-grid">
+      {% for c in screener_result.cards %}{{ screener_card(c) }}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div id="tab-screener-options" class="tab-panel {{ 'active' if active_tab == 'screener-options' else '' }}">
+    <div class="screener-banner">{{ screener_disclaimer }}</div>
+    <div class="options-note">
+      ماسح عقود الأوبشن عالية الجاهزية يحتاج مزود بيانات أوبشن مؤجل (مثل Tradier أو Polygon) لم يُفعَّل
+      بعد بموافقة المالك. بديل متاح الآن: ارفع لقطة شاشة لعقد من منصة الوساطة عبر
+      <a id="go-option-tab-from-screener">تبويب "تحليل عقد أوبشن (صورة)"</a> وسيُستخرج منها Delta وTheta
+      والمستويات الفنية للعقد تلقائياً.
+    </div>
+  </div>
+
+  <script>
+    var US_SYMBOLS = {{ symbols_json|safe }};
+
+    document.getElementById('analyze-form').addEventListener('submit', function () {
+      var btn = document.getElementById('analyze-btn');
+      btn.disabled = true;
+      btn.textContent = 'جارٍ التحليل...';
+      document.getElementById('loading-note').style.display = 'block';
+    });
+    document.getElementById('option-form').addEventListener('submit', function () {
+      var btn = document.getElementById('option-btn');
+      btn.disabled = true;
+      btn.textContent = 'جارٍ التحليل...';
+      document.getElementById('option-loading-note').style.display = 'block';
+    });
+    function activateTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+      document.querySelector('.tab-btn[data-tab="' + tabId + '"]').classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    }
+    document.querySelectorAll('button.tab-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { activateTab(btn.dataset.tab); });
+    });
+
+    // --- Autocomplete (Requirement 2) ---
+    (function () {
+      var input = document.getElementById('symbol-input');
+      var list = document.getElementById('autocomplete-list');
+      if (!input || !list) return;
+      var activeIndex = -1;
+
+      function render(matches) {
+        list.innerHTML = '';
+        activeIndex = -1;
+        if (matches.length === 0) { list.style.display = 'none'; return; }
+        matches.slice(0, 8).forEach(function (m) {
+          var item = document.createElement('div');
+          item.className = 'autocomplete-item';
+          item.innerHTML = '<b>' + m.symbol + '</b><small>' + m.name + '</small>';
+          item.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            input.value = m.symbol;
+            list.style.display = 'none';
+          });
+          list.appendChild(item);
+        });
+        list.style.display = 'block';
+      }
+
+      input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase();
+        if (q.length === 0) { list.style.display = 'none'; return; }
+        var matches = US_SYMBOLS.filter(function (s) {
+          return s.symbol.toLowerCase().indexOf(q) !== -1 || s.name.toLowerCase().indexOf(q) !== -1;
+        });
+        matches.sort(function (a, b) {
+          var aStarts = a.symbol.toLowerCase().indexOf(q) === 0 ? 0 : 1;
+          var bStarts = b.symbol.toLowerCase().indexOf(q) === 0 ? 0 : 1;
+          return aStarts - bStarts;
+        });
+        render(matches);
+      });
+      input.addEventListener('blur', function () { setTimeout(function () { list.style.display = 'none'; }, 150); });
+      input.addEventListener('keydown', function (e) {
+        var items = list.querySelectorAll('.autocomplete-item');
+        if (items.length === 0) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(activeIndex + 1, items.length - 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(activeIndex - 1, 0); }
+        else if (e.key === 'Enter' && activeIndex >= 0) { e.preventDefault(); items[activeIndex].dispatchEvent(new Event('mousedown')); return; }
+        else return;
+        items.forEach(function (it, i) { it.classList.toggle('active', i === activeIndex); });
+      });
+    })();
+
+    // --- Options-chain button (Requirement 3, graceful degrade) ---
+    (function () {
+      var toggleBtn = document.getElementById('options-toggle-btn');
+      var panel = document.getElementById('options-panel');
+      var goOptionTab = document.getElementById('go-option-tab');
+      if (toggleBtn && panel) {
+        toggleBtn.addEventListener('click', function () { panel.classList.toggle('open'); });
+      }
+      if (goOptionTab) {
+        goOptionTab.addEventListener('click', function () { activateTab('tab-option'); });
+      }
+      var goOptionTabFromScreener = document.getElementById('go-option-tab-from-screener');
+      if (goOptionTabFromScreener) {
+        goOptionTabFromScreener.addEventListener('click', function () { activateTab('tab-option'); });
+      }
+      var goOptionTabFromSnipe = document.getElementById('go-option-tab-from-snipe');
+      if (goOptionTabFromSnipe) {
+        goOptionTabFromSnipe.addEventListener('click', function () { activateTab('tab-option'); });
+      }
+    })();
+
+    // --- Candlestick chart with support/resistance lines (Requirement 5) ---
+    (function () {
+      var container = document.getElementById('chart-container');
+      if (!container || typeof LightweightCharts === 'undefined') return;
+      var bars = JSON.parse(container.dataset.bars || '[]');
+      if (bars.length === 0) return;
+      var supports = JSON.parse(container.dataset.supports || '[]');
+      var resistances = JSON.parse(container.dataset.resistances || '[]');
+      var invalidationRaw = container.dataset.invalidation;
+      var invalidation = (invalidationRaw && invalidationRaw !== 'null') ? parseFloat(invalidationRaw) : null;
+
+      var chart = LightweightCharts.createChart(container, {
+        height: 320,
+        layout: { background: { color: '#171d2e' }, textColor: '#97a2bd' },
+        grid: { vertLines: { color: '#2a3346' }, horzLines: { color: '#2a3346' } },
+        rightPriceScale: { borderColor: '#2a3346' },
+        timeScale: { borderColor: '#2a3346' },
+      });
+      var series = chart.addCandlestickSeries({
+        upColor: '#2fbf71', downColor: '#e5545e', borderVisible: false,
+        wickUpColor: '#2fbf71', wickDownColor: '#e5545e',
+      });
+      series.setData(bars.map(function (b) { return { time: b.t, open: b.o, high: b.h, low: b.l, close: b.c }; }));
+
+      supports.forEach(function (p) {
+        series.createPriceLine({ price: p, color: '#2fbf71', lineWidth: 1, lineStyle: 2, title: 'دعم' });
+      });
+      resistances.forEach(function (p) {
+        series.createPriceLine({ price: p, color: '#e5545e', lineWidth: 1, lineStyle: 2, title: 'مقاومة' });
+      });
+      if (invalidation !== null) {
+        series.createPriceLine({ price: invalidation, color: '#e8b93f', lineWidth: 2, lineStyle: 0, title: 'إبطال' });
+      }
+      chart.timeScale().fitContent();
+      window.addEventListener('resize', function () {
+        chart.applyOptions({ width: container.clientWidth });
+      });
+    })();
+
+    // --- Live price ticker: poll every 15s while the market is open (owner request) ---
+    (function () {
+      var priceEl = document.getElementById('live-price');
+      var changeEl = document.getElementById('live-change');
+      if (!priceEl) return;
+      var card = priceEl.closest('.card');
+      if (!card || card.dataset.marketOpen !== 'true') return;
+      var symbol = card.dataset.symbol;
+      var openPrice = parseFloat(card.dataset.openPrice);
+
+      function poll() {
+        fetch('/ui/quote/' + encodeURIComponent(symbol))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.error || typeof data.price !== 'number') return;
+            priceEl.textContent = data.price.toFixed(2) + '$';
+            if (changeEl && openPrice) {
+              var pct = (data.price / openPrice - 1) * 100;
+              changeEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+              changeEl.className = pct >= 0 ? 'snipe-change-up' : 'snipe-change-down';
+            }
+          })
+          .catch(function () {});
+      }
+      setInterval(poll, 15000);
+    })();
+
+    // --- Progressive load: fetch the LLM narrative in the background after a fast
+    // deterministic-only render (Requirement: pages open in under 5s) ---
+    (function () {
+      var root = document.getElementById('narrative-root');
+      if (!root || root.dataset.needsNarrative !== 'true') return;
+      var analysisId = root.dataset.analysisId;
+      var lang = root.dataset.lang || 'ar';
+      var isAr = lang === 'ar';
+
+      function buildScenarioCard(cls, title, text) {
+        var div = document.createElement('div');
+        div.className = 'scenario-card ' + cls;
+        var h4 = document.createElement('h4');
+        h4.textContent = title;
+        div.appendChild(h4);
+        div.appendChild(document.createTextNode(text || '—'));
+        return div;
+      }
+
+      fetch('/ui/analyze/narrative/' + encodeURIComponent(analysisId) + '?lang=' + encodeURIComponent(lang))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var tldrEl = document.getElementById('slot-tldr');
+          if (data.error) {
+            if (tldrEl) { tldrEl.textContent = 'تعذّر توليد الشرح: ' + data.error; tldrEl.classList.remove('loading'); }
+            return;
+          }
+          var tldr = isAr ? data.tldr_ar : data.tldr_en;
+          if (tldrEl) { tldrEl.textContent = tldr || ''; tldrEl.classList.remove('loading'); }
+
+          var scenarios = document.getElementById('slot-scenarios');
+          if (scenarios) {
+            scenarios.innerHTML = '';
+            scenarios.appendChild(buildScenarioCard('scenario-bullish', 'سيناريو صعودي', isAr ? data.scenario_bullish_ar : data.scenario_bullish_en));
+            scenarios.appendChild(buildScenarioCard('scenario-bearish', 'سيناريو هبوطي', isAr ? data.scenario_bearish_ar : data.scenario_bearish_en));
+            scenarios.appendChild(buildScenarioCard('scenario-neutral', 'سيناريو محايد', isAr ? data.scenario_neutral_ar : data.scenario_neutral_en));
+            scenarios.style.display = 'grid';
+          }
+
+          var reportEl = document.getElementById('slot-report-text');
+          if (reportEl) reportEl.textContent = (isAr ? data.report_ar : data.report_en) || '';
+          var devilsEl = document.getElementById('slot-devils-advocate');
+          if (devilsEl) devilsEl.textContent = (isAr ? data.devils_advocate_ar : data.devils_advocate_en) || '';
+
+          var costEl = document.getElementById('live-cost');
+          if (costEl && typeof data.cost_usd === 'number') costEl.textContent = 'التكلفة: ' + data.cost_usd.toFixed(4) + '$';
+
+          root.dataset.needsNarrative = 'false';
+        })
+        .catch(function () {
+          var tldrEl = document.getElementById('slot-tldr');
+          if (tldrEl) { tldrEl.textContent = 'تعذّر تحميل الشرح — حاول تحديث الصفحة.'; tldrEl.classList.remove('loading'); }
+        });
+    })();
+
+    // --- Snipe-options 0DTE / max-price filters (client-side, owner request 2026-07-19) ---
+    (function () {
+      var grid = document.getElementById('snipe-options-grid');
+      if (!grid) return;
+      var dteCheckbox = document.getElementById('filter-0dte');
+      var maxPriceInput = document.getElementById('filter-max-price');
+      var maxPriceOn = document.getElementById('filter-max-price-on');
+
+      function applyFilters() {
+        var only0dte = dteCheckbox && dteCheckbox.checked;
+        var priceOn = maxPriceOn && maxPriceOn.checked;
+        var maxPrice = parseFloat(maxPriceInput && maxPriceInput.value);
+        if (isNaN(maxPrice)) maxPrice = Infinity;
+        grid.querySelectorAll('.snipe-card').forEach(function (card) {
+          var is0dte = card.dataset.isZeroDte === 'true';
+          var price = parseFloat(card.dataset.contractPrice);
+          var pass = true;
+          if (only0dte && !is0dte) pass = false;
+          if (priceOn && !(price <= maxPrice)) pass = false;
+          card.style.display = pass ? '' : 'none';
+        });
+      }
+      [dteCheckbox, maxPriceInput, maxPriceOn].forEach(function (el) {
+        if (el) el.addEventListener('input', applyFilters);
+      });
+      applyFilters();
+
+      // --- Add-to-watch inline form per card ---
+      grid.querySelectorAll('.watch-add-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var form = btn.nextElementSibling;
+          if (form) form.classList.toggle('open');
+        });
+      });
+      grid.querySelectorAll('.watch-confirm-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var card = btn.closest('.snipe-card');
+          var form = btn.closest('.watch-inline-form');
+          var refInput = form.querySelector('.watch-ref-price');
+          var thInput = form.querySelector('.watch-threshold');
+          var invalidationRaw = card.dataset.invalidation;
+          var body = {
+            underlying_symbol: card.dataset.symbol,
+            option_type: card.dataset.optionType,
+            strike: parseFloat(card.dataset.strike),
+            expiry: card.dataset.expiry,
+            reference_price: parseFloat(refInput.value),
+            alert_threshold_pct: parseFloat(thInput.value),
+            invalidation_price: invalidationRaw ? parseFloat(invalidationRaw) : null,
+          };
+          btn.disabled = true;
+          btn.textContent = 'جارٍ الإضافة...';
+          fetch('/ui/watchlist/add', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              btn.disabled = false;
+              btn.textContent = '⭐ أضف للمراقبة (قراءة فقط)';
+              if (data.error) { alert(data.error); return; }
+              form.classList.remove('open');
+              if (window.refreshWatchlist) window.refreshWatchlist();
+            })
+            .catch(function () { btn.disabled = false; btn.textContent = '⭐ أضف للمراقبة (قراءة فقط)'; });
+        });
+      });
+    })();
+
+    // --- Watchlist panel: graduated read-only status indicator (owner request
+    // 2026-07-19) — polls /ui/watchlist/list, flashes + beeps only when a contract's
+    // tier gets WORSE than its previous reading. No trade execution anywhere here. ---
+    (function () {
+      var container = document.getElementById('watchlist-container');
+      if (!container) return;
+      var audioCtx = null;
+
+      function playBeep() {
+        try {
+          audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+          var osc = audioCtx.createOscillator();
+          var gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = 660;
+          gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.15, audioCtx.currentTime + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+          osc.connect(gain).connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.4);
+        } catch (e) {}
+      }
+
+      function fmtTime(iso) {
+        if (!iso) return '—';
+        var d = new Date(iso);
+        return d.toISOString().substr(11, 5) + ' UTC';
+      }
+
+      function renderWatchlist(items) {
+        if (items.length === 0) {
+          container.innerHTML = '<div class="watch-empty">لا توجد عقود في المراقبة بعد — اضغط "أضف للمراقبة" على أي بطاقة عقد أعلاه.</div>';
+          return;
+        }
+        container.innerHTML = '';
+        items.forEach(function (item) {
+          var div = document.createElement('div');
+          div.className = 'watch-item tier-' + item.status_code;
+          div.innerHTML =
+            '<div class="watch-item-head">' +
+              '<strong>' + item.underlying_symbol + ' Call ' + item.strike.toFixed(2) + ' · ' + item.expiry + '</strong>' +
+              '<span class="watch-status-badge">' + item.status_emoji + ' ' + item.status_mood_emoji + ' ' + item.status_label + '</span>' +
+            '</div>' +
+            '<div class="watch-item-meta">' +
+              'مرجع: ' + item.reference_price.toFixed(2) + '$ · حالي: ' + (item.last_price != null ? item.last_price.toFixed(2) : '—') + '$ ' +
+              '(' + (item.change_pct >= 0 ? '+' : '') + item.change_pct.toFixed(1) + '%) · نسبة التنبيه: ' + item.alert_threshold_pct + '%' +
+              (item.is_0dte ? ' · 0DTE' : '') + ' · آخر فحص ' + fmtTime(item.last_checked_at) +
+            '</div>' +
+            '<div class="watch-item-message">' + item.status_message + '</div>' +
+            '<div class="watch-item-actions">' +
+              '<button type="button" class="watch-log-toggle">سجل التغيّرات 📜</button>' +
+              '<button type="button" class="watch-remove-btn">إزالة من المراقبة</button>' +
+            '</div>' +
+            '<div class="watch-log"></div>';
+          container.appendChild(div);
+
+          if (item.worsened) {
+            div.classList.add('flash');
+            playBeep();
+            setTimeout(function () { div.classList.remove('flash'); }, 2500);
+          }
+
+          div.querySelector('.watch-remove-btn').addEventListener('click', function () {
+            fetch('/ui/watchlist/' + item.id + '/remove', { method: 'POST' }).then(function () { refreshWatchlist(); });
+          });
+          var logToggle = div.querySelector('.watch-log-toggle');
+          var logEl = div.querySelector('.watch-log');
+          logToggle.addEventListener('click', function () {
+            if (logEl.classList.contains('open')) { logEl.classList.remove('open'); return; }
+            fetch('/ui/watchlist/' + item.id + '/events')
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                logEl.innerHTML = '';
+                (data.events || []).forEach(function (ev) {
+                  var row = document.createElement('div');
+                  row.className = 'watch-log-row';
+                  row.textContent = fmtTime(ev.occurred_at) + ' — ' + ev.status_code + ' — ' + ev.message;
+                  logEl.appendChild(row);
+                });
+                logEl.classList.add('open');
+              });
+          });
+        });
+      }
+
+      function refreshWatchlist() {
+        fetch('/ui/watchlist/list')
+          .then(function (r) { return r.json(); })
+          .then(function (data) { renderWatchlist(data.items || []); })
+          .catch(function () {});
+      }
+      window.refreshWatchlist = refreshWatchlist;
+
+      refreshWatchlist();
+      setInterval(refreshWatchlist, 30000);
+    })();
+  </script>
+
+  <footer class="disclaimer">{{ disclaimer }}</footer>
+</div>
+</body>
+</html>
