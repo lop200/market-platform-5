@@ -27,8 +27,11 @@ class OpenAILLMAdapter(LLMAdapter):
         self._model = model
         try:
             self._encoding = tiktoken.encoding_for_model(model)
-        except KeyError:
-            self._encoding = tiktoken.get_encoding("o200k_base")
+        except Exception:
+            # Some deployment/test networks block tiktoken's first-time vocabulary
+            # download. Token counting is only a pre-flight estimate, so keep the
+            # adapter usable and rely on the API's exact usage after generation.
+            self._encoding = None
 
     def generate(self, system_prompt: str, user_content: str, max_tokens: int) -> LLMResponse:
         response = self._client.chat.completions.create(
@@ -74,7 +77,9 @@ class OpenAILLMAdapter(LLMAdapter):
         return self._actual_cost(input_tokens, max_output_tokens)
 
     def count_tokens(self, text: str) -> int:
-        return len(self._encoding.encode(text))
+        if self._encoding is not None:
+            return len(self._encoding.encode(text))
+        return max(1, (len(text.encode("utf-8")) + 3) // 4)
 
     @staticmethod
     def _actual_cost(input_tokens: int, output_tokens: int) -> float:
