@@ -127,6 +127,16 @@ def client(monkeypatch):
 def test_index_page_renders(client):
     response = client.get("/")
     assert response.status_code == 200
+    assert "لوحة السوق الحية" in response.text
+    assert "المؤشرات الرئيسية" in response.text
+    assert "RSI وMACD وEMA20" in response.text
+    assert "أخبار السوق والشركات" in response.text
+    assert "/ui/dashboard/data" in response.text
+
+
+def test_analysis_home_still_renders_legacy_analysis_workspace(client):
+    response = client.get("/ui/analysis")
+    assert response.status_code == 200
     assert "منصة الذكاء التحليلي" in response.text
     assert "المصروف اليومي" in response.text
 
