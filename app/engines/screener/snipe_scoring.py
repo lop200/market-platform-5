@@ -2,8 +2,13 @@
 new formula, not in SRS section 12 (declared and documented here per CLAUDE.md rule 2).
 Momentum + unusual volume + proximity to a notable level + timeframe confluence, 0-100:
 
-    SnipeScore = 30 x momentum_component + 25 x rvol_component
-               + 25 x proximity_component + 20 x confluence_component
+    SnipeScore = 25 x momentum_component + 20 x rvol_component
+               + 20 x proximity_component + 20 x confluence_component
+               + 15 x smc_confirmation_component
+
+The SMC component averages directional agreement from RSI divergence,
+accumulation/distribution, and the latest order block. Missing or neutral evidence
+contributes 0.5 instead of being treated as confirmation.
 
 - momentum_component / rvol_component / proximity_component: identical logic to the
   existing Daily Readiness Score (`screener/daily_readiness.py`) — 60% RSI distance from
@@ -21,6 +26,7 @@ analysis plus the same daily OHLCV frame, same objects the screener already work
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 import pandas as pd
@@ -28,10 +34,11 @@ import pandas as pd
 from app.engines.deterministic.schemas import DeterministicAnalysis
 from app.engines.screener.weekly_structure import MIN_WEEKLY_BARS, resample_weekly
 
-MOMENTUM_WEIGHT = 30
-RVOL_WEIGHT = 25
-PROXIMITY_WEIGHT = 25
+MOMENTUM_WEIGHT = 25
+RVOL_WEIGHT = 20
+PROXIMITY_WEIGHT = 20
 CONFLUENCE_WEIGHT = 20
+SMC_CONFIRMATION_WEIGHT = 15
 
 RVOL_SATURATION = 3.0
 RSI_DISTANCE_SATURATION = 30.0
@@ -39,6 +46,12 @@ PROXIMITY_SATURATION_ATR = 3.0
 
 WeeklyDirection = Literal["up", "down", "flat"]
 SnipeDirection = Literal["bullish", "bearish", "neutral"]
+
+
+@dataclass(frozen=True)
+class SnipeStrategy:
+    name_ar: str
+    description_ar: str
 
 
 def _weekly_direction(daily: pd.DataFrame) -> WeeklyDirection | None:
@@ -113,11 +126,98 @@ def infer_snipe_direction(
         elif analysis.last_close < ema20:
             bearish += 1
 
+    divergence = analysis.smc.rsi_divergence
+    if divergence.detected and divergence.type == "bullish":
+        bullish += 2
+    elif divergence.detected and divergence.type == "bearish":
+        bearish += 2
+
+    ad_read = analysis.smc.accumulation_distribution.interpretation
+    if ad_read == "accumulation":
+        bullish += 1
+    elif ad_read == "distribution":
+        bearish += 1
+
+    if analysis.smc.order_blocks:
+        latest_block = max(analysis.smc.order_blocks, key=lambda block: block.bar_index)
+        if latest_block.direction == "bullish":
+            bullish += 1
+        elif latest_block.direction == "bearish":
+            bearish += 1
+
     if bullish >= 3 and bullish - bearish >= 2:
         return "bullish"
     if bearish >= 3 and bearish - bullish >= 2:
         return "bearish"
     return "neutral"
+
+
+def _smc_confirmation_component(
+    analysis: DeterministicAnalysis, direction: SnipeDirection
+) -> float:
+    if direction == "neutral":
+        return 0.5
+    expected = "bullish" if direction == "bullish" else "bearish"
+    readings: list[float] = []
+
+    divergence = analysis.smc.rsi_divergence
+    if divergence.detected and divergence.type:
+        readings.append(1.0 if divergence.type == expected else 0.0)
+
+    ad_read = analysis.smc.accumulation_distribution.interpretation
+    if ad_read == "neutral":
+        readings.append(0.5)
+    else:
+        aligned_ad = (
+            ad_read == "accumulation" if direction == "bullish" else ad_read == "distribution"
+        )
+        readings.append(1.0 if aligned_ad else 0.0)
+
+    if analysis.smc.order_blocks:
+        latest_block = max(analysis.smc.order_blocks, key=lambda block: block.bar_index)
+        readings.append(1.0 if latest_block.direction == expected else 0.0)
+
+    return sum(readings) / len(readings) if readings else 0.5
+
+
+def select_snipe_strategy(
+    analysis: DeterministicAnalysis,
+    daily: pd.DataFrame,
+    direction: SnipeDirection | None = None,
+) -> SnipeStrategy:
+    direction = direction or infer_snipe_direction(analysis, daily)
+    weekly = _weekly_direction(daily)
+    confluence = _confluence_component(analysis.regime.label, weekly)
+    histogram = analysis.indicators.macd.histogram
+    strengthening = (
+        histogram > 0 and analysis.indicators.macd.histogram_rising
+        if direction == "bullish"
+        else histogram < 0 and not analysis.indicators.macd.histogram_rising
+    )
+
+    if analysis.regime.label in {"trending_up", "trending_down"} and confluence == 1.0:
+        return SnipeStrategy(
+            name_ar="استراتيجية استمرار الاتجاه متعدد الفريمات",
+            description_ar=(
+                "تتطلب توافق الاتجاه اليومي والأسبوعي، ثم تؤكد الزخم والحجم وإشارات SMC "
+                "قبل ترتيب المستوى والعقد."
+            ),
+        )
+    if analysis.liquidity.rvol >= 1.5 and strengthening:
+        return SnipeStrategy(
+            name_ar="استراتيجية توسع الزخم والحجم",
+            description_ar=(
+                "تعتمد على تسارع MACD مع حجم نسبي مرتفع وقرب مستوى فني، مع استبعاد "
+                "الاتجاه المتعارض بين الفريمات."
+            ),
+        )
+    return SnipeStrategy(
+        name_ar="استراتيجية تفاعل المستوى بتأكيد SMC",
+        description_ar=(
+            "تعتمد على قرب السعر من مستوى فني، واتجاه RSI وMACD، والتجميع أو التصريف "
+            "والدايفرجنس والـOrder Block عند توفرها."
+        ),
+    )
 
 
 def compute_snipe_score(analysis: DeterministicAnalysis, daily: pd.DataFrame) -> tuple[float, list[str]]:
@@ -151,15 +251,19 @@ def compute_snipe_score(analysis: DeterministicAnalysis, daily: pd.DataFrame) ->
 
     weekly_direction = _weekly_direction(daily)
     confluence_component = _confluence_component(analysis.regime.label, weekly_direction)
+    smc_component = _smc_confirmation_component(analysis, direction)
 
     score = (
         MOMENTUM_WEIGHT * momentum_component
         + RVOL_WEIGHT * rvol_component
         + PROXIMITY_WEIGHT * proximity_component
         + CONFLUENCE_WEIGHT * confluence_component
+        + SMC_CONFIRMATION_WEIGHT * smc_component
     )
 
     reasons: list[str] = []
+    strategy = select_snipe_strategy(analysis, daily, direction)
+    reasons.append(f"الاستراتيجية: {strategy.name_ar}")
     if direction == "bullish":
         reasons.append("اتجاه صاعد مكتمل قبل فحص عقود Call")
     elif direction == "bearish":

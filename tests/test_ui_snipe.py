@@ -133,3 +133,13 @@ def test_home_page_shows_snipe_button(client):
     assert response.status_code == 200
     assert "قنص اليوم" in response.text
     assert '/ui/screener/snipe/stocks' in response.text
+    assert 'name="viewport"' in response.text
+    assert "@media (max-width: 680px)" in response.text
+    assert "overflow-x: auto" in response.text
+
+
+def test_snipe_options_page_keeps_same_page_and_refreshes_every_minute(client):
+    response = client.get("/ui/screener/snipe/options")
+    assert response.status_code == 200
+    assert "if ('snipe-options' !== 'snipe-options') return;" in response.text
+    assert "setTimeout(refreshSnipeOptions, 60000)" in response.text

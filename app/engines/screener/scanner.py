@@ -5,6 +5,7 @@ feature, CLAUDE.md rule 1: deterministic engine only, no LLM anywhere in this mo
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -22,6 +23,7 @@ LOOKBACK_DAYS = 300
 MIN_BARS_REQUIRED = 30
 TOP_VOLUME_UNIVERSE = 50  # "active stocks" prefilter for the daily screener
 CARDS_DISPLAYED = 15
+logger = logging.getLogger(__name__)
 
 
 def _fetch_one(provider: MarketDataAdapter, symbol: str) -> pd.DataFrame | None:
@@ -35,8 +37,23 @@ def _fetch_one(provider: MarketDataAdapter, symbol: str) -> pd.DataFrame | None:
 
 
 def fetch_universe(provider: MarketDataAdapter, symbols: list[str]) -> dict[str, pd.DataFrame]:
-    """Threaded fetch — these are independent network I/O calls, not sequential paid calls
-    (cost-gate reservation for the whole batch happens once, before this runs)."""
+    """Fetch a batch when supported; otherwise use independent threaded I/O calls."""
+    if provider.supports_batch_daily_ohlcv:
+        try:
+            batch = provider.get_daily_ohlcv_many(symbols, lookback_days=LOOKBACK_DAYS)
+        except Exception as exc:
+            logger.warning(
+                "batch universe fetch failed via %s; per-symbol fallback suppressed: %s",
+                provider.provider_name,
+                exc,
+            )
+            return {}
+        return {
+            symbol: daily
+            for symbol, daily in batch.items()
+            if daily is not None and len(daily) >= MIN_BARS_REQUIRED
+        }
+
     fetched: dict[str, pd.DataFrame] = {}
     with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as pool:
         futures = {pool.submit(_fetch_one, provider, symbol): symbol for symbol in symbols}

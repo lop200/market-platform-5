@@ -201,3 +201,12 @@ US_SYMBOLS: list[dict[str, str]] = [
     {"symbol": "ARKK", "name": "ARK Innovation ETF"},
     {"symbol": "VIX", "name": "CBOE Volatility Index"},
 ]
+
+# Focused universe for the Snipe flow: actively traded option underlyings. Contract-level
+# spread, open-interest, premium, Greeks, and expiry gates still decide what is displayed.
+SNIPE_OPTION_UNIVERSE = {
+    "SPY", "QQQ", "IWM", "DIA", "TLT", "GLD", "SLV", "USO", "XLE", "XLF", "XLK", "ARKK",
+    "AAPL", "NVDA", "TSLA", "AMD", "AMZN", "META", "MSFT", "GOOGL", "NFLX", "AVGO", "MU",
+    "INTC", "PLTR", "COIN", "MSTR", "MARA", "RIOT", "SOFI", "BAC", "JPM", "C", "WFC", "DIS",
+    "BA", "NKE", "PFE", "XOM", "CVX", "UNH", "LLY", "SHOP", "UBER", "SNAP", "PYPL",
+}

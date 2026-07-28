@@ -12,6 +12,7 @@ from app.engines.screener.snipe_scoring import (
     SnipeDirection,
     compute_snipe_score,
     infer_snipe_direction,
+    select_snipe_strategy,
 )
 from app.providers.base import MarketDataAdapter
 
@@ -30,6 +31,8 @@ class SnipeCandidate:
     invalidation_price: float
     zone1_price: float | None
     zone2_price: float | None
+    strategy_name_ar: str
+    strategy_description_ar: str
 
 
 def _daily_change_pct(daily: pd.DataFrame) -> float:
@@ -69,6 +72,7 @@ def _build_candidate(
         zones = supports
 
     score, reasons = compute_snipe_score(analysis, daily)
+    strategy = select_snipe_strategy(analysis, daily, direction)
     return SnipeCandidate(
         symbol=symbol,
         analysis=analysis,
@@ -80,6 +84,8 @@ def _build_candidate(
         invalidation_price=invalidation,
         zone1_price=zones[0] if zones else None,
         zone2_price=zones[1] if len(zones) > 1 else None,
+        strategy_name_ar=strategy.name_ar,
+        strategy_description_ar=strategy.description_ar,
     )
 
 

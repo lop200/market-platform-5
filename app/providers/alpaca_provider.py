@@ -42,6 +42,44 @@ class AlpacaProvider(MarketDataAdapter):
         df.index.name = "date"
         return df.tail(lookback_days)
 
+    @property
+    def supports_batch_daily_ohlcv(self) -> bool:
+        return True
+
+    def get_daily_ohlcv_many(
+        self, symbols: list[str], lookback_days: int
+    ) -> dict[str, pd.DataFrame]:
+        unique_symbols = list(dict.fromkeys(symbols))
+        if not unique_symbols:
+            return {}
+        start = datetime.now(timezone.utc) - timedelta(days=int(lookback_days * 1.6) + 5)
+        request = StockBarsRequest(
+            symbol_or_symbols=unique_symbols,
+            timeframe=TimeFrame.Day,
+            start=start,
+            feed="iex",
+        )
+        bars = self._data_client.get_stock_bars(request).df
+        if bars.empty:
+            return {}
+
+        results: dict[str, pd.DataFrame] = {}
+        if isinstance(bars.index, pd.MultiIndex):
+            available = set(bars.index.get_level_values(0))
+            for symbol in unique_symbols:
+                if symbol not in available:
+                    continue
+                frame = bars.xs(symbol, level=0)[["open", "high", "low", "close", "volume"]]
+                frame.index.name = "date"
+                results[symbol] = frame.tail(lookback_days)
+            return results
+
+        if len(unique_symbols) == 1:
+            frame = bars[["open", "high", "low", "close", "volume"]].copy()
+            frame.index.name = "date"
+            results[unique_symbols[0]] = frame.tail(lookback_days)
+        return results
+
     def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame | None:
         timeframe_map = {"1m": TimeFrame.Minute, "5m": TimeFrame(5, TimeFrame.Minute.unit)}
         timeframe = timeframe_map.get(interval)

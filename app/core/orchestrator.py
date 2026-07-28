@@ -67,7 +67,7 @@ from app.engines.screener.touch_probability import estimate_touch_probability
 from app.engines.screener.watchlist_status import compute_watchlist_status
 from app.legal.disclaimers import DISCLAIMER_AR, DISCLAIMER_EN
 from app.providers.factory import get_market_data_provider
-from app.static_data.us_symbols import US_SYMBOLS
+from app.static_data.us_symbols import SNIPE_OPTION_UNIVERSE, US_SYMBOLS
 
 logger = logging.getLogger(__name__)
 
@@ -725,7 +725,7 @@ def run_snipe_scan(db: Session, settings: Settings | None = None) -> SnipeStockS
     """
     settings = settings or get_settings()
     cache = DBCacheAdapter(db)
-    cache_key = make_cache_key("snipe", "stocks")
+    cache_key = make_cache_key("snipe", "stocks_v2")
     cached = cache.get(cache_key)
     if cached is not None:
         try:
@@ -739,7 +739,11 @@ def run_snipe_scan(db: Session, settings: Settings | None = None) -> SnipeStockS
             cache.delete(cache_key)
 
     market_data_provider = get_market_data_provider()
-    universe = [s["symbol"] for s in US_SYMBOLS]
+    universe = [
+        item["symbol"] for item in US_SYMBOLS if item["symbol"] in SNIPE_OPTION_UNIVERSE
+    ]
+    if not universe:
+        universe = [item["symbol"] for item in US_SYMBOLS]
 
     gate = CostGate(db, settings)
     estimated_cost = market_data_provider.estimated_cost_per_call() * len(universe)
@@ -842,6 +846,11 @@ def run_snipe_scan(db: Session, settings: Settings | None = None) -> SnipeStockS
                 scenario_probabilities=(
                     analysis.scenario_probabilities
                     or compute_scenario_probabilities(analysis, candidate.daily)
+                ).model_copy(
+                    update={
+                        "strategy_name_ar": candidate.strategy_name_ar,
+                        "strategy_description_ar": candidate.strategy_description_ar,
+                    }
                 ),
             )
         )
@@ -959,7 +968,7 @@ def run_snipe_options_scan(db: Session, settings: Settings | None = None) -> Sni
     stock_result = run_snipe_scan(db, settings)
 
     cache = DBCacheAdapter(db)
-    cache_key = make_cache_key("snipe", "options_v2")
+    cache_key = make_cache_key("snipe", "options_v3")
     cached = cache.get(cache_key)
     if cached is not None:
         try:
@@ -1182,7 +1191,7 @@ def run_snipe_options_scan(db: Session, settings: Settings | None = None) -> Sni
     cache.set(
         cache_key,
         {"_cached_at": datetime.now(timezone.utc).isoformat(), "result": result.model_dump(mode="json")},
-        ttl_seconds=settings.cache_ttl_snipe_seconds,
+        ttl_seconds=settings.cache_ttl_snipe_options_seconds,
     )
     return result
 

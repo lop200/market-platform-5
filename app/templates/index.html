@@ -280,6 +280,63 @@
   .watch-log { display: none; margin-top: 8px; font-size: 0.76rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; }
   .watch-log.open { display: block; }
   .watch-log-row { padding: 3px 0; }
+
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .wrap, .card, .snipe-card, .screener-card { min-width: 0; }
+  .tab-bar {
+    overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-bar .tab-btn { flex: 0 0 auto; white-space: nowrap; }
+  .translated-levels { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .translated-levels table { min-width: 420px; }
+  .report-text, .devils-text, .options-note, .screener-banner, .snipe-reasons {
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 680px) {
+    body { padding: 10px; font-size: 0.95rem; }
+    h1 { font-size: 1.18rem; line-height: 1.45; }
+    .subtitle { font-size: 0.82rem; margin-bottom: 12px; }
+    .cost-bar {
+      padding: 10px 12px; margin-bottom: 12px; gap: 4px;
+      align-items: flex-start; flex-direction: column;
+    }
+    .tab-bar { margin-inline: -10px; padding-inline: 10px; gap: 12px; }
+    .tab-btn { min-height: 44px; padding: 10px 4px; font-size: 0.88rem; }
+    .sub-tab-bar .tab-btn { min-height: 42px; flex: 1 1 0; text-align: center; }
+    form.analyze-form { display: grid; grid-template-columns: 1fr; padding: 12px; }
+    .autocomplete-wrap { min-width: 0; }
+    form.analyze-form select, form.analyze-form button { width: 100%; min-height: 44px; }
+    input[type=text] { min-height: 44px; font-size: 16px; }
+    .card { padding: 14px; border-radius: 10px; }
+    .card-header { align-items: flex-start; }
+    .price-big { font-size: 1.65rem; }
+    .plain-summary { padding: 12px; font-size: 0.93rem; line-height: 1.75; }
+    .gauges-grid { gap: 12px 4px; }
+    .gauge-wrap { width: calc(50% - 4px); }
+    .indicator-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .scenario-probabilities { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+    .scenario-probability { padding: 8px 4px; font-size: 0.78rem; }
+    .scenario-probability b { font-size: 1rem; }
+    .screener-grid, .snipe-grid { grid-template-columns: minmax(0, 1fr); }
+    .screener-card, .snipe-card { padding: 13px; }
+    .snipe-card-head, .snipe-price-row, .snipe-level-row { flex-wrap: wrap; }
+    .greeks-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+    .watch-filters { gap: 10px; align-items: stretch; }
+    .watch-filters label { flex: 1 1 100%; justify-content: space-between; }
+    .watch-filters input[type=number] { width: 96px; min-height: 40px; font-size: 16px; }
+    .watch-inline-form { align-items: stretch; }
+    .watch-inline-form label { width: 100%; }
+    .watch-inline-form input, .watch-inline-form button { width: 100%; min-height: 42px; font-size: 16px; }
+    .watch-item { padding: 12px; }
+    .watch-item-actions { flex-wrap: wrap; }
+    .watch-item-actions button { flex: 1 1 120px; min-height: 40px; }
+    .levels { gap: 12px; }
+    .levels .col { flex: 1 1 130px; }
+    footer.disclaimer { font-size: 0.72rem; }
+  }
 </style>
 </head>
 <body>
@@ -1073,6 +1130,42 @@
 
       refreshWatchlist();
       setInterval(refreshWatchlist, 30000);
+    })();
+
+    // Refresh only the existing Snipe-options page. Avoid interrupting an active form
+    // interaction, and restore the mobile scroll position after the refresh.
+    (function () {
+      if ('{{ active_tab }}' !== 'snipe-options') return;
+      var storedScroll = null;
+      try {
+        storedScroll = sessionStorage.getItem('snipe-options-scroll');
+      } catch (error) {
+        storedScroll = null;
+      }
+      if (storedScroll !== null) {
+        window.scrollTo(0, parseInt(storedScroll, 10) || 0);
+        try {
+          sessionStorage.removeItem('snipe-options-scroll');
+        } catch (error) {
+          // Auto-refresh still works when mobile privacy settings block storage.
+        }
+      }
+      function refreshSnipeOptions() {
+        if (
+          document.visibilityState !== 'visible'
+          || document.querySelector('.watch-inline-form.open input:focus')
+        ) {
+          setTimeout(refreshSnipeOptions, 15000);
+          return;
+        }
+        try {
+          sessionStorage.setItem('snipe-options-scroll', String(window.scrollY));
+        } catch (error) {
+          // Reload without scroll restoration when storage is unavailable.
+        }
+        window.location.reload();
+      }
+      setTimeout(refreshSnipeOptions, 60000);
     })();
   </script>
 

@@ -89,8 +89,9 @@ def test_snipe_score_high_hand_computed():
     )
     daily = _trend_daily(250, 50, 150)  # strong uptrend -> weekly direction "up"
     score, reasons = compute_snipe_score(analysis, daily)
-    # 30*1.0 + 25*1.0 + 25*max(0, 1 - 2.5/3) + 20*1.0 = 30 + 25 + 4.1667 + 20 = 79.2
-    assert score == pytest.approx(79.2, abs=0.05)
+    # 25*1 + 20*1 + 20*(1 - 2.5/3) + 20*1 + 15*0.5 = 75.8.
+    assert score == pytest.approx(75.8, abs=0.05)
+    assert any("استراتيجية استمرار الاتجاه متعدد الفريمات" in r for r in reasons)
     assert any("حجم غير طبيعي" in r for r in reasons)
     assert any("زخم MACD" in r for r in reasons)
     assert any("توافق" in r for r in reasons)
@@ -100,8 +101,8 @@ def test_snipe_score_low_hand_computed():
     analysis = _analysis(rvol=0.5, rsi=50.0, histogram_rising=False, last_close=100.0, atr_14=2.0, regime_label="ranging")
     daily = _trend_daily(20, 100, 101)  # too short for weekly history
     score, reasons = compute_snipe_score(analysis, daily)
-    # Neutral momentum is deliberately not rewarded; short weekly history adds no confluence.
-    assert score == pytest.approx(14.2, abs=0.1)
+    # Neutral momentum is not rewarded; unknown weekly/SMC evidence stays neutral.
+    assert score == pytest.approx(20.8, abs=0.1)
     assert any("اتجاه غير مكتمل" in reason for reason in reasons)
 
 

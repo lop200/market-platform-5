@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     cache_ttl_quote_seconds: int = Field(default=15, alias="CACHE_TTL_QUOTE")
     cache_ttl_screener_seconds: int = Field(default=20 * 60, alias="CACHE_TTL_SCREENER")
     cache_ttl_snipe_seconds: int = Field(default=10 * 60, alias="CACHE_TTL_SNIPE")
+    cache_ttl_snipe_options_seconds: int = Field(
+        default=60, alias="CACHE_TTL_SNIPE_OPTIONS"
+    )
 
 
 @lru_cache

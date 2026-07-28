@@ -105,6 +105,27 @@ def test_alpaca_get_daily_ohlcv_raises_on_empty_response(monkeypatch, alpaca_pro
         alpaca_provider.get_daily_ohlcv("NVDA", lookback_days=5)
 
 
+def test_alpaca_get_daily_ohlcv_many_uses_one_batch_request(monkeypatch, alpaca_provider):
+    combined = pd.concat([
+        _fake_bars_df("NVDA", n=10),
+        _fake_bars_df("TLT", n=10),
+    ])
+    calls = []
+
+    def fake_get_stock_bars(request):
+        calls.append(request)
+        return SimpleNamespace(df=combined)
+
+    monkeypatch.setattr(alpaca_provider._data_client, "get_stock_bars", fake_get_stock_bars)
+
+    result = alpaca_provider.get_daily_ohlcv_many(["NVDA", "TLT"], lookback_days=5)
+
+    assert len(calls) == 1
+    assert set(result) == {"NVDA", "TLT"}
+    assert all(len(frame) == 5 for frame in result.values())
+    assert all(frame.index.name == "date" for frame in result.values())
+
+
 def test_alpaca_get_intraday_reshapes_response(monkeypatch, alpaca_provider):
     fake_response = SimpleNamespace(df=_fake_bars_df("NVDA", n=3))
     monkeypatch.setattr(alpaca_provider._data_client, "get_stock_bars", lambda request: fake_response)

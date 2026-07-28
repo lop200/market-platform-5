@@ -38,6 +38,17 @@ class MarketDataAdapter(ABC):
     def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame:
         """Return a DataFrame indexed by date with columns: open, high, low, close, volume."""
 
+    @property
+    def supports_batch_daily_ohlcv(self) -> bool:
+        """Whether this adapter can fetch several symbols without one request per symbol."""
+        return False
+
+    def get_daily_ohlcv_many(
+        self, symbols: list[str], lookback_days: int
+    ) -> dict[str, pd.DataFrame]:
+        """Optional batch path. Callers must check ``supports_batch_daily_ohlcv`` first."""
+        raise NotImplementedError("batch daily OHLCV is not supported by this provider")
+
     @abstractmethod
     def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame | None:
         """Return intraday bars, or None if the provider/tier does not support them."""
