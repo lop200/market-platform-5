@@ -170,8 +170,10 @@ def compute_snipe_score(analysis: DeterministicAnalysis, daily: pd.DataFrame) ->
         reasons.append(f"حجم غير طبيعي: {rvol:.1f}× المعتاد")
     elif rvol > 1.5:
         reasons.append(f"حجم أعلى من المعتاد: {rvol:.1f}×")
-    if analysis.indicators.macd.histogram_rising:
-        reasons.append("زخم MACD يتقوى")
+    if direction == "bullish" and histogram > 0 and analysis.indicators.macd.histogram_rising:
+        reasons.append("زخم MACD الإيجابي يتقوى")
+    elif direction == "bearish" and histogram < 0 and not analysis.indicators.macd.histogram_rising:
+        reasons.append("زخم MACD السلبي يتقوى")
     if nearest_distance_atr < 1.0:
         reasons.append("قريب جداً من مستوى فني مفصلي")
     if confluence_component == 1.0:

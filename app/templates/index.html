@@ -114,6 +114,21 @@
   .scenario-bullish { background: #16281d; border: 1px solid var(--good); }
   .scenario-bearish { background: #2e1418; border: 1px solid var(--bad); }
   .scenario-neutral { background: #20263a; border: 1px solid var(--border); }
+  .scenario-probabilities {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    margin: 12px 0 6px;
+  }
+  .scenario-probability {
+    border-radius: 9px; padding: 9px 10px; text-align: center;
+    border: 1px solid var(--border); background: #111827;
+  }
+  .scenario-probability b { display: block; font-size: 1.1rem; margin-top: 2px; }
+  .scenario-probability.bullish b { color: var(--good); }
+  .scenario-probability.bearish b { color: var(--bad); }
+  .scenario-probability.neutral b { color: var(--muted); }
+  .scenario-probability-note {
+    color: var(--muted); font-size: 0.72rem; line-height: 1.45; margin-bottom: 12px;
+  }
   .options-btn { background: #22304a; color: #9dc0ff; border: 1px solid var(--accent); margin: 8px 0 4px; }
   .options-panel { margin-top: 14px; display: none; }
   .options-panel.open { display: block; }
@@ -399,6 +414,16 @@
         </div>
       </details>
 
+      {% set sp = v.scenario_probabilities %}
+      <div class="scenario-probabilities" title="توزيع 100 نقطة من قراءات النظام: الاتجاه العام 25، المتوسطات 20، MACD 15، RSI 10، SMC 10، والاتجاه الأسبوعي 20">
+        <div class="scenario-probability bullish">صعودي<b>{{ "%.1f"|format(sp.bullish_pct) }}%</b></div>
+        <div class="scenario-probability bearish">هبوطي<b>{{ "%.1f"|format(sp.bearish_pct) }}%</b></div>
+        <div class="scenario-probability neutral">متعادل<b>{{ "%.1f"|format(sp.neutral_pct) }}%</b></div>
+      </div>
+      <div class="scenario-probability-note">
+        ترجيح القراءات الحالية وليس نسبة نجاح تاريخية · المجموع 100% · المعادلة: {{ sp.formula_ref }}
+      </div>
+
       {% if result %}
       {% set scenario_bullish = result.scenario_bullish_ar if is_ar else result.scenario_bullish_en %}
       {% set scenario_bearish = result.scenario_bearish_ar if is_ar else result.scenario_bearish_en %}
@@ -534,6 +559,14 @@
       <span class="{{ change_cls }}">{{ "%+.2f"|format(c.daily_change_pct) }}%</span>
     </div>
 
+    {% set sp = c.scenario_probabilities %}
+    <div class="scenario-probabilities" title="ترجيح اتجاهي من قراءات الاتجاه والمتوسطات وMACD وRSI وSMC والفريم الأسبوعي">
+      <div class="scenario-probability bullish">صعودي<b>{{ "%.1f"|format(sp.bullish_pct) }}%</b></div>
+      <div class="scenario-probability bearish">هبوطي<b>{{ "%.1f"|format(sp.bearish_pct) }}%</b></div>
+      <div class="scenario-probability neutral">متعادل<b>{{ "%.1f"|format(sp.neutral_pct) }}%</b></div>
+    </div>
+    <div class="scenario-probability-note">ترجيح القراءات الحالية، وليس نسبة نجاح تاريخية.</div>
+
     <div class="snipe-bar-track" title="موقع السعر بين مستوى الإبطال وأبعد منطقة فنية محسوبة">
       <div class="snipe-bar-marker" style="left:{{ c.bar_price_pct }}%"></div>
     </div>
@@ -624,6 +657,13 @@
     <div class="snipe-price-row">
       <span class="screener-price" style="margin-bottom:0">{{ "Call" if c.option_type == "call" else "Put" }} {{ "%.2f"|format(c.strike) }}</span>
     </div>
+    {% set sp = c.scenario_probabilities %}
+    <div class="scenario-probabilities" title="ترجيح السهم الأساسي الذي حدد Call أو Put قبل فحص العقد">
+      <div class="scenario-probability bullish">صعودي<b>{{ "%.1f"|format(sp.bullish_pct) }}%</b></div>
+      <div class="scenario-probability bearish">هبوطي<b>{{ "%.1f"|format(sp.bearish_pct) }}%</b></div>
+      <div class="scenario-probability neutral">متعادل<b>{{ "%.1f"|format(sp.neutral_pct) }}%</b></div>
+    </div>
+    <div class="scenario-probability-note">ترجيح السهم الأساسي، وليس احتمال ربح العقد أو نسبة نجاح تاريخية.</div>
     <div class="data-source-note">
       انتهاء العقد: <b>{{ c.expiry }}</b>
       {% if c.is_0dte %}(<b>اليوم — 0DTE</b>){% else %}({{ c.dte_days }} يوم متبقٍ){% endif %}

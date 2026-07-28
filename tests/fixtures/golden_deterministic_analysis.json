@@ -101,5 +101,13 @@
     "risk": 29.55,
     "overall_confidence": 48.9,
     "formulas_ref": "/docs/scoring"
+  },
+  "scenario_probabilities": {
+    "bullish_pct": 90.0,
+    "bearish_pct": 6.7,
+    "neutral_pct": 3.3,
+    "calibrated": false,
+    "formula_ref": "/docs/scoring#scenario-probabilities",
+    "formula": "25×regime + 20×MA_structure + 15×MACD + 10×RSI + 10×SMC + 20×weekly_direction"
   }
 }

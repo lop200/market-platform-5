@@ -21,7 +21,8 @@ from app.config import Settings, get_settings
 from app.core.cache import DBCacheAdapter, make_cache_key, quote_cache_ttl_seconds, report_cache_ttl_seconds
 from app.core.cost_gate import CostGate
 from app.db import repository
-from app.engines.deterministic.schemas import DeterministicAnalysis, Indicators
+from app.engines.deterministic.schemas import DeterministicAnalysis, Indicators, ScenarioProbabilities
+from app.engines.deterministic.scenario_probabilities import compute_scenario_probabilities
 from app.engines.deterministic.engine import run_deterministic_engine
 from app.engines.deterministic.plain_summary import build_plain_summary, compute_open_price
 from app.engines.llm.adapters.factory import get_llm_adapter
@@ -133,6 +134,7 @@ def _to_api_response(
     scores: ScoresOut,
     notable_levels: NotableLevels,
     indicators: Indicators,
+    scenario_probabilities: ScenarioProbabilities,
     plain_summary,
     report: ReportResult,
     lang: Literal["ar", "en"],
@@ -156,6 +158,7 @@ def _to_api_response(
         scores=scores,
         notable_levels=notable_levels,
         indicators=indicators,
+        scenario_probabilities=scenario_probabilities,
         plain_summary=plain_summary,
         chart_bars=chart_bars,
         tldr_ar=report.tldr if is_ar else None,
@@ -279,6 +282,9 @@ def run_analysis(
         invalidation=analysis.levels.invalidation,
     )
     plain_summary = build_plain_summary(analysis, compute_open_price(daily, intraday))
+    scenario_probabilities = (
+        analysis.scenario_probabilities or compute_scenario_probabilities(analysis, daily)
+    )
 
     # [4b] Cost Gate for the LLM call — only reserved now that we KNOW the symbol is
     # valid and the deterministic analysis actually succeeded.
@@ -331,6 +337,7 @@ def run_analysis(
         scores=scores,
         notable_levels=notable_levels,
         indicators=analysis.indicators,
+        scenario_probabilities=scenario_probabilities,
         plain_summary=plain_summary,
         report=report_result,
         lang=lang,
@@ -450,6 +457,9 @@ def run_analysis_deterministic_only(
         invalidation=analysis.levels.invalidation,
     )
     plain_summary = build_plain_summary(analysis, compute_open_price(daily, intraday))
+    scenario_probabilities = (
+        analysis.scenario_probabilities or compute_scenario_probabilities(analysis, daily)
+    )
     chart_bars = [
         ChartBar(t=idx.strftime("%Y-%m-%d"), o=float(row["open"]), h=float(row["high"]), l=float(row["low"]), c=float(row["close"]))
         for idx, row in daily.tail(120).iterrows()
@@ -463,6 +473,7 @@ def run_analysis_deterministic_only(
         scores=scores,
         notable_levels=notable_levels,
         indicators=analysis.indicators,
+        scenario_probabilities=scenario_probabilities,
         plain_summary=plain_summary,
         chart_bars=chart_bars,
         market_open=market_open,
@@ -560,6 +571,9 @@ def run_analysis_narrative(
         invalidation=analysis.levels.invalidation,
     )
     plain_summary = build_plain_summary(analysis, compute_open_price(daily, None))
+    scenario_probabilities = (
+        analysis.scenario_probabilities or compute_scenario_probabilities(analysis, daily)
+    )
     chart_bars = [
         ChartBar(t=idx.strftime("%Y-%m-%d"), o=float(row["open"]), h=float(row["high"]), l=float(row["low"]), c=float(row["close"]))
         for idx, row in daily.tail(120).iterrows()
@@ -574,6 +588,7 @@ def run_analysis_narrative(
         scores=scores,
         notable_levels=notable_levels,
         indicators=analysis.indicators,
+        scenario_probabilities=scenario_probabilities,
         plain_summary=plain_summary,
         report=report_result,
         lang=lang,
@@ -824,6 +839,10 @@ def run_snipe_scan(db: Session, settings: Settings | None = None) -> SnipeStockS
                 bar_price_pct=round(bar_price_pct, 1),
                 atr_pct_relative=analysis.volatility.atr_pct_relative,
                 hv_20d=analysis.volatility.hv_20d,
+                scenario_probabilities=(
+                    analysis.scenario_probabilities
+                    or compute_scenario_probabilities(analysis, candidate.daily)
+                ),
             )
         )
 
@@ -1120,6 +1139,7 @@ def run_snipe_options_scan(db: Session, settings: Settings | None = None) -> Sni
                     expiry_close_utc=expiry_close_utc,
                     hours_to_expiry=hours_to_expiry,
                     probability_horizon_days=round(probability_horizon_days, 3),
+                    scenario_probabilities=stock_card.scenario_probabilities,
                 )
             cards.append(card)
             repository.create_snipe_option_signal(

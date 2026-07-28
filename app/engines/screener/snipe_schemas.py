@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.engines.deterministic.schemas import ScenarioProbabilities
+
 
 class LevelProbability(BaseModel):
     price: float
@@ -25,6 +27,7 @@ class SnipeStockCard(BaseModel):
     bar_price_pct: float
     atr_pct_relative: float
     hv_20d: float
+    scenario_probabilities: ScenarioProbabilities
 
 
 class SnipeOptionCard(BaseModel):
@@ -55,6 +58,7 @@ class SnipeOptionCard(BaseModel):
     expiry_close_utc: datetime
     hours_to_expiry: float | None
     probability_horizon_days: float
+    scenario_probabilities: ScenarioProbabilities
 
 
 class WatchlistAddRequest(BaseModel):

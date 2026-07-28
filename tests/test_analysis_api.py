@@ -121,6 +121,9 @@ def test_analyze_happy_path(client):
     assert "NVDA" in body["report_ar"]
     assert "إنذارات" in body["devils_advocate_ar"] or "الرضا" in body["devils_advocate_ar"]
     assert body["cost_usd"] == pytest.approx(0.004)
+    probabilities = body["scenario_probabilities"]
+    assert probabilities["bullish_pct"] + probabilities["bearish_pct"] + probabilities["neutral_pct"] == pytest.approx(100.0)
+    assert probabilities["calibrated"] is False
 
 
 def test_analyze_rejects_invalid_symbol(client):

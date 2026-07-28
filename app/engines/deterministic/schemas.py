@@ -15,7 +15,7 @@ class MACDResult(BaseModel):
     macd_line: float
     signal_line: float
     histogram: float
-    histogram_rising: bool  # True if histogram moved further from zero vs the prior bar
+    histogram_rising: bool  # True when the histogram value is above the prior bar
 
 
 class MovingAverages(BaseModel):
@@ -118,6 +118,18 @@ class Scores(BaseModel):
     formulas_ref: str = "/docs/scoring"
 
 
+class ScenarioProbabilities(BaseModel):
+    bullish_pct: float
+    bearish_pct: float
+    neutral_pct: float
+    calibrated: bool = False
+    formula_ref: str = "/docs/scoring#scenario-probabilities"
+    formula: str = (
+        "25×regime + 20×MA_structure + 15×MACD + 10×RSI + 10×SMC "
+        "+ 20×weekly_direction"
+    )
+
+
 class DeterministicAnalysis(BaseModel):
     symbol: str
     as_of: datetime
@@ -131,3 +143,4 @@ class DeterministicAnalysis(BaseModel):
     regime: Regime
     smc: SMC
     scores: Scores
+    scenario_probabilities: ScenarioProbabilities | None = None

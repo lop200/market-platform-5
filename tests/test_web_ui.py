@@ -141,6 +141,8 @@ def test_ui_analyze_renders_report(client):
     assert "trending_up" in response.text or "ranging" in response.text or "high_vol" in response.text or "trending_down" in response.text
     assert "جارٍ تحضير الشرح" in response.text
     assert 'data-needs-narrative="true"' in response.text
+    assert "scenario-probabilities" in response.text
+    assert "ليس نسبة نجاح تاريخية" in response.text
 
 
 def test_ui_analyze_narrative_endpoint_returns_llm_text(client):

@@ -13,6 +13,7 @@ from app.engines.deterministic.indicators import compute_indicators
 from app.engines.deterministic.levels import detect_levels
 from app.engines.deterministic.liquidity import compute_liquidity
 from app.engines.deterministic.regime import classify_regime
+from app.engines.deterministic.scenario_probabilities import compute_scenario_probabilities
 from app.engines.deterministic.schemas import DeterministicAnalysis
 from app.engines.deterministic.scoring import DataQuality, compute_scores
 from app.engines.deterministic.smc import compute_smc
@@ -37,7 +38,7 @@ def run_deterministic_engine(
     smc = compute_smc(daily)
     scores = compute_scores(daily, indicators, levels, liquidity, data_quality)
 
-    return DeterministicAnalysis(
+    analysis = DeterministicAnalysis(
         symbol=symbol,
         as_of=datetime.now(timezone.utc),
         data_as_of=daily.index[-1].date(),
@@ -50,4 +51,7 @@ def run_deterministic_engine(
         regime=regime,
         smc=smc,
         scores=scores,
+    )
+    return analysis.model_copy(
+        update={"scenario_probabilities": compute_scenario_probabilities(analysis, daily)}
     )

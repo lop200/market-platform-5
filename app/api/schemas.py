@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app.engines.deterministic.plain_summary import PlainSummary
-from app.engines.deterministic.schemas import Indicators
+from app.engines.deterministic.schemas import Indicators, ScenarioProbabilities
 
 
 class AnalyzeRequest(BaseModel):
@@ -50,6 +50,7 @@ class AnalyzeResponse(BaseModel):
     score_formulas_ref: str = "/docs/scoring"
     notable_levels: NotableLevels
     indicators: Indicators
+    scenario_probabilities: ScenarioProbabilities
     plain_summary: PlainSummary
     chart_bars: list[ChartBar] = []
     tldr_ar: str | None = None
@@ -89,6 +90,7 @@ class PartialAnalyzeResponse(BaseModel):
     score_formulas_ref: str = "/docs/scoring"
     notable_levels: NotableLevels
     indicators: Indicators
+    scenario_probabilities: ScenarioProbabilities
     plain_summary: PlainSummary
     chart_bars: list[ChartBar] = []
     market_open: bool

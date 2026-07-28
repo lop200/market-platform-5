@@ -12,6 +12,7 @@ from app.core.orchestrator import CostLimitExceededError, DataFetchError, Invali
 from app.db import repository
 from app.db.session import get_db
 from app.engines.deterministic.plain_summary import build_plain_summary
+from app.engines.deterministic.scenario_probabilities import compute_scenario_probabilities
 from app.engines.deterministic.schemas import DeterministicAnalysis, Indicators
 from app.engines.llm.report_engine import split_report_sections
 from app.legal.disclaimers import DISCLAIMER_AR, DISCLAIMER_EN
@@ -42,8 +43,12 @@ def _record_to_response(record) -> AnalyzeResponse:
     # Historical view, no live re-fetch (see chart_bars note below) -> open price isn't
     # known here, so the plain-language summary falls back to open == last_close (0%
     # change) rather than fabricating an intraday number.
+    analysis = DeterministicAnalysis.model_validate(deterministic)
     plain_summary = build_plain_summary(
-        DeterministicAnalysis.model_validate(deterministic), open_price=deterministic.get("last_close", 0.0)
+        analysis, open_price=deterministic.get("last_close", 0.0)
+    )
+    scenario_probabilities = (
+        analysis.scenario_probabilities or compute_scenario_probabilities(analysis)
     )
 
     return AnalyzeResponse(
@@ -65,6 +70,7 @@ def _record_to_response(record) -> AnalyzeResponse:
             invalidation=levels.get("invalidation"),
         ),
         indicators=Indicators.model_validate(deterministic["indicators"]),
+        scenario_probabilities=scenario_probabilities,
         plain_summary=plain_summary,
         chart_bars=[],  # historical view — no live OHLCV re-fetch to keep this endpoint free
         tldr_ar=sections["tldr"] if is_ar else None,
