@@ -100,9 +100,9 @@ def test_snipe_score_low_hand_computed():
     analysis = _analysis(rvol=0.5, rsi=50.0, histogram_rising=False, last_close=100.0, atr_14=2.0, regime_label="ranging")
     daily = _trend_daily(20, 100, 101)  # too short for weekly history
     score, reasons = compute_snipe_score(analysis, daily)
-    # 30*(0.6*0+0.4*0.4) + 25*(0.5/3) + 25*0 + 20*0.5 = 4.8 + 4.1667 + 0 + 10 = 18.97 -> 19.0
-    assert score == pytest.approx(19.0, abs=0.1)
-    assert reasons == ["لا توجد إشارات جاهزية بارزة اليوم"]
+    # Neutral momentum is deliberately not rewarded; short weekly history adds no confluence.
+    assert score == pytest.approx(14.2, abs=0.1)
+    assert any("اتجاه غير مكتمل" in reason for reason in reasons)
 
 
 def test_snipe_score_confluence_agreement_gives_full_component():

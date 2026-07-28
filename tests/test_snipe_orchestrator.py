@@ -78,11 +78,13 @@ def test_settings():
 
     # Pinned to yfinance (not whatever MARKET_DATA_PROVIDER happens to be in the real
     # .env) so the options-chain tests below exercise their injected
-    # get_yfinance_expirations/fetch_yfinance_chain_calls fakes deterministically,
+    # get_yfinance_expirations/fetch_yfinance_chain fakes deterministically,
     # instead of the orchestrator's Alpaca branch hitting the real network.
     return Settings(
         database_url="sqlite://", default_daily_cap_usd=1.00, default_monthly_cap_usd=5.00,
         cost_anomaly_calls_per_minute=3, market_data_provider="yfinance",
+        snipe_option_min_abs_delta=0.0, snipe_option_max_abs_delta=1.0,
+        snipe_option_max_theta_decay_pct=1000.0,
     )
 
 
@@ -162,8 +164,8 @@ def test_api_screener_snipe_stocks_endpoint(client, auth_headers):
 
 
 def test_api_screener_snipe_options_endpoint_returns_ranked_contracts(monkeypatch, client, auth_headers, test_settings):
-    """The auto-pick options tab (owner request 2026-07-18) uses yfinance's free chain,
-    isolated behind `get_yfinance_expirations`/`fetch_yfinance_chain_calls` so this stays
+    """The auto-pick options view uses yfinance's free chain,
+    isolated behind `get_yfinance_expirations`/`fetch_yfinance_chain` so this stays
     a network-free unit test, same monkeypatch convention as the stock-data provider.
     Hitting the endpoint via TestClient (not calling the orchestrator function directly)
     means `run_snipe_options_scan` falls back to the process-wide `get_settings()` — pin
@@ -173,20 +175,20 @@ def test_api_screener_snipe_options_endpoint_returns_ranked_contracts(monkeypatc
 
     import pandas as pd
 
-    expiry = (date.today() + timedelta(days=30)).isoformat()
+    expiry = (date.today() + timedelta(days=2)).isoformat()
 
     def fake_expirations(symbol):
         return [expiry]
 
-    def fake_chain(symbol, expiry_str):
+    def fake_chain(symbol, expiry_str, option_type):
         return pd.DataFrame([
-            {"contractSymbol": f"{symbol}CALL", "strike": 100.0, "bid": 4.9, "ask": 5.0, "lastPrice": 4.95,
+            {"contractSymbol": f"{symbol}{option_type.upper()}", "strike": 100.0, "bid": 0.74, "ask": 0.78, "lastPrice": 0.76,
              "openInterest": 800, "volume": 400, "impliedVolatility": 0.35},
         ])
 
     monkeypatch.setattr("app.core.orchestrator.get_settings", lambda: test_settings)
     monkeypatch.setattr("app.core.orchestrator.get_yfinance_expirations", fake_expirations)
-    monkeypatch.setattr("app.core.orchestrator.fetch_yfinance_chain_calls", fake_chain)
+    monkeypatch.setattr("app.core.orchestrator.fetch_yfinance_chain", fake_chain)
 
     response = client.get("/api/v1/screener/snipe/options", headers=auth_headers)
     assert response.status_code == 200
@@ -197,6 +199,9 @@ def test_api_screener_snipe_options_endpoint_returns_ranked_contracts(monkeypatc
     card = body["cards"][0]
     assert card["strike"] == 100.0
     assert card["expiry"] == expiry
+    assert card["dte_days"] == 2
+    assert card["contract_price"] <= 1.0
+    assert card["option_type"] in {"call", "put"}
     assert "delta" in card and "theta" in card
 
 
@@ -247,12 +252,12 @@ def test_snipe_options_card_score_is_pulled_down_by_bad_risk_balance(monkeypatch
     stock_result = run_snipe_scan(db_session, settings=test_settings)
     assert len(stock_result.cards) > 0
 
-    expiry = (date.today() + timedelta(days=30)).isoformat()
+    expiry = (date.today() + timedelta(days=2)).isoformat()
     monkeypatch.setattr("app.core.orchestrator.get_yfinance_expirations", lambda symbol: [expiry])
     monkeypatch.setattr(
-        "app.core.orchestrator.fetch_yfinance_chain_calls",
-        lambda symbol, expiry_str: pd.DataFrame([
-            {"contractSymbol": f"{symbol}CALL", "strike": 100.0, "bid": 4.9, "ask": 5.0, "lastPrice": 4.95,
+        "app.core.orchestrator.fetch_yfinance_chain",
+        lambda symbol, expiry_str, option_type: pd.DataFrame([
+            {"contractSymbol": f"{symbol}{option_type.upper()}", "strike": 100.0, "bid": 0.74, "ask": 0.78, "lastPrice": 0.76,
              "openInterest": 800, "volume": 400, "impliedVolatility": 0.35},
         ]),
     )
@@ -267,6 +272,7 @@ def test_snipe_options_card_score_is_pulled_down_by_bad_risk_balance(monkeypatch
             card.zone1.touch_probability_5d = 0.01
         card.invalidation.touch_probability_5d = 0.43
     monkeypatch.setattr("app.core.orchestrator.run_snipe_scan", lambda db, settings=None: stock_result)
+    monkeypatch.setattr("app.core.orchestrator._risk_balance", lambda zone1, invalidation: (0.02, True))
 
     options_result = run_snipe_options_scan(db_session, settings=test_settings)
     assert len(options_result.cards) > 0

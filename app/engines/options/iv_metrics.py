@@ -53,3 +53,34 @@ def daily_theta_decay_pct(theta: float, current_contract_price: float) -> float 
     if current_contract_price <= 0:
         return None
     return round(theta / current_contract_price * 100, 4)
+
+
+def reprice_contract_at_stock_level(
+    stock_level_price: float,
+    strike: float,
+    time_to_expiry_years: float,
+    implied_vol: float,
+    option_type: str,
+    risk_free_rate: float,
+    *,
+    remaining_time_fraction: float = 0.5,
+) -> float:
+    """Black-Scholes reprice at a level, with explicit elapsed-time assumption.
+
+    This replaces the local Delta/Gamma Taylor approximation for Snipe cards. The latter
+    can reverse direction for large moves when gamma dominates, which is unacceptable
+    for short-dated contracts.
+    """
+    from app.engines.options.greeks import theoretical_price
+
+    minimum_years = 5 / (365 * 24 * 60)
+    remaining_years = max(time_to_expiry_years * remaining_time_fraction, minimum_years)
+    price = theoretical_price(
+        stock_level_price,
+        strike,
+        remaining_years,
+        implied_vol,
+        option_type,
+        risk_free_rate,
+    )
+    return round(max(0.0, price), 4)

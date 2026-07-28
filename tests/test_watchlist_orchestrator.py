@@ -79,14 +79,14 @@ def test_list_watchlist_reserves_gate_once_and_flags_worsened_on_price_drop(monk
         expiry=_expiry_30d(), reference_price=5.00, alert_threshold_pct=5.0,
     )
 
-    def fake_chain(symbol, expiry_str):
+    def fake_chain(symbol, expiry_str, option_type):
         return pd.DataFrame([
             {"strike": 200.0, "bid": 4.6, "ask": 4.8, "lastPrice": 4.70,  # -6% vs 5.00 reference -> red
              "openInterest": 500, "volume": 100, "impliedVolatility": 0.3},
         ])
 
     monkeypatch.setattr("app.core.orchestrator.get_market_data_provider", lambda: _FakeQuoteProvider(190.0))
-    monkeypatch.setattr("app.core.orchestrator.fetch_yfinance_chain_calls", fake_chain)
+    monkeypatch.setattr("app.core.orchestrator.fetch_yfinance_chain", fake_chain)
 
     items = list_watchlist_with_status(db_session, settings=test_settings)
     assert len(items) == 1
@@ -157,8 +157,8 @@ def test_add_watchlist_item_timestamps_are_tz_aware_in_output(db_session, test_s
 def test_remove_watchlist_item_excludes_from_list(monkeypatch, db_session, test_settings):
     monkeypatch.setattr("app.core.orchestrator.get_market_data_provider", lambda: _FakeQuoteProvider(200.0))
     monkeypatch.setattr(
-        "app.core.orchestrator.fetch_yfinance_chain_calls",
-        lambda symbol, expiry_str: pd.DataFrame([
+        "app.core.orchestrator.fetch_yfinance_chain",
+        lambda symbol, expiry_str, option_type: pd.DataFrame([
             {"strike": 200.0, "bid": 4.9, "ask": 5.1, "lastPrice": 5.00,
              "openInterest": 500, "volume": 100, "impliedVolatility": 0.3},
         ]),
@@ -183,14 +183,14 @@ def test_invalidation_breach_shown_even_under_threshold(monkeypatch, db_session,
         expiry=_expiry_30d(), reference_price=5.00, alert_threshold_pct=20.0, invalidation_price=4.90,
     )
 
-    def fake_chain(symbol, expiry_str):
+    def fake_chain(symbol, expiry_str, option_type):
         return pd.DataFrame([
             {"strike": 200.0, "bid": 4.75, "ask": 4.85, "lastPrice": 4.80,  # only -4% (well under the 20% threshold)
              "openInterest": 500, "volume": 100, "impliedVolatility": 0.3},
         ])
 
     monkeypatch.setattr("app.core.orchestrator.get_market_data_provider", lambda: _FakeQuoteProvider(195.0))
-    monkeypatch.setattr("app.core.orchestrator.fetch_yfinance_chain_calls", fake_chain)
+    monkeypatch.setattr("app.core.orchestrator.fetch_yfinance_chain", fake_chain)
 
     [item] = list_watchlist_with_status(db_session, settings=test_settings)
     assert item.status_code == "red"  # invalidation (4.90) breached even though decline < threshold

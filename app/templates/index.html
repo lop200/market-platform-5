@@ -525,7 +525,7 @@
   {% set prob_title = "احتمال 5 جلسات = 2×(1−Φ(|ln(المستوى/السعر)|/(الانحراف اليومي×√5))) — نموذج حركة عشوائية بلا انجراف" %}
   <div class="snipe-card">
     <div class="snipe-card-head">
-      <strong>{{ c.symbol }}</strong>
+      <strong>{{ c.symbol }} · {{ "صاعد" if c.direction == "bullish" else "هابط" }}</strong>
       <span class="screener-score" style="--gcolor:{{ gcolor }}"
             title="SnipeScore = 30×الزخم + 25×RVOL + 25×القرب من مستوى مفصلي + 20×توافق الفريمات">{{ "%.0f"|format(c.readiness_score) }}</span>
     </div>
@@ -600,7 +600,7 @@
   {% macro snipe_option_card(c, generated_at) %}
   {% set gcolor = 'var(--good)' if c.quality_score >= 70 else ('var(--warn)' if c.quality_score >= 40 else 'var(--bad)') %}
   {% set score_title = "الدرجة المعروضة = 70%×جودة العقد الميكانيكية (35×سيولة + 25×(1−سبريد%) + 20×ملاءمة الدلتا + 20×مؤشر تقلب تقريبي) + 30%×توازن المخاطرة (احتمال المنطقة الأولى ÷ (احتمال المنطقة الأولى + احتمال الإبطال)). جودة العقد وحدها هنا: " ~ ("%.0f"|format(c.mechanical_quality_score)) %}
-  {% set prob_title = "احتمال 5 جلسات = 2×(1−Φ(|ln(المستوى/السعر)|/(الانحراف اليومي×√5))) — نفس احتمال السهم، مطبَّق على مستوى العقد المترجم" %}
+  {% set prob_title = "احتمال لمس المستوى خلال عمر العقد نفسه (" ~ ("%.2f"|format(c.probability_horizon_days)) ~ " جلسة تقريبية)، وليس نسبة نجاح تاريخية" %}
   <div class="snipe-card" data-symbol="{{ c.symbol }}" data-option-type="{{ c.option_type }}" data-strike="{{ c.strike }}"
        data-expiry="{{ c.expiry }}" data-contract-price="{{ c.contract_price }}" data-is-zero-dte="{{ 'true' if c.is_0dte else 'false' }}"
        data-invalidation="{{ c.invalidation.price if c.invalidation else '' }}">
@@ -622,14 +622,19 @@
     </div>
     {% endif %}
     <div class="snipe-price-row">
-      <span class="screener-price" style="margin-bottom:0">Call {{ "%.2f"|format(c.strike) }}</span>
+      <span class="screener-price" style="margin-bottom:0">{{ "Call" if c.option_type == "call" else "Put" }} {{ "%.2f"|format(c.strike) }}</span>
     </div>
     <div class="data-source-note">
       انتهاء العقد: <b>{{ c.expiry }}</b>
       {% if c.is_0dte %}(<b>اليوم — 0DTE</b>){% else %}({{ c.dte_days }} يوم متبقٍ){% endif %}
       · إغلاق تقديري {{ c.expiry_close_utc.strftime('%H:%M UTC') }} (≈16:00 بتوقيت نيويورك)
     </div>
-    <div class="data-source-note">سعر العقد التقديري: <b>{{ "%.2f"|format(c.contract_price) }}$</b> · آخر تحديث بيانات: {{ generated_at.strftime('%H:%M UTC') }}</div>
+    <div class="data-source-note">
+      Bid <b>{{ "%.2f"|format(c.bid) }}$</b> · Ask <b>{{ "%.2f"|format(c.ask) }}$</b> ·
+      Mid <b>{{ "%.2f"|format(c.contract_price) }}$</b> · السبريد {{ "%.1f"|format(c.spread_pct * 100) }}% ·
+      القيمة التقريبية للعقد القياسي <b>{{ "%.2f"|format(c.premium_total) }}$</b> قبل الرسوم ·
+      آخر تحديث: {{ generated_at.strftime('%H:%M UTC') }}
+    </div>
 
     <div class="greeks-grid">
       <div class="g"><b>Delta</b>{{ "%.3f"|format(c.delta) }}</div>
@@ -685,6 +690,7 @@
     {% if snipe_options_error %}<div class="error-banner">{{ snipe_options_error }}</div>{% endif %}
     {% if snipe_options_result %}
     <div class="options-note">{{ snipe_options_result.data_source_note }}</div>
+    <div class="options-note">{{ snipe_options_result.selection_policy }}</div>
     <div class="screener-meta">
       آخر تحديث: {{ snipe_options_result.generated_at.strftime('%H:%M UTC') }}
       {% if snipe_options_result.from_cache %}(قبل {{ snipe_options_result.cached_minutes_ago }} دقيقة — من الكاش){% endif %}
@@ -692,11 +698,6 @@
       {% if snipe_options_result.skipped_symbols %}· بلا عقد مناسب: {{ snipe_options_result.skipped_symbols|join(", ") }}{% endif %}
     </div>
     {% if snipe_options_result.cards %}
-    <div class="watch-filters">
-      <label><input type="checkbox" id="filter-0dte"> انتهاء اليوم فقط (0DTE)</label>
-      <label>سعر أقصى للعقد $<input type="number" id="filter-max-price" step="0.05" min="0" value="1.00"></label>
-      <label><input type="checkbox" id="filter-max-price-on" checked> تفعيل فلتر السعر</label>
-    </div>
     <div class="snipe-grid" id="snipe-options-grid">
       {% for c in snipe_options_result.cards %}{{ snipe_option_card(c, snipe_options_result.generated_at) }}{% endfor %}
     </div>
@@ -1076,7 +1077,7 @@
           div.className = 'watch-item tier-' + item.status_code;
           div.innerHTML =
             '<div class="watch-item-head">' +
-              '<strong>' + item.underlying_symbol + ' Call ' + item.strike.toFixed(2) + ' · ' + item.expiry + '</strong>' +
+              '<strong>' + item.underlying_symbol + ' ' + (item.option_type === 'put' ? 'Put' : 'Call') + ' ' + item.strike.toFixed(2) + ' · ' + item.expiry + '</strong>' +
               '<span class="watch-status-badge">' + item.status_emoji + ' ' + item.status_mood_emoji + ' ' + item.status_label + '</span>' +
             '</div>' +
             '<div class="watch-item-meta">' +

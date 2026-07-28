@@ -94,21 +94,27 @@ def test_ui_snipe_options_renders_auto_picked_contracts(monkeypatch, client):
 
     from app.config import Settings
 
-    expiry = (date.today() + timedelta(days=30)).isoformat()
+    expiry = (date.today() + timedelta(days=2)).isoformat()
 
     def fake_expirations(symbol):
         return [expiry]
 
-    def fake_chain(symbol, expiry_str):
+    def fake_chain(symbol, expiry_str, option_type):
         return pd.DataFrame([
-            {"contractSymbol": f"{symbol}CALL", "strike": 100.0, "bid": 4.9, "ask": 5.0, "lastPrice": 4.95,
+            {"contractSymbol": f"{symbol}{option_type.upper()}", "strike": 100.0, "bid": 0.74, "ask": 0.78, "lastPrice": 0.76,
              "openInterest": 800, "volume": 400, "impliedVolatility": 0.35},
         ])
 
-    yfinance_settings = Settings(database_url="sqlite://", market_data_provider="yfinance")
+    yfinance_settings = Settings(
+        database_url="sqlite://",
+        market_data_provider="yfinance",
+        snipe_option_min_abs_delta=0.0,
+        snipe_option_max_abs_delta=1.0,
+        snipe_option_max_theta_decay_pct=1000.0,
+    )
     monkeypatch.setattr("app.core.orchestrator.get_settings", lambda: yfinance_settings)
     monkeypatch.setattr("app.core.orchestrator.get_yfinance_expirations", fake_expirations)
-    monkeypatch.setattr("app.core.orchestrator.fetch_yfinance_chain_calls", fake_chain)
+    monkeypatch.setattr("app.core.orchestrator.fetch_yfinance_chain", fake_chain)
 
     response = client.get("/ui/screener/snipe/options")
     assert response.status_code == 200

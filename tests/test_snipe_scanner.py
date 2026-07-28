@@ -76,8 +76,14 @@ def test_snipe_candidate_zone1_is_nearer_than_zone2():
     candidates, _ = run_snipe_universe_scan(provider, list(data.keys()))
     for c in candidates:
         if c.zone1_price is not None and c.zone2_price is not None:
-            assert c.zone1_price < c.zone2_price
-        assert c.invalidation_price < c.analysis.last_close
+            if c.direction == "bullish":
+                assert c.zone1_price < c.zone2_price
+            else:
+                assert c.zone1_price > c.zone2_price
+        if c.direction == "bullish":
+            assert c.invalidation_price < c.analysis.last_close
+        else:
+            assert c.invalidation_price > c.analysis.last_close
 
 
 def test_snipe_candidates_excluded_when_no_invalidation():

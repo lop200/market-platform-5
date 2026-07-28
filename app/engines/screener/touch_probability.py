@@ -33,7 +33,7 @@ def estimate_touch_probability(
     current_price: float,
     level_price: float,
     hv_20d_annualized_pct: float,
-    horizon_days: int = DEFAULT_HORIZON_DAYS,
+    horizon_days: float = DEFAULT_HORIZON_DAYS,
 ) -> float:
     """Probability the price touches `level_price` at least once within `horizon_days`
     trading sessions, under a driftless-random-walk assumption. Returns 0-1.
@@ -45,7 +45,9 @@ def estimate_touch_probability(
         return 1.0
 
     daily_sigma = max(hv_20d_annualized_pct, 0.0) / 100 / math.sqrt(TRADING_DAYS_PER_YEAR)
-    sigma_horizon = daily_sigma * math.sqrt(max(horizon_days, 1))
+    # A same-day contract can have less than one session remaining. Five minutes is the
+    # numerical floor; the caller supplies the actual fraction for 0DTE.
+    sigma_horizon = daily_sigma * math.sqrt(max(horizon_days, 5 / (6.5 * 60)))
     if sigma_horizon <= 0:
         return 0.0
 

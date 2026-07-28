@@ -18,6 +18,7 @@ from app.db.models import (
     CostLedger,
     CostLimits,
     OptionContractAnalysisRecord,
+    SnipeOptionSignal,
     OptionWatchlistEvent,
     OptionWatchlistItem,
 )
@@ -154,6 +155,40 @@ def record_option_contract_analysis(
     return record
 
 
+def create_snipe_option_signal(
+    db: Session,
+    *,
+    symbol: str,
+    option_type: str,
+    strike: float,
+    expiry: datetime,
+    underlying_price: float,
+    bid: float,
+    ask: float,
+    mid_price: float,
+    score: float,
+    signal_json: dict,
+    formula_version: str = "snipe-option-v2",
+) -> SnipeOptionSignal:
+    record = SnipeOptionSignal(
+        symbol=symbol,
+        option_type=option_type,
+        strike=strike,
+        expiry=expiry,
+        underlying_price=underlying_price,
+        bid=bid,
+        ask=ask,
+        mid_price=mid_price,
+        score=score,
+        formula_version=formula_version,
+        signal_json=signal_json,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
 # --- Stock analyses + audit targets (SRS 7.1, 4.1 steps 7/10, 15.2) ---
 
 def create_analysis(
@@ -283,31 +318,32 @@ def create_snipe_audit_targets(
     zone1_price: float | None,
     zone2_price: float | None,
     invalidation_price: float,
+    direction: str = "bullish",
 ) -> list[AuditTarget]:
     """Extract the two target zones + invalidation for a Snipe scanner card (new feature,
     not in SRS) — mirrors `create_audit_targets` but for the fixed zone1/zone2/invalidation
     shape (`level_type` = "target_zone_1"/"target_zone_2"/"invalidation") the Snipe self-
-    audit evaluator (`audit/self_audit.py::evaluate_snipe_targets`) reads. Both zones are
-    resistances above price by construction, so the scenario is always "bullish"."""
+    audit evaluator (`audit/self_audit.py::evaluate_snipe_targets`) reads. Bullish zones
+    are resistances above price; bearish zones are supports below price."""
     targets: list[AuditTarget] = []
     if zone1_price is not None:
         targets.append(
             AuditTarget(
                 analysis_id=analysis_id, symbol=symbol, price_at_analysis=price_at_analysis,
-                level_type="target_zone_1", level_value=zone1_price, scenario="bullish",
+                level_type="target_zone_1", level_value=zone1_price, scenario=direction,
             )
         )
     if zone2_price is not None:
         targets.append(
             AuditTarget(
                 analysis_id=analysis_id, symbol=symbol, price_at_analysis=price_at_analysis,
-                level_type="target_zone_2", level_value=zone2_price, scenario="bullish",
+                level_type="target_zone_2", level_value=zone2_price, scenario=direction,
             )
         )
     targets.append(
         AuditTarget(
             analysis_id=analysis_id, symbol=symbol, price_at_analysis=price_at_analysis,
-            level_type="invalidation", level_value=invalidation_price, scenario="bullish",
+            level_type="invalidation", level_value=invalidation_price, scenario=direction,
         )
     )
     db.add_all(targets)

@@ -36,14 +36,17 @@ from app.engines.llm.report_engine import (
 from app.db.repository import record_option_contract_analysis
 from app.engines.options.contract_analyzer import analyze_option_contract
 from app.engines.options.contract_ranker import (
-    fetch_alpaca_chain_calls,
-    fetch_yfinance_chain_calls,
+    fetch_alpaca_chain,
+    fetch_yfinance_chain,
     get_alpaca_expirations,
     get_yfinance_expirations,
-    rank_best_call_contract,
+    rank_best_contract,
 )
 from app.engines.options.greeks import compute_greeks, years_to_expiry
-from app.engines.options.iv_metrics import daily_theta_decay_pct, translate_stock_level_to_contract_price
+from app.engines.options.iv_metrics import (
+    daily_theta_decay_pct,
+    reprice_contract_at_stock_level,
+)
 from app.engines.options.schemas import OptionContractAnalysis
 from app.engines.options.vision_extraction import extract_contract_from_image
 from app.engines.screener.scanner import run_universe_scan
@@ -765,10 +768,22 @@ def run_snipe_scan(db: Session, settings: Settings | None = None) -> SnipeStockS
                 touch_probability_5d=estimate_touch_probability(last_close, candidate.zone2_price, hv_20d),
             )
 
-        farthest_zone = candidate.zone2_price or candidate.zone1_price or last_close
-        span = farthest_zone - candidate.invalidation_price
+        plotted_levels = [
+            value
+            for value in (
+                candidate.invalidation_price,
+                candidate.zone1_price,
+                candidate.zone2_price,
+                last_close,
+            )
+            if value is not None
+        ]
+        lower_level, upper_level = min(plotted_levels), max(plotted_levels)
+        span = upper_level - lower_level
         bar_price_pct = (
-            max(0.0, min(100.0, (last_close - candidate.invalidation_price) / span * 100)) if span > 0 else 50.0
+            max(0.0, min(100.0, (last_close - lower_level) / span * 100))
+            if span > 0
+            else 50.0
         )
 
         # Persist now — deterministic-only, zero cost, but still an "analysis" whose
@@ -792,11 +807,13 @@ def run_snipe_scan(db: Session, settings: Settings | None = None) -> SnipeStockS
             candidate.zone1_price,
             candidate.zone2_price,
             candidate.invalidation_price,
+            direction=candidate.direction,
         )
 
         cards.append(
             SnipeStockCard(
                 symbol=candidate.symbol,
+                direction=candidate.direction,
                 last_close=last_close,
                 daily_change_pct=candidate.daily_change_pct,
                 readiness_score=candidate.score,
@@ -806,6 +823,7 @@ def run_snipe_scan(db: Session, settings: Settings | None = None) -> SnipeStockS
                 zone2=zone2_prob,
                 bar_price_pct=round(bar_price_pct, 1),
                 atr_pct_relative=analysis.volatility.atr_pct_relative,
+                hv_20d=analysis.volatility.hv_20d,
             )
         )
 
@@ -848,12 +866,47 @@ def _expiry_close_utc(expiry_date: date) -> datetime:
 
 
 def _translate_level(
-    level: LevelProbability | None, underlying_price: float, contract_price: float, delta: float, gamma: float
+    level: LevelProbability | None,
+    *,
+    strike: float,
+    time_to_expiry_years: float,
+    implied_volatility: float,
+    option_type: str,
+    risk_free_rate: float,
 ) -> LevelProbability | None:
     if level is None:
         return None
-    translated_price = translate_stock_level_to_contract_price(level.price, underlying_price, contract_price, delta, gamma)
-    return LevelProbability(price=translated_price, distance_pct=level.distance_pct, touch_probability_5d=level.touch_probability_5d)
+    translated_price = reprice_contract_at_stock_level(
+        level.price,
+        strike,
+        time_to_expiry_years,
+        implied_volatility,
+        option_type,
+        risk_free_rate,
+    )
+    return LevelProbability(
+        price=translated_price,
+        distance_pct=level.distance_pct,
+        touch_probability_5d=level.touch_probability_5d,
+    )
+
+
+def _expiry_aligned_level(
+    level: LevelProbability | None,
+    *,
+    current_price: float,
+    hv_20d: float,
+    horizon_days: float,
+) -> LevelProbability | None:
+    if level is None:
+        return None
+    return LevelProbability(
+        price=level.price,
+        distance_pct=level.distance_pct,
+        touch_probability_5d=estimate_touch_probability(
+            current_price, level.price, hv_20d, horizon_days=horizon_days
+        ),
+    )
 
 
 # Risk-balance blend weight for the Snipe options tab's displayed score (owner request
@@ -882,23 +935,12 @@ def _risk_balance(zone1: LevelProbability | None, invalidation: LevelProbability
 
 
 def run_snipe_options_scan(db: Session, settings: Settings | None = None) -> SnipeOptionsScanResult:
-    """Auto-picked option contracts for the Snipe scanner's "أوبشن" tab (owner request
-    2026-07-18): for each of the top-10 stock cards, ranks the live yfinance chain
-    (engines/options/contract_ranker.py — free interim source, no paid options-data
-    subscription yet, SRS 9.3) and translates the same three technical levels already
-    shown on the stock card into estimated contract prices (Delta/Gamma translation,
-    engines/options/iv_metrics.py — reused, not recomputed).
-
-    Reuses `run_snipe_scan`'s own cache-first result for the underlying symbols/levels/
-    probabilities (no second stock-scan pass), then does ONE additional cost-gate
-    reservation for the whole batch of chain lookups (CLAUDE.md rule 3) — yfinance has no
-    per-call cost, but every external call still goes through the gate, no exceptions.
-    """
+    """Pick at most three direction-matched 0-2 DTE contracts inside the existing page."""
     settings = settings or get_settings()
     stock_result = run_snipe_scan(db, settings)
 
     cache = DBCacheAdapter(db)
-    cache_key = make_cache_key("snipe", "options")
+    cache_key = make_cache_key("snipe", "options_v2")
     cached = cache.get(cache_key)
     if cached is not None:
         try:
@@ -911,10 +953,6 @@ def run_snipe_options_scan(db: Session, settings: Settings | None = None) -> Sni
         except (ValidationError, KeyError):
             cache.delete(cache_key)
 
-    # Alpaca's options endpoints (owner-confirmed 2026-07-18) use the same paper-account
-    # keys already configured for stock data — preferred over the yfinance interim
-    # workaround whenever they're actually available. Falls back to yfinance for local
-    # dev without Alpaca keys, same "dev-tier" rule as the stock-data adapter.
     use_alpaca_options = settings.market_data_provider.lower() == "alpaca" and bool(
         settings.alpaca_api_key and settings.alpaca_api_secret
     )
@@ -934,26 +972,53 @@ def run_snipe_options_scan(db: Session, settings: Settings | None = None) -> Sni
     skipped: list[str] = []
     try:
         for stock_card in stock_result.cards:
+            option_type = "call" if stock_card.direction == "bullish" else "put"
             try:
                 if use_alpaca_options:
-                    expirations = get_alpaca_expirations(stock_card.symbol)
-                    best = rank_best_call_contract(
+                    expirations = get_alpaca_expirations(
+                        stock_card.symbol,
+                        option_type=option_type,
+                        max_dte=settings.snipe_option_max_dte,
+                    )
+                    best = rank_best_contract(
                         expirations,
-                        lambda expiry_str, sym=stock_card.symbol, price=stock_card.last_close: fetch_alpaca_chain_calls(
-                            sym, expiry_str, underlying_price=price, risk_free_rate=settings.risk_free_rate
+                        lambda expiry_str, sym=stock_card.symbol, price=stock_card.last_close, kind=option_type: fetch_alpaca_chain(
+                            sym,
+                            expiry_str,
+                            underlying_price=price,
+                            risk_free_rate=settings.risk_free_rate,
+                            option_type=kind,
                         ),
                         underlying_price=stock_card.last_close,
                         atr_pct_relative=stock_card.atr_pct_relative,
                         risk_free_rate=settings.risk_free_rate,
+                        option_type=option_type,
+                        max_dte=settings.snipe_option_max_dte,
+                        max_premium=settings.snipe_option_max_premium,
+                        max_spread_pct=settings.snipe_option_max_spread_pct,
+                        min_open_interest=settings.snipe_option_min_open_interest,
+                        min_abs_delta=settings.snipe_option_min_abs_delta,
+                        max_abs_delta=settings.snipe_option_max_abs_delta,
+                        max_theta_decay_pct=settings.snipe_option_max_theta_decay_pct,
                     )
                 else:
                     expirations = get_yfinance_expirations(stock_card.symbol)
-                    best = rank_best_call_contract(
+                    best = rank_best_contract(
                         expirations,
-                        lambda expiry_str, sym=stock_card.symbol: fetch_yfinance_chain_calls(sym, expiry_str),
+                        lambda expiry_str, sym=stock_card.symbol, kind=option_type: fetch_yfinance_chain(
+                            sym, expiry_str, kind
+                        ),
                         underlying_price=stock_card.last_close,
                         atr_pct_relative=stock_card.atr_pct_relative,
                         risk_free_rate=settings.risk_free_rate,
+                        option_type=option_type,
+                        max_dte=settings.snipe_option_max_dte,
+                        max_premium=settings.snipe_option_max_premium,
+                        max_spread_pct=settings.snipe_option_max_spread_pct,
+                        min_open_interest=settings.snipe_option_min_open_interest,
+                        min_abs_delta=settings.snipe_option_min_abs_delta,
+                        max_abs_delta=settings.snipe_option_max_abs_delta,
+                        max_theta_decay_pct=settings.snipe_option_max_theta_decay_pct,
                     )
             except Exception as chain_exc:
                 logger.warning(
@@ -966,66 +1031,133 @@ def run_snipe_options_scan(db: Session, settings: Settings | None = None) -> Sni
                 skipped.append(stock_card.symbol)
                 continue
 
-            delta, gamma = float(best.greeks.delta), float(best.greeks.gamma)
-            risk_balance_component, risk_imbalanced = _risk_balance(stock_card.zone1, stock_card.invalidation)
+            now = datetime.now(timezone.utc)
+            dte_days = max(0, (best.expiry - now.date()).days)
+            is_0dte = dte_days == 0
+            expiry_close_utc = _expiry_close_utc(best.expiry)
+            remaining_hours = max(0.0, (expiry_close_utc - now).total_seconds() / 3600)
+            hours_to_expiry = remaining_hours if is_0dte else None
+            probability_horizon_days = (
+                min(1.0, max(remaining_hours / 6.5, 5 / (6.5 * 60)))
+                if is_0dte
+                else float(max(dte_days, 1))
+            )
+            expiry_invalidation = _expiry_aligned_level(
+                stock_card.invalidation,
+                current_price=stock_card.last_close,
+                hv_20d=stock_card.hv_20d,
+                horizon_days=probability_horizon_days,
+            )
+            expiry_zone1 = _expiry_aligned_level(
+                stock_card.zone1,
+                current_price=stock_card.last_close,
+                hv_20d=stock_card.hv_20d,
+                horizon_days=probability_horizon_days,
+            )
+            expiry_zone2 = _expiry_aligned_level(
+                stock_card.zone2,
+                current_price=stock_card.last_close,
+                hv_20d=stock_card.hv_20d,
+                horizon_days=probability_horizon_days,
+            )
+            risk_balance_component, risk_imbalanced = _risk_balance(
+                expiry_zone1, expiry_invalidation
+            )
             final_score = round(
                 (1 - RISK_BALANCE_WEIGHT) * best.quality_score + RISK_BALANCE_WEIGHT * (100 * risk_balance_component), 1
             )
             reasons = list(best.reasons)
+            reasons.insert(
+                0,
+                "اتجاه صاعد متوافق → Call"
+                if option_type == "call"
+                else "اتجاه هابط متوافق → Put",
+            )
             if risk_imbalanced:
-                reasons.append("⚠️ احتمال الإبطال أعلى من احتمال المنطقة الأولى — درجة العقد مخفَّضة لهذا السبب")
+                reasons.append(
+                    "احتمال الإبطال أعلى من المنطقة الأولى ضمن عمر العقد — خُفّضت الدرجة"
+                )
 
-            as_of_date = datetime.now(timezone.utc).date()
-            dte_days = max(0, (best.expiry - as_of_date).days)
-            is_0dte = dte_days == 0
-            expiry_close_utc = _expiry_close_utc(best.expiry)
-            hours_to_expiry = (
-                max(0.0, (expiry_close_utc - datetime.now(timezone.utc)).total_seconds() / 3600)
-                if is_0dte else None
+            time_to_expiry = years_to_expiry(best.expiry, now.date())
+            translation_args = {
+                "strike": best.strike,
+                "time_to_expiry_years": time_to_expiry,
+                "implied_volatility": best.implied_volatility,
+                "option_type": option_type,
+                "risk_free_rate": settings.risk_free_rate,
+            }
+            spread_pct = (
+                (best.ask - best.bid) / ((best.ask + best.bid) / 2)
+                if best.bid and best.ask
+                else 1.0
             )
 
-            cards.append(
-                SnipeOptionCard(
+            card = SnipeOptionCard(
                     symbol=stock_card.symbol,
+                    option_type=option_type,
                     strike=best.strike,
                     expiry=best.expiry.isoformat(),
                     contract_price=best.contract_price,
+                    bid=float(best.bid),
+                    ask=float(best.ask),
+                    spread_pct=round(spread_pct, 4),
+                    premium_total=round(best.contract_price * 100, 2),
                     quality_score=final_score,
                     mechanical_quality_score=best.quality_score,
                     risk_balance_component=round(risk_balance_component, 3),
                     risk_imbalanced=risk_imbalanced,
-                    delta=delta,
-                    gamma=gamma,
+                    delta=float(best.greeks.delta),
+                    gamma=float(best.greeks.gamma),
                     theta=float(best.greeks.theta),
                     vega=float(best.greeks.vega),
                     daily_theta_decay_pct=daily_theta_decay_pct(float(best.greeks.theta), best.contract_price),
-                    invalidation=_translate_level(stock_card.invalidation, stock_card.last_close, best.contract_price, delta, gamma),
-                    zone1=_translate_level(stock_card.zone1, stock_card.last_close, best.contract_price, delta, gamma),
-                    zone2=_translate_level(stock_card.zone2, stock_card.last_close, best.contract_price, delta, gamma),
+                    invalidation=_translate_level(expiry_invalidation, **translation_args),
+                    zone1=_translate_level(expiry_zone1, **translation_args),
+                    zone2=_translate_level(expiry_zone2, **translation_args),
                     reasons=reasons,
                     dte_days=dte_days,
                     is_0dte=is_0dte,
                     expiry_close_utc=expiry_close_utc,
                     hours_to_expiry=hours_to_expiry,
+                    probability_horizon_days=round(probability_horizon_days, 3),
                 )
+            cards.append(card)
+            repository.create_snipe_option_signal(
+                db,
+                symbol=card.symbol,
+                option_type=card.option_type,
+                strike=card.strike,
+                expiry=datetime.combine(best.expiry, time.min),
+                underlying_price=stock_card.last_close,
+                bid=card.bid,
+                ask=card.ask,
+                mid_price=card.contract_price,
+                score=card.quality_score,
+                signal_json=card.model_dump(mode="json"),
             )
     except Exception:
         gate.record_actual(decision.ledger_id, 0.0)
         raise
     gate.record_actual(decision.ledger_id, 0.0)
 
+    cards.sort(key=lambda card: card.quality_score, reverse=True)
+    cards = cards[:3]
     data_source_note = (
-        "بيانات سلسلة العقود من Alpaca (تغذية indicative مجانية — ليست OPRA اللحظية المدفوعة). "
-        "الفائدة المفتوحة من إغلاق آخر جلسة تداول، وحجم التداول اليومي غير متاح عبر هذه التغذية "
-        "فيُعتمد على الفائدة المفتوحة وحدها لدرجة السيولة."
+        "بيانات Alpaca indicative المجانية للاختبار وليست OPRA الرسمية؛ الأسعار قد تكون "
+        "معدّلة أو متأخرة، لذلك الدرجات قراءات رياضية تعليمية وليست نسب نجاح تاريخية."
         if use_alpaca_options
         else
-        "بيانات سلسلة العقود من yfinance (مصدر مجاني غير رسمي وقد يكون متأخراً) — بديل تطوير "
-        "مؤقت (MARKET_DATA_PROVIDER ليس alpaca)."
+        "بيانات yfinance غير الرسمية قد تكون متأخرة؛ تستخدم هنا للتطوير فقط."
+    )
+    selection_policy = (
+        f"اختيار مسبق داخل المحرك: اتجاه Call/Put أولاً، انتهاء 0–{settings.snipe_option_max_dte} يوم، "
+        f"علاوة ≤ {settings.snipe_option_max_premium:.2f}$، سبريد ≤ "
+        f"{settings.snipe_option_max_spread_pct * 100:.0f}%، وفائدة مفتوحة ≥ "
+        f"{settings.snipe_option_min_open_interest}. يعرض أفضل 3 فقط وقد لا يعرض أي عقد."
     )
     result = SnipeOptionsScanResult(
         generated_at=datetime.now(timezone.utc), cards=cards, skipped_symbols=skipped,
-        data_source_note=data_source_note,
+        data_source_note=data_source_note, selection_policy=selection_policy,
     )
     cache.set(
         cache_key,
@@ -1067,12 +1199,14 @@ def _fetch_watchlist_contract_quote(
     expiry_str = item.expiry.isoformat()
     try:
         if use_alpaca_options:
-            chain = fetch_alpaca_chain_calls(
+            chain = fetch_alpaca_chain(
                 item.underlying_symbol, expiry_str, underlying_price=underlying_price,
-                risk_free_rate=settings.risk_free_rate,
+                risk_free_rate=settings.risk_free_rate, option_type=item.option_type,
             )
         else:
-            chain = fetch_yfinance_chain_calls(item.underlying_symbol, expiry_str)
+            chain = fetch_yfinance_chain(
+                item.underlying_symbol, expiry_str, item.option_type
+            )
     except Exception as chain_exc:
         logger.warning(
             "watchlist chain refresh failed for %s %s %s — status shows stale/unknown this poll: %s",
@@ -1090,13 +1224,20 @@ def _fetch_watchlist_contract_quote(
         return None
     time_to_expiry = years_to_expiry(item.expiry, datetime.now(timezone.utc).date())
     try:
-        greeks = compute_greeks(underlying_price, float(item.strike), time_to_expiry, float(iv), "call", settings.risk_free_rate)
+        greeks = compute_greeks(
+            underlying_price,
+            float(item.strike),
+            time_to_expiry,
+            float(iv),
+            item.option_type,
+            settings.risk_free_rate,
+        )
     except Exception:
         return None
     bid, ask, last_price = row.get("bid"), row.get("ask"), row.get("lastPrice")
-    price = float(last_price) if last_price and last_price == last_price else None
-    if not price and bid and ask:
-        price = (float(bid) + float(ask)) / 2
+    price = (float(bid) + float(ask)) / 2 if bid and ask else None
+    if not price and last_price and last_price == last_price:
+        price = float(last_price)
     if not price:
         return None
     price = round(price, 2)

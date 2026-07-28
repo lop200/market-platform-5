@@ -159,14 +159,37 @@ def evaluate_snipe_targets(window: pd.DataFrame, targets: list[AuditTarget]) -> 
     zone1_level = float(zone1.level_value) if zone1 is not None else None
     zone2_level = float(zone2.level_value) if zone2 is not None else None
     invalidation_level = float(invalidation.level_value) if invalidation is not None else None
+    direction = next(
+        (
+            getattr(target, "scenario", None)
+            for target in targets
+            if getattr(target, "scenario", None) in {"bullish", "bearish"}
+        ),
+        "bullish",
+    )
 
     zone1_touch_pos = zone2_touch_pos = invalidation_touch_pos = None
     for pos, (_, row) in enumerate(window.iterrows()):
-        if zone1_level is not None and zone1_touch_pos is None and row["high"] >= zone1_level:
+        zone1_hit = (
+            row["high"] >= zone1_level
+            if direction == "bullish"
+            else row["low"] <= zone1_level
+        ) if zone1_level is not None else False
+        zone2_hit = (
+            row["high"] >= zone2_level
+            if direction == "bullish"
+            else row["low"] <= zone2_level
+        ) if zone2_level is not None else False
+        invalidation_hit = (
+            row["low"] <= invalidation_level
+            if direction == "bullish"
+            else row["high"] >= invalidation_level
+        ) if invalidation_level is not None else False
+        if zone1_touch_pos is None and zone1_hit:
             zone1_touch_pos = pos
-        if zone2_level is not None and zone2_touch_pos is None and row["high"] >= zone2_level:
+        if zone2_touch_pos is None and zone2_hit:
             zone2_touch_pos = pos
-        if invalidation_level is not None and invalidation_touch_pos is None and row["low"] <= invalidation_level:
+        if invalidation_touch_pos is None and invalidation_hit:
             invalidation_touch_pos = pos
 
     zone1_touched = zone1_touch_pos is not None
@@ -184,9 +207,9 @@ def evaluate_snipe_targets(window: pd.DataFrame, targets: list[AuditTarget]) -> 
     outcome_score = sum(per_zone_scores) / len(per_zone_scores) if per_zone_scores else None
 
     if zone1_touched_first or zone2_touched_first:
-        scenario_realized = "bullish"
+        scenario_realized = direction
     elif invalidation_touched:
-        scenario_realized = "bearish"
+        scenario_realized = "bearish" if direction == "bullish" else "bullish"
     else:
         scenario_realized = "neutral"
 

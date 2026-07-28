@@ -1,55 +1,31 @@
-"""Contract Quality Score (SRS 11.2) — auto-picks the single best call contract for a
-Snipe scanner card from a live options chain.
+"""Deterministic 0-2 DTE option-contract ranking for Today's Snipe.
 
-Primary data source (owner-confirmed 2026-07-18): Alpaca's options endpoints, using the
-same paper-account keys already configured for stock data — no separate Tradier/Polygon
-subscription needed. Alpaca's free "indicative" options feed (not the paid OPRA
-real-time feed, which requires signing a separate market-data agreement) gives live
-bid/ask/last-trade per contract via `OptionHistoricalDataClient`, and contract metadata
-(strike/expiry/type/open interest) via `TradingClient.get_option_contracts`. It does not
-expose implied volatility or per-contract daily volume, so IV is solved in-house from the
-mid price via py_vollib (`solve_implied_volatility`, CLAUDE.md rule 1) and volume defaults
-to 0 (open interest — the dominant, more stable term in the liquidity component below —
-still carries full weight). Falls back to yfinance's free, no-key `option_chain()` only
-when `MARKET_DATA_PROVIDER` is not `alpaca` (local dev without Alpaca keys) — same
-"dev-tier" caveat as `providers/yfinance_provider.py`. No historical chain in either case,
-so a true 252-session IV Rank (SRS 11.1) isn't computable — `iv_rank_proxy` below is a
-declared, clearly-labeled approximation instead.
-
-    ContractQualityScore = 35×liquidity + 25×(1 − spread_pct) + 20×delta_fit + 20×iv_rank_proxy
-
-- liquidity: 0.7×open-interest saturation + 0.3×volume saturation (declared constants).
-- spread_pct: (ask − bid) / mid, scaled so 0% -> 1.0 and >=15% -> 0.0.
-- delta_fit: how close the contract's Delta is to 0.5 — a liquid, balanced middle ground
-  between a cheap far-OTM lotto ticket and an expensive deep-ITM stock substitute. 1.0 at
-  Delta=0.5, 0.0 at the edges.
-- iv_rank_proxy: NOT a real percentile — approximated from the stock's own ATR% relative
-  to its 90-day average (`Volatility.atr_pct_relative`, already computed by the
-  deterministic engine), scaled so >=1.5x average maxes out.
-
-No LLM anywhere in this module (CLAUDE.md rule 1) — pure arithmetic + py_vollib Greeks
-(same library already used for the M2-B screenshot flow).
+The ranker evaluates calls or puts only after the underlying direction is known. Hard
+gates (DTE, premium, spread, open interest, delta, and theta) run before scoring so the
+UI never has to hide an invalid contract after it has already been selected.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import Literal
 
 import pandas as pd
 
 from app.engines.options.greeks import Greeks, compute_greeks, solve_implied_volatility, years_to_expiry
 
-TARGET_DTE_MIN = 14
-TARGET_DTE_MAX = 45
-TARGET_DTE_PREFERRED = 30
-STRIKE_BAND_PCT = 0.15  # only evaluate strikes within +/-15% of the current underlying price
-MAX_CONTRACTS_EVALUATED = 40
+OptionType = Literal["call", "put"]
+
+TARGET_DTE_MIN = 0
+TARGET_DTE_MAX = 2
+STRIKE_BAND_PCT = 0.15
+MAX_CONTRACTS_EVALUATED = 80
 
 LIQUIDITY_OI_SATURATION = 500
 LIQUIDITY_VOLUME_SATURATION = 200
 SPREAD_PCT_SATURATION = 0.15
 IV_RANK_PROXY_SATURATION = 1.5
-MAX_PLAUSIBLE_IV = 3.0  # above this, treat the chain quote as stale/unreliable and skip it
+MAX_PLAUSIBLE_IV = 3.0
 
 QUALITY_WEIGHT_LIQUIDITY = 35
 QUALITY_WEIGHT_SPREAD = 25
@@ -60,7 +36,7 @@ QUALITY_WEIGHT_IV_RANK = 20
 @dataclass(frozen=True)
 class RankedContract:
     contract_symbol: str
-    option_type: str
+    option_type: OptionType
     strike: float
     expiry: date
     contract_price: float
@@ -74,163 +50,224 @@ class RankedContract:
     reasons: list[str]
 
 
-def _select_expiry(expirations: list[str], as_of: date) -> str | None:
-    in_window: list[tuple[int, str]] = []
-    all_future: list[tuple[int, str]] = []
-    for exp_str in expirations:
-        exp_date = datetime.strptime(exp_str, "%Y-%m-%d").date()
-        dte = (exp_date - as_of).days
-        if dte <= 0:
-            continue
-        all_future.append((dte, exp_str))
-        if TARGET_DTE_MIN <= dte <= TARGET_DTE_MAX:
-            in_window.append((dte, exp_str))
-    if in_window:
-        in_window.sort(key=lambda pair: abs(pair[0] - TARGET_DTE_PREFERRED))
-        return in_window[0][1]
-    if all_future:
-        all_future.sort()
-        return all_future[0][1]
-    return None
+def _select_expiries(
+    expirations: list[str],
+    as_of: date,
+    min_dte: int = TARGET_DTE_MIN,
+    max_dte: int = TARGET_DTE_MAX,
+) -> list[str]:
+    """Return eligible expiries only; never substitute a longer-dated contract."""
+    selected: list[tuple[int, str]] = []
+    for expiry_str in expirations:
+        expiry = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+        dte = (expiry - as_of).days
+        if min_dte <= dte <= max_dte:
+            selected.append((dte, expiry_str))
+    selected.sort(key=lambda item: item[0])
+    return [expiry for _, expiry in selected]
 
 
 def _safe_number(value, default: float = 0.0) -> float:
-    """`yfinance` chain columns are pandas float64 and use NaN (not None) for missing
-    data — NaN is truthy in Python, so a plain `value or default` silently lets it through."""
     if value is None:
         return default
     try:
         value = float(value)
     except (TypeError, ValueError):
         return default
-    return default if value != value else value  # NaN != NaN
+    return default if value != value else value
 
 
 def _liquidity_component(open_interest: float | None, volume: float | None) -> float:
     oi = _safe_number(open_interest)
     vol = _safe_number(volume)
     return min(
-        0.7 * min(oi / LIQUIDITY_OI_SATURATION, 1.0) + 0.3 * min(vol / LIQUIDITY_VOLUME_SATURATION, 1.0), 1.0
+        0.7 * min(oi / LIQUIDITY_OI_SATURATION, 1.0)
+        + 0.3 * min(vol / LIQUIDITY_VOLUME_SATURATION, 1.0),
+        1.0,
     )
 
 
-def _spread_component(bid: float | None, ask: float | None) -> float | None:
-    bid = _safe_number(bid, default=-1)
-    ask = _safe_number(ask, default=-1)
-    if bid <= 0 or ask <= 0 or ask < bid:
+def _spread_metrics(bid: float | None, ask: float | None) -> tuple[float, float, float] | None:
+    bid_value = _safe_number(bid, default=-1)
+    ask_value = _safe_number(ask, default=-1)
+    if bid_value <= 0 or ask_value <= 0 or ask_value < bid_value:
         return None
-    mid = (bid + ask) / 2
-    spread_pct = (ask - bid) / mid
-    return max(0.0, 1 - spread_pct / SPREAD_PCT_SATURATION)
+    mid = (bid_value + ask_value) / 2
+    spread_pct = (ask_value - bid_value) / mid
+    component = max(0.0, 1 - spread_pct / SPREAD_PCT_SATURATION)
+    return mid, spread_pct, component
 
 
 def _delta_fit_component(delta_value: float) -> float:
-    return max(0.0, 1 - abs(delta_value - 0.5) / 0.5)
+    return max(0.0, 1 - abs(abs(delta_value) - 0.5) / 0.5)
 
 
 def _iv_rank_proxy(atr_pct_relative: float) -> float:
-    if atr_pct_relative != atr_pct_relative:  # NaN guard
+    if atr_pct_relative != atr_pct_relative:
         return 0.5
     return max(0.0, min(atr_pct_relative / IV_RANK_PROXY_SATURATION, 1.0))
 
 
-def rank_best_call_contract(
+def _years_for_expiry(expiry: date, as_of: date) -> float:
+    if expiry == as_of and as_of != datetime.now(timezone.utc).date():
+        # Deterministic test/backtest fallback: half a calendar day remains.
+        return 0.5 / 365.0
+    return years_to_expiry(expiry, as_of)
+
+
+def rank_best_contract(
     expirations: list[str],
-    fetch_chain_calls,  # Callable[[str], pandas.DataFrame] — injected so this stays testable without network
+    fetch_chain,
     underlying_price: float,
     atr_pct_relative: float,
     risk_free_rate: float,
+    option_type: OptionType,
     as_of: date | None = None,
+    *,
+    min_dte: int = TARGET_DTE_MIN,
+    max_dte: int = TARGET_DTE_MAX,
+    max_premium: float = 1.0,
+    max_spread_pct: float = SPREAD_PCT_SATURATION,
+    min_open_interest: int = 100,
+    min_abs_delta: float = 0.30,
+    max_abs_delta: float = 0.65,
+    max_theta_decay_pct: float = 40.0,
 ) -> RankedContract | None:
-    """Pure ranking logic over an already-fetched chain — `fetch_chain_calls(expiry_str)`
-    is the only network-touching call, kept as an injected callable so tests can fake it
-    without a real yfinance round-trip."""
+    """Rank all eligible expiries after applying every declared hard gate."""
     as_of = as_of or datetime.now(timezone.utc).date()
-    expiry_str = _select_expiry(expirations, as_of)
-    if expiry_str is None:
-        return None
-    expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
-    time_to_expiry = years_to_expiry(expiry_date, as_of)
-
-    calls = fetch_chain_calls(expiry_str)
-    if calls is None or calls.empty:
-        return None
-
-    lower = underlying_price * (1 - STRIKE_BAND_PCT)
-    upper = underlying_price * (1 + STRIKE_BAND_PCT)
-    band = calls[(calls["strike"] >= lower) & (calls["strike"] <= upper)]
-    if band.empty:
-        band = calls
-    band = band.head(MAX_CONTRACTS_EVALUATED)
-
+    selected_expiries = _select_expiries(expirations, as_of, min_dte, max_dte)
     best: RankedContract | None = None
-    for _, row in band.iterrows():
-        iv = row.get("impliedVolatility")
-        if iv is None or iv != iv or iv <= 0 or iv > MAX_PLAUSIBLE_IV:
-            continue
-        bid, ask = row.get("bid"), row.get("ask")
-        spread_component = _spread_component(bid, ask)
-        if spread_component is None:
-            continue
+
+    for expiry_str in selected_expiries:
+        expiry = datetime.strptime(expiry_str, "%Y-%m-%d").date()
         try:
-            greeks = compute_greeks(underlying_price, float(row["strike"]), time_to_expiry, float(iv), "call", risk_free_rate)
-        except Exception:
+            time_to_expiry = _years_for_expiry(expiry, as_of)
+        except ValueError:
             continue
 
-        liquidity_component = _liquidity_component(row.get("openInterest"), row.get("volume"))
-        delta_fit = _delta_fit_component(float(greeks.delta))
-        iv_rank = _iv_rank_proxy(atr_pct_relative)
-        score = round(
-            float(
+        chain = fetch_chain(expiry_str)
+        if chain is None or chain.empty:
+            continue
+
+        lower = underlying_price * (1 - STRIKE_BAND_PCT)
+        upper = underlying_price * (1 + STRIKE_BAND_PCT)
+        band = chain[(chain["strike"] >= lower) & (chain["strike"] <= upper)]
+        if band.empty:
+            band = chain
+        band = band.head(MAX_CONTRACTS_EVALUATED)
+
+        for _, row in band.iterrows():
+            iv = _safe_number(row.get("impliedVolatility"), default=-1)
+            if iv <= 0 or iv > MAX_PLAUSIBLE_IV:
+                continue
+
+            spread = _spread_metrics(row.get("bid"), row.get("ask"))
+            if spread is None:
+                continue
+            mid, spread_pct, spread_component = spread
+            if spread_pct > max_spread_pct:
+                continue
+
+            contract_price = round(mid, 2)
+            if contract_price <= 0 or contract_price > max_premium:
+                continue
+
+            open_interest = int(_safe_number(row.get("openInterest")))
+            if open_interest < min_open_interest:
+                continue
+
+            try:
+                greeks = compute_greeks(
+                    underlying_price,
+                    float(row["strike"]),
+                    time_to_expiry,
+                    iv,
+                    option_type,
+                    risk_free_rate,
+                )
+            except Exception:
+                continue
+
+            abs_delta = abs(float(greeks.delta))
+            if not min_abs_delta <= abs_delta <= max_abs_delta:
+                continue
+            theta_decay_pct = abs(float(greeks.theta)) / contract_price * 100
+            if theta_decay_pct > max_theta_decay_pct:
+                continue
+
+            liquidity_component = _liquidity_component(open_interest, row.get("volume"))
+            delta_fit = _delta_fit_component(float(greeks.delta))
+            iv_rank = _iv_rank_proxy(atr_pct_relative)
+            score = round(
                 QUALITY_WEIGHT_LIQUIDITY * liquidity_component
                 + QUALITY_WEIGHT_SPREAD * spread_component
                 + QUALITY_WEIGHT_DELTA_FIT * delta_fit
-                + QUALITY_WEIGHT_IV_RANK * iv_rank
-            ),
-            1,
-        )
+                + QUALITY_WEIGHT_IV_RANK * iv_rank,
+                1,
+            )
 
-        reasons: list[str] = []
-        if _safe_number(row.get("openInterest")) >= LIQUIDITY_OI_SATURATION:
-            reasons.append("فائدة مفتوحة عالية")
-        if spread_component >= 0.7:
-            reasons.append("سبريد سعري ضيق نسبياً")
-        if delta_fit >= 0.8:
-            reasons.append("دلتا متوازنة قرب 0.5")
+            reasons = [
+                f"انتهاء ضمن {max_dte} يوم",
+                f"العلاوة ضمن {max_premium:.2f}$",
+                f"السبريد {spread_pct * 100:.1f}%",
+            ]
+            if open_interest >= LIQUIDITY_OI_SATURATION:
+                reasons.append("فائدة مفتوحة مرتفعة")
+            if delta_fit >= 0.8:
+                reasons.append("دلتا متوازنة قرب 0.5")
 
-        contract_price = _safe_number(row.get("lastPrice"))
-        if not contract_price and bid and ask:
-            contract_price = (bid + ask) / 2
-        contract_price = round(contract_price, 2)
-
-        candidate = RankedContract(
-            contract_symbol=str(row.get("contractSymbol", "")),
-            option_type="call",
-            strike=float(row["strike"]),
-            expiry=expiry_date,
-            contract_price=contract_price,
-            bid=float(bid) if bid else None,
-            ask=float(ask) if ask else None,
-            open_interest=int(_safe_number(row.get("openInterest"))),
-            volume=int(_safe_number(row.get("volume"))),
-            implied_volatility=float(iv),
-            quality_score=score,
-            greeks=greeks,
-            reasons=reasons or ["جودة عقد متوسطة ضمن النطاق المفحوص"],
-        )
-        if best is None or candidate.quality_score > best.quality_score:
-            best = candidate
+            candidate = RankedContract(
+                contract_symbol=str(row.get("contractSymbol", "")),
+                option_type=option_type,
+                strike=float(row["strike"]),
+                expiry=expiry,
+                contract_price=contract_price,
+                bid=float(row["bid"]),
+                ask=float(row["ask"]),
+                open_interest=open_interest,
+                volume=int(_safe_number(row.get("volume"))),
+                implied_volatility=iv,
+                quality_score=score,
+                greeks=greeks,
+                reasons=reasons,
+            )
+            if best is None or candidate.quality_score > best.quality_score:
+                best = candidate
 
     return best
 
 
-def fetch_yfinance_chain_calls(symbol: str, expiry_str: str):
-    """The one real network call this module makes — isolated so `rank_best_call_contract`
-    stays a pure function callers can unit-test without hitting yfinance."""
+def rank_best_call_contract(
+    expirations: list[str],
+    fetch_chain_calls,
+    underlying_price: float,
+    atr_pct_relative: float,
+    risk_free_rate: float,
+    as_of: date | None = None,
+    **kwargs,
+) -> RankedContract | None:
+    """Backward-compatible wrapper; the Snipe flow uses ``rank_best_contract``."""
+    return rank_best_contract(
+        expirations,
+        fetch_chain_calls,
+        underlying_price,
+        atr_pct_relative,
+        risk_free_rate,
+        "call",
+        as_of,
+        **kwargs,
+    )
+
+
+def fetch_yfinance_chain(symbol: str, expiry_str: str, option_type: OptionType):
     import yfinance as yf
 
-    ticker = yf.Ticker(symbol)
-    return ticker.option_chain(expiry_str).calls
+    chain = yf.Ticker(symbol).option_chain(expiry_str)
+    return chain.calls if option_type == "call" else chain.puts
+
+
+def fetch_yfinance_chain_calls(symbol: str, expiry_str: str):
+    return fetch_yfinance_chain(symbol, expiry_str, "call")
 
 
 def get_yfinance_expirations(symbol: str) -> list[str]:
@@ -248,62 +285,77 @@ def _alpaca_trading_client():
     return TradingClient(settings.alpaca_api_key, settings.alpaca_api_secret, paper=True)
 
 
-def get_alpaca_expirations(symbol: str) -> list[str]:
-    """Contract metadata via Alpaca's Trading API — same paper-account keys already used
-    for stock data (owner-confirmed 2026-07-18), no extra subscription."""
+def get_alpaca_expirations(
+    symbol: str,
+    option_type: OptionType = "call",
+    as_of: date | None = None,
+    max_dte: int = TARGET_DTE_MAX,
+) -> list[str]:
+    """Request only the owner-approved expiry window, avoiding irrelevant pagination."""
     from alpaca.trading.enums import ContractType
     from alpaca.trading.requests import GetOptionContractsRequest
 
-    client = _alpaca_trading_client()
-    request = GetOptionContractsRequest(underlying_symbols=[symbol], type=ContractType.CALL)
-    contracts = client.get_option_contracts(request).option_contracts
-    return sorted({c.expiration_date.isoformat() for c in contracts})
-
-
-def fetch_alpaca_chain_calls(
-    symbol: str, expiry_str: str, underlying_price: float, risk_free_rate: float, as_of: date | None = None
-):
-    """The two real network calls this path makes — isolated (like `fetch_yfinance_chain_calls`)
-    so `rank_best_call_contract` stays a pure function callers can unit-test without hitting
-    Alpaca. Joins contract metadata (strike/open interest) with a live bid/ask/last-trade
-    snapshot, then solves IV in-house since Alpaca's indicative feed doesn't supply it."""
-    from alpaca.trading.enums import ContractType
-    from alpaca.trading.requests import GetOptionContractsRequest
-
-    client = _alpaca_trading_client()
+    as_of = as_of or datetime.now(timezone.utc).date()
     request = GetOptionContractsRequest(
-        underlying_symbols=[symbol], type=ContractType.CALL, expiration_date=expiry_str
+        underlying_symbols=[symbol],
+        type=ContractType.CALL if option_type == "call" else ContractType.PUT,
+        expiration_date_gte=as_of,
+        expiration_date_lte=as_of + timedelta(days=max_dte),
     )
-    contracts = client.get_option_contracts(request).option_contracts
+    contracts = _alpaca_trading_client().get_option_contracts(request).option_contracts
+    return sorted({contract.expiration_date.isoformat() for contract in contracts})
+
+
+def fetch_alpaca_chain(
+    symbol: str,
+    expiry_str: str,
+    underlying_price: float,
+    risk_free_rate: float,
+    option_type: OptionType,
+    as_of: date | None = None,
+):
+    from alpaca.trading.enums import ContractType
+    from alpaca.trading.requests import GetOptionContractsRequest
+
+    request = GetOptionContractsRequest(
+        underlying_symbols=[symbol],
+        type=ContractType.CALL if option_type == "call" else ContractType.PUT,
+        expiration_date=expiry_str,
+    )
+    contracts = _alpaca_trading_client().get_option_contracts(request).option_contracts
     if not contracts:
         return None
 
     from alpaca.data.historical.option import OptionHistoricalDataClient
     from alpaca.data.requests import OptionSnapshotRequest
-
     from app.config import get_settings
 
     settings = get_settings()
     data_client = OptionHistoricalDataClient(settings.alpaca_api_key, settings.alpaca_api_secret)
-    symbols = [c.symbol for c in contracts]
-    snapshots = data_client.get_option_snapshot(OptionSnapshotRequest(symbol_or_symbols=symbols))
+    snapshots = data_client.get_option_snapshot(
+        OptionSnapshotRequest(symbol_or_symbols=[contract.symbol for contract in contracts])
+    )
 
     as_of = as_of or datetime.now(timezone.utc).date()
-    expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
-    time_to_expiry = years_to_expiry(expiry_date, as_of)
-
+    expiry = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+    time_to_expiry = _years_for_expiry(expiry, as_of)
     rows = []
     for contract in contracts:
-        snap = snapshots.get(contract.symbol)
-        bid = snap.latest_quote.bid_price if snap and snap.latest_quote else None
-        ask = snap.latest_quote.ask_price if snap and snap.latest_quote else None
-        last_price = snap.latest_trade.price if snap and snap.latest_trade else None
+        snapshot = snapshots.get(contract.symbol)
+        bid = snapshot.latest_quote.bid_price if snapshot and snapshot.latest_quote else None
+        ask = snapshot.latest_quote.ask_price if snapshot and snapshot.latest_quote else None
+        last_price = snapshot.latest_trade.price if snapshot and snapshot.latest_trade else None
         mid = (bid + ask) / 2 if bid and ask else last_price
         implied_vol = None
         if mid and mid > 0:
             try:
                 implied_vol = solve_implied_volatility(
-                    mid, underlying_price, float(contract.strike_price), time_to_expiry, "call", risk_free_rate
+                    mid,
+                    underlying_price,
+                    float(contract.strike_price),
+                    time_to_expiry,
+                    option_type,
+                    risk_free_rate,
                 )
             except ValueError:
                 implied_vol = None
@@ -313,8 +365,6 @@ def fetch_alpaca_chain_calls(
                 "impliedVolatility": implied_vol,
                 "bid": bid,
                 "ask": ask,
-                # Alpaca's indicative feed has no per-contract daily volume; open interest
-                # (0.7 of the liquidity weight) still carries the signal.
                 "openInterest": int(contract.open_interest) if contract.open_interest else 0,
                 "volume": 0,
                 "lastPrice": last_price,
@@ -322,3 +372,20 @@ def fetch_alpaca_chain_calls(
             }
         )
     return pd.DataFrame(rows)
+
+
+def fetch_alpaca_chain_calls(
+    symbol: str,
+    expiry_str: str,
+    underlying_price: float,
+    risk_free_rate: float,
+    as_of: date | None = None,
+):
+    return fetch_alpaca_chain(
+        symbol,
+        expiry_str,
+        underlying_price,
+        risk_free_rate,
+        "call",
+        as_of=as_of,
+    )

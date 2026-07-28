@@ -176,6 +176,26 @@ class OptionContractAnalysisRecord(Base):
     status: Mapped[str] = mapped_column(String(15), nullable=False)  # completed/vision_failed/data_failed
 
 
+class SnipeOptionSignal(Base):
+    """Immutable option snapshot selected by the Snipe engine for later calibration."""
+
+    __tablename__ = "snipe_option_signals"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    symbol: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    option_type: Mapped[str] = mapped_column(String(4), nullable=False)
+    strike: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    expiry: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    underlying_price: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    bid: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    ask: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    mid_price: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    score: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    formula_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    signal_json: Mapped[dict] = mapped_column(JSONVariant, nullable=False)
+
+
 class OptionWatchlistItem(Base):
     """User-added "مراقب حالة قرائي" contract (new feature, not in SRS, owner request
     2026-07-19). Read-only status indicator — no trade execution anywhere near this

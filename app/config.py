@@ -58,6 +58,17 @@ class Settings(BaseSettings):
     # Approximate risk-free rate for Black-Scholes (py_vollib). No live source in M2-B;
     # update periodically to track the current ~short-term US Treasury yield.
     risk_free_rate: float = Field(default=0.045, alias="RISK_FREE_RATE")
+    # Today's Snipe contract gates. These are selection constraints, not UI-only filters:
+    # no contract outside them can enter the ranked result.
+    snipe_option_max_dte: int = Field(default=2, alias="SNIPE_OPTION_MAX_DTE")
+    snipe_option_max_premium: float = Field(default=1.00, alias="SNIPE_OPTION_MAX_PREMIUM")
+    snipe_option_max_spread_pct: float = Field(default=0.15, alias="SNIPE_OPTION_MAX_SPREAD_PCT")
+    snipe_option_min_open_interest: int = Field(default=100, alias="SNIPE_OPTION_MIN_OPEN_INTEREST")
+    snipe_option_min_abs_delta: float = Field(default=0.30, alias="SNIPE_OPTION_MIN_ABS_DELTA")
+    snipe_option_max_abs_delta: float = Field(default=0.65, alias="SNIPE_OPTION_MAX_ABS_DELTA")
+    snipe_option_max_theta_decay_pct: float = Field(
+        default=40.0, alias="SNIPE_OPTION_MAX_THETA_DECAY_PCT"
+    )
 
     # --- Self-audit scheduler (SRS 15, M3) ---
     enable_self_audit_scheduler: bool = Field(default=True, alias="ENABLE_SELF_AUDIT_SCHEDULER")
