@@ -33,7 +33,6 @@ from app.db.session import get_db
 from app.engines.screener.snipe_schemas import WatchlistAddRequest
 from app.legal.disclaimers import DISCLAIMER_AR, DISCLAIMER_EN, SCREENER_DISCLAIMER_AR, SNIPE_DISCLAIMER_AR
 from app.static_data.us_symbols import US_SYMBOLS
-from app.services.dashboard import get_dashboard_snapshot, get_market_news
 
 router = APIRouter(tags=["web"])
 templates = Jinja2Templates(directory="app/templates")
@@ -58,30 +57,7 @@ def _base_context(db: Session, active_tab: str) -> dict:
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    # The dashboard shell is static and loads market data asynchronously. Keeping this
-    # first paint database-free makes cold starts and maintenance windows more resilient.
-    return templates.TemplateResponse(request, "dashboard.html", {})
-
-
-@router.get("/ui/analysis", response_class=HTMLResponse)
-def analysis_home(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return templates.TemplateResponse(request, "index.html", _base_context(db, "stock"))
-
-
-@router.get("/ui/dashboard/data")
-def ui_dashboard_data(db: Session = Depends(get_db)) -> dict:
-    try:
-        return get_dashboard_snapshot(db)
-    except Exception as exc:
-        return {"indices": [], "watchlist": [], "error": f"تعذّر تحديث السوق: {exc}"}
-
-
-@router.get("/ui/dashboard/news")
-def ui_dashboard_news(db: Session = Depends(get_db)) -> dict:
-    try:
-        return get_market_news(db)
-    except Exception as exc:
-        return {"items": [], "error": f"تعذّر تحديث الأخبار: {exc}"}
 
 
 @router.post("/ui/analyze", response_class=HTMLResponse)
