@@ -128,6 +128,11 @@ class ScenarioProbabilities(BaseModel):
         "25×regime + 20×MA_structure + 15×MACD + 10×RSI + 10×SMC "
         "+ 20×weekly_direction"
     )
+    strategy_name_ar: str = "استراتيجية ترجيح السيناريو متعددة العوامل والفريمات"
+    strategy_description_ar: str = (
+        "تجمع اتجاه السوق، بنية المتوسطات، زخم MACD، قوة RSI، إشارات SMC، "
+        "والاتجاه الأسبوعي؛ والتعارض يُحوَّل إلى السيناريو المتعادل."
+    )
 
 
 class DeterministicAnalysis(BaseModel):

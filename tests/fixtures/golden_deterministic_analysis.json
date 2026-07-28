@@ -108,6 +108,8 @@
     "neutral_pct": 3.3,
     "calibrated": false,
     "formula_ref": "/docs/scoring#scenario-probabilities",
-    "formula": "25×regime + 20×MA_structure + 15×MACD + 10×RSI + 10×SMC + 20×weekly_direction"
+    "formula": "25×regime + 20×MA_structure + 15×MACD + 10×RSI + 10×SMC + 20×weekly_direction",
+    "strategy_name_ar": "استراتيجية ترجيح السيناريو متعددة العوامل والفريمات",
+    "strategy_description_ar": "تجمع اتجاه السوق، بنية المتوسطات، زخم MACD، قوة RSI، إشارات SMC، والاتجاه الأسبوعي؛ والتعارض يُحوَّل إلى السيناريو المتعادل."
   }
 }

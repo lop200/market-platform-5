@@ -82,27 +82,6 @@ def _valid_report_json(symbol: str) -> str:
     )
 
 
-class FakeVisionAdapter(LLMAdapter):
-    def __init__(self, canned_text: str):
-        self.canned_text = canned_text
-
-    def generate(self, system_prompt, user_content, max_tokens):
-        raise NotImplementedError
-
-    def extract_json_from_image(self, system_prompt, user_prompt, image_bytes, media_type, max_tokens):
-        return LLMResponse(text=self.canned_text, input_tokens=1000, output_tokens=80, cost_usd=0.003)
-
-    def estimate_cost(self, input_tokens, max_output_tokens):
-        return 0.003
-
-    def count_tokens(self, text):
-        return len(text) // 4
-
-    @property
-    def provider_name(self):
-        return "fake_vision"
-
-
 @pytest.fixture
 def client(monkeypatch):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
@@ -143,6 +122,8 @@ def test_ui_analyze_renders_report(client):
     assert 'data-needs-narrative="true"' in response.text
     assert "scenario-probabilities" in response.text
     assert "ليس نسبة نجاح تاريخية" in response.text
+    assert "الاستراتيجية المستخدمة" in response.text
+    assert "استراتيجية ترجيح السيناريو متعددة العوامل والفريمات" in response.text
 
 
 def test_ui_analyze_narrative_endpoint_returns_llm_text(client):
@@ -184,46 +165,14 @@ def test_ui_analyze_shows_error_when_cost_gate_blocks(client):
     assert "Kill-Switch" in response.text
 
 
-def test_ui_analyze_option_renders_result(client, monkeypatch):
-    from datetime import date, timedelta
+def test_option_image_tab_and_web_route_are_removed(client):
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "تحليل عقد أوبشن (صورة)" not in page.text
+    assert 'id="tab-option"' not in page.text
+    assert 'action="/ui/analyze-option"' not in page.text
 
-    from app.engines.options.greeks import theoretical_price
-
-    daily = _zigzag_daily()
-    underlying_price = float(daily["close"].iloc[-1])
-    expiry = (date.today() + timedelta(days=60)).isoformat()
-    price = theoretical_price(underlying_price, 130.0, 60 / 365, 0.35, "call", 0.045)
-    canned_json = (
-        '{"symbol": "NVDA", "option_type": "call", "strike": 130.0, "expiry": "%s", '
-        '"contract_price": %.2f, "extraction_confidence": "high", "raw_notes": null}'
-    ) % (expiry, price)
-
-    monkeypatch.setattr("app.core.orchestrator.get_llm_adapter", lambda: FakeVisionAdapter(canned_json))
-    monkeypatch.setattr("app.core.orchestrator.get_market_data_provider", lambda: FakeMarketDataAdapter(daily))
-
-    response = client.post(
+    removed_route = client.post(
         "/ui/analyze-option", files={"file": ("contract.png", b"fake-png-bytes", "image/png")}
     )
-    assert response.status_code == 200
-    assert "NVDA" in response.text
-    assert "Call" in response.text
-    assert "tab-option active" in response.text or 'id="tab-option" class="tab-panel active"' in response.text
-
-
-def test_ui_analyze_option_shows_error_for_bad_content_type(client):
-    response = client.post(
-        "/ui/analyze-option", files={"file": ("contract.txt", b"not an image", "text/plain")}
-    )
-    assert response.status_code == 200
-    assert "error-banner" in response.text
-    assert "نوع صورة غير مدعوم" in response.text
-
-
-def test_ui_analyze_option_shows_error_for_bad_vision_json(client, monkeypatch):
-    monkeypatch.setattr("app.core.orchestrator.get_llm_adapter", lambda: FakeVisionAdapter("not json"))
-    response = client.post(
-        "/ui/analyze-option", files={"file": ("contract.png", b"fake-png-bytes", "image/png")}
-    )
-    assert response.status_code == 200
-    assert "error-banner" in response.text
-    assert "تعذّر قراءة بيانات العقد" in response.text
+    assert removed_route.status_code == 404

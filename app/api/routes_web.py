@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -16,7 +16,6 @@ from app.core.orchestrator import (
     CostLimitExceededError,
     DataFetchError,
     InvalidSymbolError,
-    VisionExtractionError,
     add_watchlist_item,
     get_live_quote,
     get_watchlist_item_events,
@@ -24,7 +23,6 @@ from app.core.orchestrator import (
     remove_watchlist_item,
     run_analysis_deterministic_only,
     run_analysis_narrative,
-    run_option_image_analysis,
     run_screener_scan,
     run_snipe_options_scan,
     run_snipe_scan,
@@ -38,8 +36,6 @@ router = APIRouter(tags=["web"])
 templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["chart_bars_json"] = lambda bars: json.dumps([b.model_dump() for b in bars])
 
-MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB
-ALLOWED_MEDIA_TYPES = {"image/png", "image/jpeg", "image/webp"}
 SYMBOLS_JSON = json.dumps(US_SYMBOLS, ensure_ascii=False)
 
 
@@ -47,7 +43,7 @@ def _base_context(db: Session, active_tab: str) -> dict:
     return {
         "cost_today": CostGate(db).spend_summary("today"),
         "result": None, "partial": None, "error": None, "symbol": None, "lang": "ar", "disclaimer": DISCLAIMER_AR,
-        "option_result": None, "option_error": None, "active_tab": active_tab,
+        "active_tab": active_tab,
         "symbols_json": SYMBOLS_JSON,
         "screener_result": None, "screener_error": None, "screener_disclaimer": SCREENER_DISCLAIMER_AR,
         "snipe_result": None, "snipe_error": None, "snipe_disclaimer": SNIPE_DISCLAIMER_AR,
@@ -240,32 +236,3 @@ def ui_watchlist_events(item_id: str, db: Session = Depends(get_db)) -> dict:
         return {"error": "invalid item_id", "events": []}
     events = get_watchlist_item_events(db, parsed_id)
     return {"events": [e.model_dump(mode="json") for e in events]}
-
-
-@router.post("/ui/analyze-option", response_class=HTMLResponse)
-def ui_analyze_option(
-    request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)
-) -> HTMLResponse:
-    option_result = None
-    option_error = None
-    try:
-        if file.content_type not in ALLOWED_MEDIA_TYPES:
-            raise ValueError(f"نوع صورة غير مدعوم: {file.content_type} (استخدم PNG أو JPEG أو WEBP)")
-        image_bytes = file.file.read(MAX_IMAGE_BYTES + 1)
-        if len(image_bytes) > MAX_IMAGE_BYTES:
-            raise ValueError("حجم الصورة أكبر من الحد المسموح (8 ميجابايت)")
-        option_result = run_option_image_analysis(db, image_bytes, file.content_type)
-    except VisionExtractionError as exc:
-        option_error = f"تعذّر قراءة بيانات العقد من الصورة بثقة كافية: {exc}"
-    except DataFetchError as exc:
-        option_error = f"تعذّر جلب بيانات السهم الأم للعقد: {exc}"
-    except CostLimitExceededError as exc:
-        option_error = exc.reason
-    except ValueError as exc:
-        option_error = str(exc)
-    except Exception as exc:
-        option_error = f"تعذّر إكمال تحليل العقد: {exc}"
-
-    context = _base_context(db, "option")
-    context.update(option_result=option_result, option_error=option_error)
-    return templates.TemplateResponse(request, "index.html", context)

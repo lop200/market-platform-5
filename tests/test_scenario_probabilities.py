@@ -38,6 +38,7 @@ def test_scenario_probabilities_follow_clear_trend_and_sum_to_100(start, end, do
     assert sum(values) == pytest.approx(100.0)
     assert getattr(probabilities, dominant) == max(values)
     assert probabilities.calibrated is False
+    assert probabilities.strategy_name_ar == "استراتيجية ترجيح السيناريو متعددة العوامل والفريمات"
 
 
 def test_missing_weekly_history_allocates_uncertainty_instead_of_forcing_direction():

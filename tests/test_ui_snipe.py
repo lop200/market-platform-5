@@ -83,6 +83,7 @@ def test_ui_snipe_stocks_renders(client):
     assert find_banned_phrases(response.text, "ar") == []
     assert "scenario-probabilities" in response.text
     assert "ليس نسبة نجاح تاريخية" in response.text
+    assert "الاستراتيجية المستخدمة" in response.text
 
 
 def test_ui_snipe_options_renders_auto_picked_contracts(monkeypatch, client):
@@ -124,6 +125,7 @@ def test_ui_snipe_options_renders_auto_picked_contracts(monkeypatch, client):
     assert "yfinance" in response.text  # data-source caveat always disclosed
     assert find_banned_phrases(response.text, "ar") == []
     assert "scenario-probabilities" in response.text
+    assert "الاستراتيجية المستخدمة" in response.text
 
 
 def test_home_page_shows_snipe_button(client):

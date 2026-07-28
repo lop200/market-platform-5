@@ -129,9 +129,12 @@
   .scenario-probability-note {
     color: var(--muted); font-size: 0.72rem; line-height: 1.45; margin-bottom: 12px;
   }
-  .options-btn { background: #22304a; color: #9dc0ff; border: 1px solid var(--accent); margin: 8px 0 4px; }
-  .options-panel { margin-top: 14px; display: none; }
-  .options-panel.open { display: block; }
+  .scenario-strategy {
+    background: #121b2d; border-inline-start: 3px solid var(--accent);
+    border-radius: 8px; padding: 9px 11px; margin: 12px 0 6px;
+    color: var(--muted); font-size: 0.76rem; line-height: 1.5;
+  }
+  .scenario-strategy b { color: var(--text); display: block; font-size: 0.82rem; }
   .options-note {
     background: #20263a; border: 1px solid var(--border); border-radius: 10px;
     padding: 14px 16px; font-size: 0.88rem;
@@ -218,11 +221,6 @@
   .snipe-report-form button {
     width: 100%; background: #22304a; color: #9dc0ff; border: 1px solid var(--accent); padding: 8px;
   }
-  form.option-form {
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 16px; display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;
-  }
-  input[type=file] { color: var(--text); font-family: inherit; flex: 1; min-width: 200px; }
   .greeks-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; font-size: 0.85rem; }
   .greeks-grid .g { background: #0c111c; border-radius: 8px; padding: 8px; text-align: center; }
   .greeks-grid .g b { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 4px; }
@@ -296,8 +294,7 @@
 
   <div class="tab-bar">
     <a class="tab-btn snipe-btn {{ 'active' if active_tab in ['snipe-stocks', 'snipe-options'] else '' }}" href="/ui/screener/snipe/stocks">🎯 قنص اليوم</a>
-    <button type="button" class="tab-btn {{ 'active' if active_tab == 'stock' else '' }}" data-tab="tab-stock">تحليل سهم</button>
-    <button type="button" class="tab-btn {{ 'active' if active_tab == 'option' else '' }}" data-tab="tab-option">تحليل عقد أوبشن (صورة)</button>
+    <a class="tab-btn {{ 'active' if active_tab == 'stock' else '' }}" href="/">تحليل سهم</a>
     <a class="tab-btn {{ 'active' if active_tab == 'screener-daily' else '' }}" href="/ui/screener/daily">📊 أبرز الإعدادات اليوم</a>
     <a class="tab-btn {{ 'active' if active_tab == 'screener-weekly' else '' }}" href="/ui/screener/weekly">📅 الإعدادات الأسبوعية</a>
     <a class="tab-btn {{ 'active' if active_tab == 'screener-options' else '' }}" href="/ui/screener/options">⚡ أوبشن بجاهزية عالية</a>
@@ -415,6 +412,10 @@
       </details>
 
       {% set sp = v.scenario_probabilities %}
+      <div class="scenario-strategy">
+        <b>الاستراتيجية المستخدمة: {{ sp.strategy_name_ar }}</b>
+        {{ sp.strategy_description_ar }}
+      </div>
       <div class="scenario-probabilities" title="توزيع 100 نقطة من قراءات النظام: الاتجاه العام 25، المتوسطات 20، MACD 15، RSI 10، SMC 10، والاتجاه الأسبوعي 20">
         <div class="scenario-probability bullish">صعودي<b>{{ "%.1f"|format(sp.bullish_pct) }}%</b></div>
         <div class="scenario-probability bearish">هبوطي<b>{{ "%.1f"|format(sp.bearish_pct) }}%</b></div>
@@ -437,16 +438,6 @@
       <div class="scenario-cards" id="slot-scenarios" style="display:none"></div>
       {% endif %}
 
-      <button type="button" class="options-btn" id="options-toggle-btn">عرض عقود الأوبشن 📊</button>
-      <div class="options-panel" id="options-panel">
-        <div class="options-note">
-          سلسلة عقود الأوبشن التفاعلية (تواريخ الانتهاء ← جدول العقود Calls/Puts ← تحليل العقد) تحتاج
-          اشتراكاً في مزود بيانات أوبشن مؤجل (مثل Tradier أو Polygon) لم يُفعَّل بعد بموافقة المالك.
-          بديل متاح الآن: ارفع لقطة شاشة لعقد من منصة الوساطة عبر
-          <a id="go-option-tab">تبويب "تحليل عقد أوبشن (صورة)"</a> وسيُستخرج منها Delta وTheta والمستويات الفنية للعقد تلقائياً.
-        </div>
-      </div>
-
       <details class="full-report" id="narrative-root" data-analysis-id="{{ v.analysis_id }}" data-lang="{{ lang }}" data-needs-narrative="{{ 'false' if result else 'true' }}">
         <summary>التفاصيل الكاملة ▼</summary>
         <div class="levels">
@@ -460,66 +451,6 @@
           <div class="devils-text" id="slot-devils-advocate">{% if result %}{{ result.devils_advocate_ar if is_ar else result.devils_advocate_en }}{% else %}جارٍ التحضير...{% endif %}</div>
         </div>
       </details>
-    </div>
-    {% endif %}
-  </div>
-
-  <div id="tab-option" class="tab-panel {{ 'active' if active_tab == 'option' else '' }}">
-    <form class="option-form" method="post" action="/ui/analyze-option" enctype="multipart/form-data" id="option-form">
-      <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required>
-      <button type="submit" id="option-btn">تحليل صورة العقد</button>
-    </form>
-    <div id="option-loading-note" style="display:none; font-size:0.85rem; color:var(--muted); margin:-12px 0 20px;">
-      جارٍ استخراج بيانات العقد وتحليلها... فضلاً لا تضغط الزر مرة أخرى.
-    </div>
-
-    {% if option_error %}
-    <div class="error-banner">{{ option_error }}</div>
-    {% endif %}
-
-    {% if option_result %}
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <strong style="font-size:1.1rem">{{ option_result.symbol }}</strong>
-          <span class="badge badge-regime">{{ "Call" if option_result.option_type == "call" else "Put" }} · إضراب {{ option_result.strike }}</span>
-          {% if option_result.extraction_confidence == "low" %}<span class="badge badge-fallback">ثقة استخراج منخفضة</span>{% endif %}
-        </div>
-        <div style="font-size:0.85rem;color:var(--muted)">التكلفة: {{ "%.4f"|format(option_result.cost_usd) }}$</div>
-      </div>
-
-      <div class="data-source-note">
-        انتهاء العقد: <b>{{ option_result.expiry }}</b> ({{ option_result.time_to_expiry_days }} يوماً) ·
-        سعر السهم الأم: <b>{{ option_result.underlying_price }}</b> ·
-        التقلب الضمني المستخرج: <b>{{ "%.1f"|format(option_result.implied_volatility * 100) }}%</b>
-      </div>
-
-      <div class="greeks-grid">
-        <div class="g"><b>Delta</b>{{ "%.3f"|format(option_result.greeks.delta) }}</div>
-        <div class="g"><b>Gamma</b>{{ "%.4f"|format(option_result.greeks.gamma) }}</div>
-        <div class="g"><b>Theta (يومي)</b>{{ "%.3f"|format(option_result.greeks.theta) }}$</div>
-        <div class="g"><b>Vega</b>{{ "%.3f"|format(option_result.greeks.vega) }}</div>
-      </div>
-
-      <div class="levels">
-        <div class="col"><b>الحركة المتوقعة (±1σ حتى الانتهاء)</b>{{ "%.2f"|format(option_result.expected_move.lower_bound) }} إلى {{ "%.2f"|format(option_result.expected_move.upper_bound) }}</div>
-        <div class="col"><b>مستوى الإبطال الفني للسهم الأم</b>{{ "%.2f"|format(option_result.invalidation_level) if option_result.invalidation_level is not none else "—" }}</div>
-      </div>
-
-      {% if option_result.translated_levels %}
-      <div class="translated-levels">
-        <table>
-          <thead><tr><th>المستوى الفني للسهم</th><th>سعر السهم</th><th>سعر العقد التقديري</th></tr></thead>
-          <tbody>
-          {% for lv in option_result.translated_levels %}
-            <tr><td>{{ lv.label }}</td><td>{{ "%.2f"|format(lv.stock_price) }}</td><td>{{ "%.2f"|format(lv.estimated_contract_price) }}</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% endif %}
-
-      <div class="report-text">{{ option_result.report_text_ar }}</div>
     </div>
     {% endif %}
   </div>
@@ -560,6 +491,10 @@
     </div>
 
     {% set sp = c.scenario_probabilities %}
+    <div class="scenario-strategy">
+      <b>الاستراتيجية المستخدمة: {{ sp.strategy_name_ar }}</b>
+      {{ sp.strategy_description_ar }}
+    </div>
     <div class="scenario-probabilities" title="ترجيح اتجاهي من قراءات الاتجاه والمتوسطات وMACD وRSI وSMC والفريم الأسبوعي">
       <div class="scenario-probability bullish">صعودي<b>{{ "%.1f"|format(sp.bullish_pct) }}%</b></div>
       <div class="scenario-probability bearish">هبوطي<b>{{ "%.1f"|format(sp.bearish_pct) }}%</b></div>
@@ -658,6 +593,10 @@
       <span class="screener-price" style="margin-bottom:0">{{ "Call" if c.option_type == "call" else "Put" }} {{ "%.2f"|format(c.strike) }}</span>
     </div>
     {% set sp = c.scenario_probabilities %}
+    <div class="scenario-strategy">
+      <b>الاستراتيجية المستخدمة: {{ sp.strategy_name_ar }}</b>
+      {{ sp.strategy_description_ar }}
+    </div>
     <div class="scenario-probabilities" title="ترجيح السهم الأساسي الذي حدد Call أو Put قبل فحص العقد">
       <div class="scenario-probability bullish">صعودي<b>{{ "%.1f"|format(sp.bullish_pct) }}%</b></div>
       <div class="scenario-probability bearish">هبوطي<b>{{ "%.1f"|format(sp.bearish_pct) }}%</b></div>
@@ -785,9 +724,7 @@
     <div class="screener-banner">{{ screener_disclaimer }}</div>
     <div class="options-note">
       ماسح عقود الأوبشن عالية الجاهزية يحتاج مزود بيانات أوبشن مؤجل (مثل Tradier أو Polygon) لم يُفعَّل
-      بعد بموافقة المالك. بديل متاح الآن: ارفع لقطة شاشة لعقد من منصة الوساطة عبر
-      <a id="go-option-tab-from-screener">تبويب "تحليل عقد أوبشن (صورة)"</a> وسيُستخرج منها Delta وTheta
-      والمستويات الفنية للعقد تلقائياً.
+      بعد بموافقة المالك. سيبقى هذا الجزء متوقفاً حتى نراجعه ونبنيه لاحقاً خطوة بخطوة.
     </div>
   </div>
 
@@ -799,21 +736,6 @@
       btn.disabled = true;
       btn.textContent = 'جارٍ التحليل...';
       document.getElementById('loading-note').style.display = 'block';
-    });
-    document.getElementById('option-form').addEventListener('submit', function () {
-      var btn = document.getElementById('option-btn');
-      btn.disabled = true;
-      btn.textContent = 'جارٍ التحليل...';
-      document.getElementById('option-loading-note').style.display = 'block';
-    });
-    function activateTab(tabId) {
-      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
-      document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
-      document.querySelector('.tab-btn[data-tab="' + tabId + '"]').classList.add('active');
-      document.getElementById(tabId).classList.add('active');
-    }
-    document.querySelectorAll('button.tab-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () { activateTab(btn.dataset.tab); });
     });
 
     // --- Autocomplete (Requirement 2) ---
@@ -864,27 +786,6 @@
         else return;
         items.forEach(function (it, i) { it.classList.toggle('active', i === activeIndex); });
       });
-    })();
-
-    // --- Options-chain button (Requirement 3, graceful degrade) ---
-    (function () {
-      var toggleBtn = document.getElementById('options-toggle-btn');
-      var panel = document.getElementById('options-panel');
-      var goOptionTab = document.getElementById('go-option-tab');
-      if (toggleBtn && panel) {
-        toggleBtn.addEventListener('click', function () { panel.classList.toggle('open'); });
-      }
-      if (goOptionTab) {
-        goOptionTab.addEventListener('click', function () { activateTab('tab-option'); });
-      }
-      var goOptionTabFromScreener = document.getElementById('go-option-tab-from-screener');
-      if (goOptionTabFromScreener) {
-        goOptionTabFromScreener.addEventListener('click', function () { activateTab('tab-option'); });
-      }
-      var goOptionTabFromSnipe = document.getElementById('go-option-tab-from-snipe');
-      if (goOptionTabFromSnipe) {
-        goOptionTabFromSnipe.addEventListener('click', function () { activateTab('tab-option'); });
-      }
     })();
 
     // --- Candlestick chart with support/resistance lines (Requirement 5) ---
