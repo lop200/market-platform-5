@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,9 +17,22 @@ class Settings(BaseSettings):
     database_url: str = Field(default="sqlite:///./market_platform.db", alias="DATABASE_URL")
 
     market_data_provider: str = Field(default="yfinance", alias="MARKET_DATA_PROVIDER")
-    alpaca_api_key: str | None = Field(default=None, alias="ALPACA_API_KEY")
-    alpaca_api_secret: str | None = Field(default=None, alias="ALPACA_API_SECRET")
-    alpaca_feed: str = Field(default="iex", alias="ALPACA_FEED")
+    alpaca_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("APCA_API_KEY_ID", "ALPACA_API_KEY"),
+    )
+    alpaca_api_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("APCA_API_SECRET_KEY", "ALPACA_API_SECRET"),
+    )
+    alpaca_data_base_url: str = Field(
+        default="https://data.alpaca.markets",
+        validation_alias=AliasChoices("ALPACA_DATA_BASE_URL", "APCA_API_DATA_URL"),
+    )
+    alpaca_feed: str = Field(
+        default="iex",
+        validation_alias=AliasChoices("ALPACA_DATA_FEED", "ALPACA_FEED"),
+    )
     finnhub_api_key: str | None = Field(default=None, alias="FINNHUB_API_KEY")
     news_provider: str = Field(default="none", alias="NEWS_PROVIDER")
     social_sentiment_provider: str = Field(default="none", alias="SOCIAL_SENTIMENT_PROVIDER")

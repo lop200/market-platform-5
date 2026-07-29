@@ -1,14 +1,17 @@
 """Alpaca Market Data adapter — primary production provider.
 
-Fully implemented but inert until ALPACA_API_KEY / ALPACA_API_SECRET are set in .env.
+Fully implemented but inert until APCA_API_KEY_ID / APCA_API_SECRET_KEY are set.
 Uses the free IEX real-time feed tier. Raises a clear error if credentials are missing
 rather than silently falling back — provider selection is explicit via
 MARKET_DATA_PROVIDER (SRS NFR-5), never an implicit downgrade.
 """
 from __future__ import annotations
 
+import json
+import logging
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pandas as pd
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import (
@@ -23,22 +26,39 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import AssetClass, AssetStatus
 from alpaca.trading.requests import GetAssetsRequest
 
-from app.config import get_settings
 from app.providers.base import MarketDataAdapter, Quote
+
+logger = logging.getLogger(__name__)
 
 
 class AlpacaProvider(MarketDataAdapter):
     provider_name_value = "alpaca"
 
-    def __init__(self, api_key: str | None, api_secret: str | None):
+    def __init__(
+        self,
+        api_key: str | None,
+        api_secret: str | None,
+        *,
+        data_base_url: str = "https://data.alpaca.markets",
+        feed: str = "iex",
+    ):
         if not api_key or not api_secret:
             raise ValueError(
-                "Alpaca provider selected but ALPACA_API_KEY/ALPACA_API_SECRET are not set. "
+                "Alpaca provider selected but APCA_API_KEY_ID/APCA_API_SECRET_KEY are not set. "
                 "Add them to .env, or set MARKET_DATA_PROVIDER=yfinance for local dev."
             )
-        self._data_client = StockHistoricalDataClient(api_key, api_secret)
+        self._api_key = api_key
+        self._api_secret = api_secret
+        self._data_base_url = data_base_url.rstrip("/")
+        if self._data_base_url != "https://data.alpaca.markets":
+            raise ValueError("ALPACA_DATA_BASE_URL must be https://data.alpaca.markets")
+        self._data_client = StockHistoricalDataClient(
+            api_key,
+            api_secret,
+            url_override=self._data_base_url,
+        )
         self._trading_client = TradingClient(api_key, api_secret, paper=True)
-        self._feed = get_settings().alpaca_feed
+        self._feed = feed.lower()
 
     def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame:
         start = datetime.now(timezone.utc) - timedelta(days=int(lookback_days * 1.6) + 5)
@@ -125,6 +145,77 @@ class AlpacaProvider(MarketDataAdapter):
             StockSnapshotRequest(symbol_or_symbols=symbol, feed=self._feed)
         )
         return self._merge_realtime(symbol, quotes.get(symbol), trades.get(symbol), bars.get(symbol), snapshots.get(symbol))
+
+    @staticmethod
+    def _parse_rfc3339(value: str | None) -> pd.Timestamp | None:
+        if not value:
+            return None
+        parsed = pd.Timestamp(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.tz_localize("UTC")
+        return parsed.tz_convert("UTC")
+
+    @staticmethod
+    def _timestamp_age_seconds(value: pd.Timestamp | None, now: pd.Timestamp) -> int | None:
+        if value is None:
+            return None
+        return max(0, int((now - value).total_seconds()))
+
+    def debug_market_data(self, symbol: str, *, bypass_cache: bool = True) -> dict:
+        symbol = symbol.upper()
+        request_url = f"{self._data_base_url}/v2/stocks/{symbol}/snapshot"
+        server_now = pd.Timestamp.now(tz="UTC")
+        with httpx.Client(timeout=12.0) as client:
+            response = client.get(
+                request_url,
+                params={"feed": self._feed},
+                headers={
+                    "APCA-API-KEY-ID": self._api_key,
+                    "APCA-API-SECRET-KEY": self._api_secret,
+                },
+            )
+        payload = response.json() if response.content else {}
+        latest_trade = payload.get("latestTrade") or {}
+        latest_quote = payload.get("latestQuote") or {}
+        minute_bar = payload.get("minuteBar") or {}
+        trade_time = self._parse_rfc3339(latest_trade.get("t"))
+        quote_time = self._parse_rfc3339(latest_quote.get("t"))
+        bar_time = self._parse_rfc3339(minute_bar.get("t"))
+        candidates = [
+            (trade_time, "latest_trade"),
+            (quote_time, "latest_quote"),
+            (bar_time, "minute_bar"),
+        ]
+        valid_candidates = [item for item in candidates if item[0] is not None]
+        data_source = max(valid_candidates, key=lambda item: item[0])[1] if valid_candidates else None
+        clean = {
+            "server_now_utc": server_now.isoformat(),
+            "market_session": self._session(server_now.to_pydatetime()),
+            "requested_feed": self._feed,
+            "snapshot_request_url": f"{request_url}?feed={self._feed}",
+            "http_status": response.status_code,
+            "latest_trade": {
+                "price": latest_trade.get("p"),
+                "timestamp": trade_time.isoformat() if trade_time is not None else None,
+            },
+            "latest_quote": {
+                "bid_price": latest_quote.get("bp"),
+                "ask_price": latest_quote.get("ap"),
+                "timestamp": quote_time.isoformat() if quote_time is not None else None,
+            },
+            "minute_bar": {
+                "close": minute_bar.get("c"),
+                "timestamp": bar_time.isoformat() if bar_time is not None else None,
+            },
+            "calculated_trade_age_seconds": self._timestamp_age_seconds(trade_time, server_now),
+            "calculated_quote_age_seconds": self._timestamp_age_seconds(quote_time, server_now),
+            "calculated_bar_age_seconds": self._timestamp_age_seconds(bar_time, server_now),
+            "data_source": data_source,
+        }
+        logger.info("alpaca_market_data_debug %s", json.dumps(clean, ensure_ascii=False))
+        if response.status_code >= 400:
+            response.raise_for_status()
+        return clean
 
     @staticmethod
     def _newer(primary, fallback):

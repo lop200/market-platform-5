@@ -17,6 +17,8 @@ def get_market_data_provider() -> MarketDataAdapter:
     name = settings.market_data_provider.lower()
 
     if name == "yfinance":
+        if settings.app_env.lower() == "production":
+            raise ValueError("yfinance is disabled in production; configure Alpaca market data")
         from app.providers.yfinance_provider import YFinanceProvider
 
         return ResilientMarketDataProvider(YFinanceProvider(), settings)
@@ -25,7 +27,13 @@ def get_market_data_provider() -> MarketDataAdapter:
         from app.providers.alpaca_provider import AlpacaProvider
 
         return ResilientMarketDataProvider(
-            AlpacaProvider(settings.alpaca_api_key, settings.alpaca_api_secret), settings
+            AlpacaProvider(
+                settings.alpaca_api_key,
+                settings.alpaca_api_secret,
+                data_base_url=settings.alpaca_data_base_url,
+                feed=settings.alpaca_feed,
+            ),
+            settings,
         )
 
     if name == "finnhub":

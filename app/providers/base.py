@@ -119,6 +119,9 @@ class MarketDataAdapter(ABC):
     def invalidate_symbol_cache(self, symbol: str) -> int:
         return 0
 
+    def debug_market_data(self, symbol: str, *, bypass_cache: bool = True) -> dict:
+        raise NotImplementedError("market-data diagnostics are not supported")
+
     @abstractmethod
     def estimated_cost_per_call(self) -> float: ...
 

@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pandas as pd
+
 from app.config import Settings
 from app.providers.alpaca_provider import AlpacaProvider
 from app.providers.base import MarketDataAdapter, Quote
@@ -96,6 +98,65 @@ def test_session_uses_new_york_clock_with_utc_input():
     assert AlpacaProvider._session(datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc)) == "pre_market"
     assert AlpacaProvider._session(datetime(2026, 7, 29, 15, 0, tzinfo=timezone.utc)) == "regular"
     assert AlpacaProvider._session(datetime(2026, 7, 29, 21, 0, tzinfo=timezone.utc)) == "after_hours"
+
+
+def test_rfc3339_nanoseconds_are_parsed_as_utc():
+    parsed = AlpacaProvider._parse_rfc3339("2026-07-29T08:15:32.123456789Z")
+    assert parsed is not None
+    assert str(parsed.tz) == "UTC"
+    assert parsed.nanosecond == 789
+
+
+def test_debug_snapshot_uses_data_endpoint_and_never_returns_keys(monkeypatch):
+    now = pd.Timestamp.now(tz="UTC")
+    payload = {
+        "latestTrade": {"p": 502.10, "t": (now - pd.Timedelta(seconds=2)).isoformat()},
+        "latestQuote": {
+            "bp": 502.08,
+            "ap": 502.12,
+            "t": (now - pd.Timedelta(seconds=1)).isoformat(),
+        },
+        "minuteBar": {"c": 502.09, "t": (now - pd.Timedelta(seconds=45)).isoformat()},
+    }
+
+    class Response:
+        status_code = 200
+        content = b"{}"
+
+        def json(self):
+            return payload
+
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url, **kwargs):
+            assert url == "https://data.alpaca.markets/v2/stocks/QQQ/snapshot"
+            assert kwargs["params"] == {"feed": "iex"}
+            assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-key"
+            return Response()
+
+    monkeypatch.setattr("app.providers.alpaca_provider.httpx.Client", Client)
+    provider = alpaca_provider()
+    provider._api_key = "test-key"
+    provider._api_secret = "test-secret"
+    provider._data_base_url = "https://data.alpaca.markets"
+    result = provider.debug_market_data("QQQ")
+
+    assert result["http_status"] == 200
+    assert result["data_source"] == "latest_quote"
+    assert result["calculated_quote_age_seconds"] < 5
+    assert "test-key" not in str(result)
+    assert "test-secret" not in str(result)
 
 
 class CountingProvider(MarketDataAdapter):

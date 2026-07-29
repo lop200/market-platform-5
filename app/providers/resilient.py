@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import replace
+from datetime import datetime, timezone
 from threading import Lock
 
 import pandas as pd
@@ -21,6 +22,7 @@ class ResilientMarketDataProvider(MarketDataAdapter):
         self.inner = inner
         self.settings = settings
         self._cache: dict[str, tuple[float, object]] = {}
+        self._cache_created_at: dict[str, str] = {}
         self._failures = 0
         self._opened_at = 0.0
         self._lock = Lock()
@@ -57,6 +59,7 @@ class ResilientMarketDataProvider(MarketDataAdapter):
                 value = operation()
                 with self._lock:
                     self._cache[key] = (now + ttl, value)
+                    self._cache_created_at[key] = datetime.now(timezone.utc).isoformat()
                     self._failures = 0
                 return value
             except Exception as exc:
@@ -94,7 +97,26 @@ class ResilientMarketDataProvider(MarketDataAdapter):
             ]
             for key in keys:
                 self._cache.pop(key, None)
+                self._cache_created_at.pop(key, None)
         return len(keys)
+
+    def debug_market_data(self, symbol: str, *, bypass_cache: bool = True) -> dict:
+        symbol = symbol.upper()
+        key = f"quote:{symbol}"
+        now = time.monotonic()
+        with self._lock:
+            cached = self._cache.get(key)
+            cache_created_at = self._cache_created_at.get(key)
+            cache_was_fresh = bool(cached and cached[0] > now)
+        if bypass_cache:
+            self.invalidate_symbol_cache(symbol)
+        result = self.inner.debug_market_data(symbol, bypass_cache=bypass_cache)
+        result.update({
+            "bypass_cache": bypass_cache,
+            "cache_hit": bool(cache_was_fresh and not bypass_cache),
+            "cache_created_at": cache_created_at,
+        })
+        return result
 
     def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame:
         return self._call(
