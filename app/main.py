@@ -59,4 +59,5 @@ def health() -> dict:
         "provider_healthy": provider_healthy,
         "ai_provider": "openai",
         "openai_configured": bool(settings.openai_api_key),
+        "deployed_commit_sha": os.environ.get("RENDER_GIT_COMMIT"),
     }
