@@ -1,4 +1,4 @@
-"""FastAPI entry point (SRS 3.1, 5.2)."""
+"""FastAPI entry point for the Arabic stock opportunity platform."""
 from __future__ import annotations
 
 import logging
@@ -7,67 +7,56 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-# uvicorn only configures its own loggers; without this, `app.*` INFO/WARNING messages
-# (provider-failure reasons, scheduler start, self-audit summaries) never reach the console.
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s"
-)
-
-from app.api import routes_analysis, routes_audit, routes_cost, routes_lock, routes_options, routes_screener, routes_web
+from app.api import routes_cost, routes_debug, routes_lock, routes_opportunities, routes_web
 from app.config import get_settings
-from app.core.scheduler import start_scheduler, stop_scheduler
 from app.db.session import init_db
+from app.opportunities.audit_scheduler import start_audit_scheduler, stop_audit_scheduler
 from app.providers.factory import get_market_data_provider
 from app.security.site_lock import SiteLockMiddleware
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure the schema + cost_limits defaults exist before serving any request (fixes a
-    # fresh deploy where migrations were skipped). Idempotent, so it runs unconditionally.
     init_db()
-
-    # Skip during pytest (PYTEST_CURRENT_TEST is set automatically) so the test suite
-    # never spins up a real background scheduler thread.
     settings = get_settings()
-    started = False
-    if settings.enable_self_audit_scheduler and not os.environ.get("PYTEST_CURRENT_TEST"):
-        start_scheduler()
-        started = True
+    started = settings.enable_self_audit_scheduler and not os.environ.get("PYTEST_CURRENT_TEST")
+    if started:
+        start_audit_scheduler()
     yield
     if started:
-        stop_scheduler()
+        stop_audit_scheduler()
 
 
 app = FastAPI(
-    title="US Stock & Options Decision Intelligence Platform", version="0.1.0", lifespan=lifespan
+    title="منصة تحليل الأسهم الأمريكية",
+    description="تحليل مشروط للأسهم الأمريكية، دون تنفيذ تداول آلي أو ضمان للربح.",
+    version="2.0.0",
+    lifespan=lifespan,
 )
-
-# Site-wide access lock (Phase 5, owner request 2026-07-20) — inert unless
-# ACCESS_CODE_MAIN is set in the environment (see app/security/site_lock.py).
 app.add_middleware(SiteLockMiddleware)
-
 app.include_router(routes_lock.router)
-app.include_router(routes_analysis.router)
-app.include_router(routes_audit.router)
+app.include_router(routes_opportunities.router)
 app.include_router(routes_cost.router)
-app.include_router(routes_options.router)
-app.include_router(routes_screener.router)
+app.include_router(routes_debug.router)
 app.include_router(routes_web.router)
 
 
 @app.get("/api/v1/health")
 def health() -> dict:
     settings = get_settings()
-    provider_status = "unknown"
     try:
-        provider = get_market_data_provider()
-        provider_status = provider.provider_name
-    except Exception as exc:  # provider misconfigured (e.g. missing API key)
-        provider_status = f"error: {exc}"
+        provider_status = get_market_data_provider().provider_name
+        provider_healthy = True
+    except Exception as exc:
+        provider_status = f"error:{type(exc).__name__}"
+        provider_healthy = False
     return {
         "status": "ok",
         "env": settings.app_env,
         "market_data_provider": provider_status,
-        "llm_provider": settings.llm_provider,
+        "provider_healthy": provider_healthy,
+        "ai_provider": "openai",
+        "openai_configured": bool(settings.openai_api_key),
     }

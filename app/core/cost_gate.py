@@ -1,4 +1,4 @@
-"""Cost Gate — the ONLY path to a paid external call (SRS 16, CLAUDE.md rule 3).
+"""Cost Gate — the only path to a paid external call.
 
 Architectural rule (SRS 16.3, "درس Replit"): no code path reaches a market-data or LLM
 call without going through `check_and_reserve()` first. Adapters are never called

@@ -1,6 +1,6 @@
 """Finnhub adapter — alternative primary provider to Alpaca (owner decision 2026-07-17).
 
-Free tier, REST-only (no official heavy SDK needed — plain httpx calls), no options chain
+Free tier, REST-only (no official heavy SDK needed — plain httpx calls).
 support. Raises a clear error if the API key is missing, same fail-loud contract as
 AlpacaProvider — provider selection is explicit via MARKET_DATA_PROVIDER (SRS NFR-5).
 
@@ -111,6 +111,9 @@ class FinnhubProvider(MarketDataAdapter):
             if data.get("t")
             else datetime.now(timezone.utc).isoformat(),
             is_delayed=False,
+            provider=self.provider_name,
+            feed="finnhub",
+            last_trade=float(price),
         )
 
     def estimated_cost_per_call(self) -> float:

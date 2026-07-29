@@ -1,8 +1,4 @@
-"""Cache layer (SRS 17). Cache-first: checked before any paid call (CLAUDE.md rule 8).
-
-`CacheAdapter` is the abstract contract so the Postgres/SQLite-table implementation used
-in M0 can be swapped for Redis later without touching any caller (SRS 17.2).
-"""
+"""Typed cache layer with database-backed expiry."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

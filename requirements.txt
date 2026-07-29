@@ -6,22 +6,12 @@ sqlalchemy==2.0.51
 alembic==1.14.0
 pandas==2.3.3
 numpy==2.5.1
-py_vollib==1.0.1
 yfinance==1.5.1
 alpaca-py==0.33.1
-anthropic==0.42.0
-openai==1.58.1
-tiktoken==0.13.0
-apscheduler==3.11.0
+openai>=2.0.0,<3.0.0
 jinja2==3.1.5
 python-multipart==0.0.20
-
-# Postgres driver — installs automatically on the Render (Linux) deploy so DATABASE_URL
-# can point at a managed Postgres, but is skipped on local dev machines (Windows/macOS)
-# which use SQLite and have no prebuilt wheel on newer Python. No build-command change
-# needed: a plain `pip install -r requirements.txt` picks it up on the server.
+httpx==0.28.1
 psycopg2-binary==2.9.10 ; platform_system == "Linux"
-
 pytest==8.3.4
 pytest-cov==6.0.0
-httpx==0.28.1

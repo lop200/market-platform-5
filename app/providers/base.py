@@ -1,12 +1,9 @@
-"""MarketDataAdapter — abstract contract any data provider must implement (SRS 5.3, 9.1).
-
-No code outside this module (and the orchestrator) should import a concrete provider
-directly; everything goes through this interface so providers are swappable (NFR-5).
-"""
+"""Swappable market-data provider contract."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -18,58 +15,119 @@ class Quote:
     bid: float | None
     ask: float | None
     volume: int | None
-    as_of: str  # ISO timestamp
+    as_of: str
     is_delayed: bool
+    provider: str = "unknown"
+    feed: str | None = None
+    last_trade: float | None = None
+    relative_volume: float | None = None
+    session: str = "regular"
+    trade_as_of: str | None = None
+    bid_as_of: str | None = None
+    ask_as_of: str | None = None
+    bar_as_of: str | None = None
+    bar_close: float | None = None
+    price_source: str = "unknown"
+    snapshot_as_of: str | None = None
 
+    @property
+    def mid(self) -> float | None:
+        if self.bid is None or self.ask is None:
+            return None
+        return (self.bid + self.ask) / 2
 
-@dataclass(frozen=True)
-class OptionsChain:
-    """Placeholder shape for M2/M5 — options adapters are out of scope for M0."""
+    @property
+    def spread(self) -> float | None:
+        if self.bid is None or self.ask is None:
+            return None
+        return self.ask - self.bid
 
-    symbol: str
-    expiry: str
-    contracts: list[dict]
+    @property
+    def spread_pct(self) -> float | None:
+        if not self.mid:
+            return None
+        return (self.ask - self.bid) / self.mid * 100
+
+    @property
+    def age_seconds(self) -> int:
+        parsed = datetime.fromisoformat(self.as_of.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return max(0, int((datetime.now(timezone.utc) - parsed).total_seconds()))
+
+    @staticmethod
+    def timestamp_age(value: str | None) -> int | None:
+        if not value:
+            return None
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return max(0, int((datetime.now(timezone.utc) - parsed).total_seconds()))
+
+    @property
+    def trade_age_seconds(self) -> int | None:
+        return self.timestamp_age(self.trade_as_of or self.as_of)
+
+    @property
+    def bid_age_seconds(self) -> int | None:
+        return self.timestamp_age(self.bid_as_of or self.as_of)
+
+    @property
+    def ask_age_seconds(self) -> int | None:
+        return self.timestamp_age(self.ask_as_of or self.as_of)
+
+    @property
+    def bar_age_seconds(self) -> int | None:
+        return self.timestamp_age(self.bar_as_of)
 
 
 class MarketDataAdapter(ABC):
-    """SRS 5.3 abstract data-provider contract."""
-
     @abstractmethod
-    def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame:
-        """Return a DataFrame indexed by date with columns: open, high, low, close, volume."""
+    def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame: ...
 
     @property
     def supports_batch_daily_ohlcv(self) -> bool:
-        """Whether this adapter can fetch several symbols without one request per symbol."""
         return False
 
     def get_daily_ohlcv_many(
         self, symbols: list[str], lookback_days: int
     ) -> dict[str, pd.DataFrame]:
-        """Optional batch path. Callers must check ``supports_batch_daily_ohlcv`` first."""
-        raise NotImplementedError("batch daily OHLCV is not supported by this provider")
+        return {symbol: self.get_daily_ohlcv(symbol, lookback_days) for symbol in symbols}
+
+    @property
+    def supports_batch_quotes(self) -> bool:
+        return False
+
+    def get_quotes_many(self, symbols: list[str]) -> dict[str, Quote]:
+        return {symbol: self.get_quote(symbol) for symbol in symbols}
 
     @abstractmethod
-    def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame | None:
-        """Return intraday bars, or None if the provider/tier does not support them."""
+    def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame | None: ...
 
     @abstractmethod
-    def get_quote(self, symbol: str) -> Quote:
-        ...
+    def get_quote(self, symbol: str) -> Quote: ...
 
-    def get_options_chain(self, symbol: str, expiry: str) -> OptionsChain:
-        """Phase M2/M5. Not required in M0; default raises so callers fail loudly."""
-        raise NotImplementedError("Options chain support lands in M2/M5")
+    def list_active_us_symbols(self, limit: int = 1000) -> list[str]:
+        return []
+
+    def get_company_profile(self, symbol: str) -> dict:
+        return {}
+
+    def telemetry_snapshot(self) -> dict[str, int]:
+        return {"api_requests": 0, "cache_hits": 0, "requested_symbols": 0}
+
+    def invalidate_symbol_cache(self, symbol: str) -> int:
+        return 0
+
+    def debug_market_data(self, symbol: str, *, bypass_cache: bool = True) -> dict:
+        raise NotImplementedError("market-data diagnostics are not supported")
 
     @abstractmethod
-    def estimated_cost_per_call(self) -> float:
-        """Marginal USD cost of one call, for the Cost Gate (SRS 16)."""
+    def estimated_cost_per_call(self) -> float: ...
 
     @abstractmethod
-    def is_market_open(self) -> bool:
-        ...
+    def is_market_open(self) -> bool: ...
 
     @property
     @abstractmethod
-    def provider_name(self) -> str:
-        ...
+    def provider_name(self) -> str: ...
