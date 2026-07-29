@@ -372,6 +372,25 @@ def analyze_single_stock(
     }
     valid_minutes = strategy.valid_minutes if strategy and status == "conditional_entry" else 0
     expires_at = started + timedelta(minutes=valid_minutes) if valid_minutes else started
+    quote_age = max(
+        value for value in (quality.bid_age_seconds, quality.ask_age_seconds)
+        if value is not None
+    ) if any(value is not None for value in (quality.bid_age_seconds, quality.ask_age_seconds)) else None
+    fresh_quote = quote_age is not None and quote_age < 10
+    fresh_trade = quality.trade_age_seconds is not None and quality.trade_age_seconds < 30
+    acceptable_bar = (
+        quality.latest_bar_age_seconds is not None
+        and quality.latest_bar_age_seconds < 120
+    )
+    feed = quote.feed.lower() if quote and quote.feed else None
+    if feed == "sip" and (fresh_quote or fresh_trade) and acceptable_bar:
+        data_status = "live_sip"
+    elif feed != "sip" and (fresh_quote or fresh_trade) and acceptable_bar:
+        data_status = "live_partial"
+    elif quote and quote.age_seconds <= settings.max_quote_age_seconds:
+        data_status = "delayed"
+    else:
+        data_status = "stale"
     result = {
         "symbol": symbol,
         "company_name": profile.get("name") or symbol,
@@ -408,6 +427,7 @@ def analyze_single_stock(
             "candle_age_seconds": quality.candle_age_seconds,
             "provider": quote.provider if quote else provider.provider_name,
             "feed": quote.feed if quote else None,
+            "data_status": data_status,
             "delayed": (quote.is_delayed or quote.age_seconds > settings.max_quote_age_seconds) if quote else True,
             "market_session": _market_session_label(quote.session if quote else None),
         },

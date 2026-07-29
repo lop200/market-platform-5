@@ -141,7 +141,7 @@ def test_debug_snapshot_uses_data_endpoint_and_never_returns_keys(monkeypatch):
 
         def get(self, url, **kwargs):
             assert url == "https://data.alpaca.markets/v2/stocks/QQQ/snapshot"
-            assert kwargs["params"] == {"feed": "iex"}
+            assert kwargs["params"] == {"feed": "sip"}
             assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-key"
             return Response()
 
@@ -150,10 +150,19 @@ def test_debug_snapshot_uses_data_endpoint_and_never_returns_keys(monkeypatch):
     provider._api_key = "test-key"
     provider._api_secret = "test-secret"
     provider._data_base_url = "https://data.alpaca.markets"
+    provider._feed = "sip"
     result = provider.debug_market_data("QQQ")
 
     assert result["http_status"] == 200
+    assert result["alpaca_http_status"] == 200
+    assert result["data_feed"] == "sip"
+    assert result["status"] == "live"
+    assert result["is_live"] is True
     assert result["data_source"] == "latest_quote"
+    assert result["source_used_for_current_price"] == "latest_quote"
+    assert result["latest_quote_age_seconds"] < 5
+    assert result["latest_trade_age_seconds"] < 5
+    assert result["minute_bar_age_seconds"] < 120
     assert result["calculated_quote_age_seconds"] < 5
     assert "test-key" not in str(result)
     assert "test-secret" not in str(result)

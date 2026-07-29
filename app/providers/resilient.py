@@ -116,6 +116,10 @@ class ResilientMarketDataProvider(MarketDataAdapter):
             "cache_hit": bool(cache_was_fresh and not bypass_cache),
             "cache_created_at": cache_created_at,
         })
+        if bypass_cache and result["cache_hit"]:
+            result["status"] = "cache_failure"
+            result["is_live"] = False
+            result["diagnostic_error"] = "فشل التحديث المباشر: أُعيدت نتيجة من الكاش."
         return result
 
     def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame:

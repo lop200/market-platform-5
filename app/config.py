@@ -30,7 +30,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ALPACA_DATA_BASE_URL", "APCA_API_DATA_URL"),
     )
     alpaca_feed: str = Field(
-        default="iex",
+        default="sip",
         validation_alias=AliasChoices("ALPACA_DATA_FEED", "ALPACA_FEED"),
     )
     finnhub_api_key: str | None = Field(default=None, alias="FINNHUB_API_KEY")

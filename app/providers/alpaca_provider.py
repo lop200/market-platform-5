@@ -40,7 +40,7 @@ class AlpacaProvider(MarketDataAdapter):
         api_secret: str | None,
         *,
         data_base_url: str = "https://data.alpaca.markets",
-        feed: str = "iex",
+        feed: str = "sip",
     ):
         if not api_key or not api_secret:
             raise ValueError(
@@ -188,11 +188,56 @@ class AlpacaProvider(MarketDataAdapter):
         ]
         valid_candidates = [item for item in candidates if item[0] is not None]
         data_source = max(valid_candidates, key=lambda item: item[0])[1] if valid_candidates else None
+        trade_age = self._timestamp_age_seconds(trade_time, server_now)
+        quote_age = self._timestamp_age_seconds(quote_time, server_now)
+        bar_age = self._timestamp_age_seconds(bar_time, server_now)
+        session = self._session(server_now.to_pydatetime())
+        active_session = session in {"pre_market", "regular"}
+        quote_live = quote_age is not None and quote_age < 10
+        trade_live = trade_age is not None and trade_age < 30
+        bar_acceptable = bar_age is not None and bar_age < 120
+        feed_is_sip = self._feed == "sip"
+        live = (
+            response.status_code < 400
+            and feed_is_sip
+            and (quote_live or trade_live)
+            and (bar_acceptable or not active_session)
+        )
+        if response.status_code >= 400:
+            diagnostic_status = "alpaca_error"
+            diagnostic_error = payload.get("message") or f"Alpaca HTTP {response.status_code}"
+        elif not feed_is_sip:
+            diagnostic_status = "wrong_feed"
+            diagnostic_error = "مصدر البيانات ليس SIP؛ لا يمكن إثبات بيانات السوق الأمريكي الكاملة."
+        elif live:
+            diagnostic_status = "live"
+            diagnostic_error = None
+        else:
+            diagnostic_status = "stale"
+            diagnostic_error = "بيانات SIP وصلت، لكن Quote وTrade لا يحققان حدود الحداثة المطلوبة."
+
         clean = {
+            "symbol": symbol,
+            "data_feed": self._feed,
             "server_now_utc": server_now.isoformat(),
-            "market_session": self._session(server_now.to_pydatetime()),
+            "market_session": session,
             "requested_feed": self._feed,
             "snapshot_request_url": f"{request_url}?feed={self._feed}",
+            "alpaca_http_status": response.status_code,
+            "latest_trade_price": latest_trade.get("p"),
+            "latest_trade_timestamp": trade_time.isoformat() if trade_time is not None else None,
+            "latest_trade_age_seconds": trade_age,
+            "bid_price": latest_quote.get("bp"),
+            "ask_price": latest_quote.get("ap"),
+            "latest_quote_timestamp": quote_time.isoformat() if quote_time is not None else None,
+            "latest_quote_age_seconds": quote_age,
+            "minute_bar_close": minute_bar.get("c"),
+            "minute_bar_timestamp": bar_time.isoformat() if bar_time is not None else None,
+            "minute_bar_age_seconds": bar_age,
+            "source_used_for_current_price": data_source,
+            "status": diagnostic_status,
+            "is_live": live,
+            "diagnostic_error": diagnostic_error,
             "http_status": response.status_code,
             "latest_trade": {
                 "price": latest_trade.get("p"),
@@ -207,14 +252,12 @@ class AlpacaProvider(MarketDataAdapter):
                 "close": minute_bar.get("c"),
                 "timestamp": bar_time.isoformat() if bar_time is not None else None,
             },
-            "calculated_trade_age_seconds": self._timestamp_age_seconds(trade_time, server_now),
-            "calculated_quote_age_seconds": self._timestamp_age_seconds(quote_time, server_now),
-            "calculated_bar_age_seconds": self._timestamp_age_seconds(bar_time, server_now),
+            "calculated_trade_age_seconds": trade_age,
+            "calculated_quote_age_seconds": quote_age,
+            "calculated_bar_age_seconds": bar_age,
             "data_source": data_source,
         }
         logger.info("alpaca_market_data_debug %s", json.dumps(clean, ensure_ascii=False))
-        if response.status_code >= 400:
-            response.raise_for_status()
         return clean
 
     @staticmethod
