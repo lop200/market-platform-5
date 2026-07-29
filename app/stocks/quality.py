@@ -90,14 +90,22 @@ def evaluate_plan_data(
             candle_age = max(0, int((datetime.now(timezone.utc) - candle_time).total_seconds()))
             fresh_realtime = price_age is not None and price_age <= settings.max_quote_age_seconds
             iex_sparse_bar = bool(quote and quote.feed and quote.feed.lower() == "iex" and fresh_realtime)
-            if market_open and candle_age > settings.max_candle_age_seconds and not iex_sparse_bar:
+            # Five-minute bars are timestamped at the start of their bucket.
+            # The separately fetched one-minute bar is the strict freshness
+            # proof when that aggregate candle appears older than two minutes.
+            realtime_bar_fresh = (
+                latest_bar_age is not None
+                and latest_bar_age <= settings.max_candle_age_seconds
+            )
+            realtime_proof = iex_sparse_bar or realtime_bar_fresh
+            if market_open and candle_age > settings.max_candle_age_seconds and not realtime_proof:
                 reasons.append("آخر شمعة أقدم من الحد المسموح")
-            elif market_open and candle_age > settings.max_candle_age_seconds and iex_sparse_bar:
+            elif market_open and candle_age > settings.max_candle_age_seconds and realtime_proof:
                 warnings.append("آخر شمعة قديمة، لكن Trade/Quote أحدث؛ استُخدم السعر الحديث.")
             quote_time = _utc(quote.as_of) if quote else None
             if quote_time:
                 quote_candle_skew = abs(int((quote_time - candle_time).total_seconds()))
-                if market_open and quote_candle_skew > settings.max_quote_candle_skew_seconds and not iex_sparse_bar:
+                if market_open and quote_candle_skew > settings.max_quote_candle_skew_seconds and not realtime_proof:
                     reasons.append("السعر والشموع غير متزامنين")
 
     if not market_open:
