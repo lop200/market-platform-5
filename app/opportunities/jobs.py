@@ -13,7 +13,8 @@ from app.db.models import AIAnalysisLog, ProviderHealth, StockCandidate, StockSc
 from app.db.session import SessionLocal
 from app.opportunities.scanner import scan_market
 from app.opportunities.openai_review import review_single_analysis
-from app.providers.factory import get_market_data_provider
+from app.options.service import analyze_options_after_stock
+from app.providers.factory import get_market_data_provider, get_option_data_provider
 from app.stocks.analysis import analyze_single_stock
 
 logger = logging.getLogger(__name__)
@@ -150,7 +151,17 @@ def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
             return
         if refresh:
             provider.invalidate_symbol_cache(symbol)
-        analysis = analyze_single_stock(db, provider, get_settings(), symbol)
+        settings = get_settings()
+        analysis = analyze_single_stock(db, provider, settings, symbol)
+        option_provider = None
+        if settings.options_enabled and analysis.get("status") == "conditional_entry":
+            try:
+                option_provider = get_option_data_provider()
+            except Exception:
+                option_provider = None
+        analysis["options"] = analyze_options_after_stock(
+            analysis, settings, option_provider
+        ).model_dump(mode="json")
         candidate = StockCandidate(
             scan_run_id=run.id,
             symbol=symbol,
@@ -164,7 +175,7 @@ def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
         run.symbols_excluded = 0
         run.status = "reviewing" if analysis["data_quality"]["valid_for_plan"] else "running"
         db.commit()
-        analysis["ai_review"] = review_single_analysis(db, get_settings(), analysis)
+        analysis["ai_review"] = review_single_analysis(db, settings, analysis)
         analysis["system_usage"]["openai_calls"] = analysis["ai_review"]["ai_calls"]
         analysis["system_usage"]["openai_cost_usd"] = analysis["ai_review"]["ai_cost_estimate"]
         candidate.snapshot_json = analysis

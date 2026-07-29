@@ -16,11 +16,11 @@ def test_page_is_fast_shell_and_mobile_rtl():
     assert 'dir="rtl"' in html
     assert 'name="viewport"' in html
     assert "@media(min-width:720px)" in html
-    assert "مسح السوق واستخراج الفرص" in html
+    assert "من الإشارة إلى القرار" in html
     assert "symbolCatalog" in html
     assert "NVIDIA" in html
     assert 'aria-autocomplete="list"' in html
-    assert "تحديث هذا السهم فقط" in html
+    assert "صائد عقود الشركات" in html
     assert "حالة السوق" in html
     assert "OPENAI_API_KEY" not in html
 
@@ -31,17 +31,19 @@ def test_health_reports_openai_only():
     assert body["ai_provider"] == "openai"
 
 
-def test_runtime_contains_no_removed_derivatives_or_legacy_ai():
-    forbidden = ("anthropic", "claude", "0dte", "greeks", "/options")
+def test_runtime_contains_no_legacy_ai_or_live_execution():
+    forbidden = ("anthropic", "claude", "automated_live_execution")
     for path in (ROOT / "app").rglob("*"):
         if path.is_file() and path.suffix in {".py", ".html"}:
             content = path.read_text(encoding="utf-8").lower()
             assert not any(term in content for term in forbidden), path
 
 
-def test_no_removed_route_is_registered():
-    paths = {route.path for route in app.routes if hasattr(route, "path")}
-    assert not any("option" in path.lower() for path in paths)
+def test_options_are_feature_gated_and_dashboard_route_is_registered():
+    paths = set(app.openapi()["paths"])
+    assert "/api/v1/dashboard" in paths
+    assert "/api/v1/opportunities/symbols/{symbol}" in paths
+    assert "OPTIONS_ENABLED" in (ROOT / ".env.example").read_text(encoding="utf-8")
 
 
 def test_results_page_is_arabic_rtl_and_factual():

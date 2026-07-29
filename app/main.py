@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import routes_cost, routes_debug, routes_lock, routes_opportunities, routes_web
+from app.api import routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_web
 from app.config import get_settings
 from app.db.session import init_db
 from app.opportunities.audit_scheduler import start_audit_scheduler, stop_audit_scheduler
@@ -40,6 +40,7 @@ app.include_router(routes_lock.router)
 app.include_router(routes_opportunities.router)
 app.include_router(routes_cost.router)
 app.include_router(routes_debug.router)
+app.include_router(routes_dashboard.router)
 app.include_router(routes_web.router)
 
 
@@ -56,6 +57,10 @@ def health() -> dict:
         "status": "ok",
         "env": settings.app_env,
         "market_data_provider": provider_status,
+        "stock_feed": settings.alpaca_feed if settings.market_data_provider == "alpaca" else settings.market_data_provider,
+        "options_enabled": settings.options_enabled,
+        "options_feed": settings.alpaca_options_feed if settings.options_enabled else "disabled",
+        "paper_trading_only": True,
         "provider_healthy": provider_healthy,
         "ai_provider": "openai",
         "openai_configured": bool(settings.openai_api_key),

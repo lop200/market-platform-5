@@ -21,11 +21,13 @@ from app.opportunities.indicators import calculate_indicators
 from app.opportunities.market_regime import classify_market, current_session
 from app.opportunities.news import get_news_provider
 from app.opportunities.openai_review import review_candidates
+from app.options.service import analyze_options_after_stock
 from app.opportunities.quality import evaluate_quote
 from app.opportunities.risk import position_size, risk_reward
 from app.opportunities.schemas import EntryZone, MarketRegime, OpportunityResult, OpportunityStatus, Target
 from app.opportunities.strategies import select_strategy
 from app.providers.base import MarketDataAdapter, Quote
+from app.providers.factory import get_option_data_provider
 
 
 def _quote_time(quote: Quote) -> datetime:
@@ -365,7 +367,30 @@ def scan_market(
         if index % 10 == 0:
             db.commit()
     accepted.sort(key=lambda item: item.overall_score, reverse=True)
-    shortlist = accepted[: min(settings.openai_candidate_limit, 5)]
+    shortlist = accepted[: min(max(3, settings.openai_candidate_limit), 5)]
+    option_provider = None
+    if settings.options_enabled and shortlist:
+        try:
+            option_provider = get_option_data_provider()
+        except Exception:
+            option_provider = None
+    for item in shortlist:
+        stock_analysis = {
+            "symbol": item.symbol,
+            "status": "conditional_entry",
+            "trend": "هابط" if "breakdown" in item.strategy_id else "صاعد",
+            "quote": {"price": item.current_price, "feed": item.data_feed},
+            "data_quality": {"valid_for_plan": True},
+            "trade_plan": {
+                "entry_from": item.entry_zone.from_price,
+                "stop": item.stop_loss,
+                "targets": [{"price": target.price} for target in item.targets],
+                "risk_reward": item.risk_reward,
+            },
+        }
+        item.options = analyze_options_after_stock(
+            stock_analysis, settings, option_provider
+        ).model_dump(mode="json")
     reviews = review_candidates(
         db, settings,
         [
@@ -384,6 +409,10 @@ def scan_market(
                 "stop": item.stop_loss,
                 "targets": [target.price for target in item.targets],
                 "warnings": item.warnings_ar,
+                "ranked_option_contracts": (
+                    (item.options or {}).get("ranked_contracts", [])[:3]
+                    if (item.options or {}).get("stock_first_gate_passed") else []
+                ),
             }
             for item in shortlist
         ],

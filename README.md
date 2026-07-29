@@ -7,6 +7,10 @@
 - مسح خلفي لا يحبس تحميل الصفحة، مع تقدم وعدد الأسهم المفحوصة والمستبعدة.
 - حارس جودة تنفيذي يرفض Bid/Ask الناقص أو غير المتزامن، السعر/الشموع القديمة، السوق المغلق، والسبريد غير المقبول؛ وعند الرفض لا تُنشأ خطة أو احتمالات أو انحياز اتجاهي.
 - مؤشرات واستراتيجيات ومستويات دخول وإبطال وأهداف وحجم صفقة محسوبة حتميًا في Python.
+- تسلسل إلزامي: تحليل السهم ← فرصة سهم صالحة ← OPRA Option Chain ← تصفية ← ترتيب ← مراجعة OpenAI.
+- صائد Call وPut للشركات مع Strike وDTE وBid/Ask وGreeks وIV والسيولة والتكلفة وBreak-even والأهداف والوقف؛ Paper Trading فقط.
+- تعطيل كامل وآمن للخيارات عبر `OPTIONS_ENABLED=false` دون التأثير على تحليل الأسهم.
+- تقويم أرباح وأخبار محفوظة تُحدّث في الخلفية، مع تحذيرات IV Crush وفجوات الأرباح.
 - مراجعة OpenAI مهيكلة لأفضل المرشحين فقط، مع Cost Gate ومنع إعادة التحليل عند ثبات بصمة البيانات.
 - بحث محلي سريع بالرمز أو اسم الشركة، غير حساس لحالة الأحرف؛ مثل `nv` أو `NVIDIA`.
 - صفحة مستقلة للسهم المحدد لا تطبق فلتر سعر الماسح، وتعرض شموعًا تفاعلية 1m و5m و15m و1h واليومي مع Crosshair وZoom/Pan.
@@ -31,7 +35,8 @@ Copy-Item .env.example .env
 
 ## المزودات
 
-- `MARKET_DATA_PROVIDER=alpaca`: موصى به للإنتاج ويقدم Bid/Ask. خلاصة IEX محدودة مقارنة بـSIP.
+- `MARKET_DATA_PROVIDER=alpaca`: موصى به للإنتاج، مع `ALPACA_DATA_FEED=sip` للأسهم.
+- `ALPACA_OPTIONS_FEED=opra`: بيانات عقود الشركات عند توفر صلاحية OPRA في الحساب.
 - `MARKET_DATA_PROVIDER=yfinance`: تطوير محلي، بيانات غير رسمية ومتأخرة وقد يغيب Bid/Ask، لذلك قد يرفض حارس الجودة الفرصة.
 - `NEWS_PROVIDER=finnhub`: أخبار اختيارية. عند غيابها يظهر ذلك صراحة.
 
@@ -45,6 +50,9 @@ Copy-Item .env.example .env
 - `MIN_RISK_REWARD`, `MAX_QUOTE_AGE_SECONDS`, `MAX_RESULTS`
 - `MAX_QUOTE_TIMESTAMP_SKEW_SECONDS`, `MAX_CANDLE_AGE_SECONDS`, `MAX_QUOTE_CANDLE_SKEW_SECONDS`
 - `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_MAX_RETRIES`, `OPENAI_DAILY_BUDGET_USD`
+- `OPTIONS_ENABLED`, `ALPACA_OPTIONS_FEED`, `OPTIONS_MIN_DTE`, `OPTIONS_MAX_DTE`
+- `OPTIONS_MAX_SPREAD_PCT`, `OPTIONS_MIN_VOLUME`, `OPTIONS_MIN_OPEN_INTEREST`, `OPTIONS_MAX_QUOTE_AGE_SECONDS`
+- `EARNINGS_PROVIDER`, `EARNINGS_CACHE_SECONDS`, `FINNHUB_API_KEY`
 - `DEFAULT_CAPITAL_SAR`, `DEFAULT_RISK_PCT`, `USD_SAR_RATE`
 
 ## API
@@ -58,6 +66,8 @@ Copy-Item .env.example .env
 - `POST /api/v1/opportunities/{id}/refresh`
 - `GET /api/v1/opportunities/results/summary`
 - `GET|PUT /api/v1/opportunities/risk-settings`
+- `GET /api/v1/dashboard`
+- `POST /api/v1/dashboard/refresh-events`
 
 ## اختبار ونشر
 
@@ -68,4 +78,4 @@ Copy-Item .env.example .env
 
 تفاصيل Render في `DEPLOY_AR.md`. جميع الاستدعاءات تتم من الخادم، ولا تُحفظ مفاتيح API في قاعدة البيانات.
 
-تحتفظ سلسلة Alembic التاريخية بأسماء migrations القديمة لضمان ترقية قواعد البيانات القائمة بأمان، لكن migration منصة الأسهم تحذف جداول المشتقات، ولا توجد لها Models أو Routes أو Templates في التطبيق التشغيلي.
+تحتفظ سلسلة Alembic التاريخية بأسماء migrations القديمة لضمان ترقية قواعد البيانات القائمة بأمان. دعم عقود الشركات الحالي معزول خلف `OPTIONS_ENABLED` ويمنع التنفيذ الحقيقي التلقائي.

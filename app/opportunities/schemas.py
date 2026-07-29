@@ -79,6 +79,7 @@ class OpportunityResult(BaseModel):
     max_loss_sar: float = 0
     capital_used_pct: float = 0
     estimated_profit_sar: list[float] = Field(default_factory=list)
+    options: dict | None = None
 
 
 class QualityDecision(BaseModel):

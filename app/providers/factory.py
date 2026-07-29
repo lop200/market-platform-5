@@ -42,3 +42,19 @@ def get_market_data_provider() -> MarketDataAdapter:
         return ResilientMarketDataProvider(FinnhubProvider(settings.finnhub_api_key), settings)
 
     raise ValueError(f"unknown MARKET_DATA_PROVIDER '{settings.market_data_provider}'")
+
+
+def get_option_data_provider():
+    """Return OPRA only when options are explicitly enabled and configured."""
+    settings = get_settings()
+    if not settings.options_enabled:
+        return None
+    from app.options.provider import AlpacaOptionProvider
+
+    return AlpacaOptionProvider(
+        settings.alpaca_api_key,
+        settings.alpaca_api_secret,
+        feed=settings.alpaca_options_feed,
+        base_url=settings.alpaca_data_base_url,
+        timeout_seconds=settings.external_timeout_seconds,
+    )

@@ -33,6 +33,17 @@ class Settings(BaseSettings):
         default="sip",
         validation_alias=AliasChoices("ALPACA_DATA_FEED", "ALPACA_FEED"),
     )
+    alpaca_options_feed: str = Field(default="opra", alias="ALPACA_OPTIONS_FEED")
+    options_enabled: bool = Field(default=False, alias="OPTIONS_ENABLED")
+    options_min_dte: int = Field(default=7, alias="OPTIONS_MIN_DTE")
+    options_max_dte: int = Field(default=30, alias="OPTIONS_MAX_DTE")
+    options_max_quote_age_seconds: int = Field(default=30, alias="OPTIONS_MAX_QUOTE_AGE_SECONDS")
+    options_max_spread_pct: float = Field(default=12.0, alias="OPTIONS_MAX_SPREAD_PCT")
+    options_min_volume: int = Field(default=10, alias="OPTIONS_MIN_VOLUME")
+    options_min_open_interest: int = Field(default=100, alias="OPTIONS_MIN_OPEN_INTEREST")
+    options_contract_limit: int = Field(default=3, alias="OPTIONS_CONTRACT_LIMIT")
+    earnings_provider: str = Field(default="finnhub", alias="EARNINGS_PROVIDER")
+    earnings_cache_seconds: int = Field(default=3600, alias="EARNINGS_CACHE_SECONDS")
     finnhub_api_key: str | None = Field(default=None, alias="FINNHUB_API_KEY")
     news_provider: str = Field(default="none", alias="NEWS_PROVIDER")
     social_sentiment_provider: str = Field(default="none", alias="SOCIAL_SENTIMENT_PROVIDER")
@@ -42,7 +53,7 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = Field(default=30.0, alias="OPENAI_TIMEOUT_SECONDS")
     openai_max_retries: int = Field(default=2, alias="OPENAI_MAX_RETRIES")
     openai_daily_budget_usd: float = Field(default=1.0, alias="OPENAI_DAILY_BUDGET_USD")
-    openai_candidate_limit: int = Field(default=8, alias="OPENAI_CANDIDATE_LIMIT")
+    openai_candidate_limit: int = Field(default=5, alias="OPENAI_CANDIDATE_LIMIT")
 
     min_avg_daily_volume: int = Field(default=500_000, alias="MIN_AVG_DAILY_VOLUME")
     min_relative_volume: float = Field(default=1.0, alias="MIN_RELATIVE_VOLUME")

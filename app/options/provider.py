@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+import re
+from datetime import date, datetime, timezone
+from typing import Protocol
+
+import httpx
+
+from app.options.schemas import OptionType, RawOptionContract
+
+OCC_PATTERN = re.compile(r"^(?P<root>[A-Z]{1,6})(?P<expiry>\d{6})(?P<side>[CP])(?P<strike>\d{8})$")
+
+
+class OptionDataProvider(Protocol):
+    provider_name: str
+    feed: str
+
+    def get_option_chain(self, symbol: str) -> list[RawOptionContract]: ...
+
+
+def parse_occ_symbol(contract_symbol: str) -> tuple[str, date, OptionType, float]:
+    match = OCC_PATTERN.fullmatch(contract_symbol)
+    if not match:
+        raise ValueError("invalid OCC option symbol")
+    expiry = datetime.strptime(match.group("expiry"), "%y%m%d").date()
+    option_type = OptionType.CALL if match.group("side") == "C" else OptionType.PUT
+    return match.group("root"), expiry, option_type, int(match.group("strike")) / 1000
+
+
+class AlpacaOptionProvider:
+    provider_name = "alpaca"
+
+    def __init__(
+        self,
+        api_key: str | None,
+        api_secret: str | None,
+        *,
+        feed: str = "opra",
+        base_url: str = "https://data.alpaca.markets",
+        timeout_seconds: float = 12,
+    ):
+        if not api_key or not api_secret:
+            raise ValueError("Alpaca credentials are required for OPRA options data")
+        self.api_key = api_key
+        self.api_secret = api_secret
+        self.feed = feed.lower()
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+
+    def get_option_chain(self, symbol: str) -> list[RawOptionContract]:
+        url = f"{self.base_url}/v1beta1/options/snapshots/{symbol.upper()}"
+        with httpx.Client(timeout=self.timeout_seconds) as client:
+            response = client.get(
+                url,
+                params={"feed": self.feed, "limit": 1000},
+                headers={
+                    "APCA-API-KEY-ID": self.api_key,
+                    "APCA-API-SECRET-KEY": self.api_secret,
+                },
+            )
+            response.raise_for_status()
+        snapshots = response.json().get("snapshots") or {}
+        contracts: list[RawOptionContract] = []
+        for contract_symbol, snapshot in snapshots.items():
+            try:
+                root, expiry, option_type, strike = parse_occ_symbol(contract_symbol)
+                quote = snapshot.get("latestQuote") or {}
+                trade = snapshot.get("latestTrade") or {}
+                daily = snapshot.get("dailyBar") or {}
+                greeks = snapshot.get("greeks") or {}
+                timestamp = quote.get("t") or trade.get("t")
+                contracts.append(RawOptionContract(
+                    symbol=contract_symbol,
+                    underlying_symbol=root,
+                    option_type=option_type,
+                    strike=strike,
+                    expiration=expiry,
+                    bid=quote.get("bp"),
+                    ask=quote.get("ap"),
+                    volume=daily.get("v"),
+                    open_interest=snapshot.get("openInterest"),
+                    delta=greeks.get("delta"),
+                    gamma=greeks.get("gamma"),
+                    theta=greeks.get("theta"),
+                    vega=greeks.get("vega"),
+                    iv=snapshot.get("impliedVolatility"),
+                    quote_timestamp=(
+                        datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                        if timestamp else datetime.now(timezone.utc)
+                    ),
+                    feed=self.feed,
+                ))
+            except (TypeError, ValueError):
+                continue
+        return contracts
+

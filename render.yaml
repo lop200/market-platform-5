@@ -27,6 +27,28 @@ services:
         value: https://data.alpaca.markets
       - key: ALPACA_DATA_FEED
         value: sip
+      - key: ALPACA_OPTIONS_FEED
+        value: opra
+      - key: OPTIONS_ENABLED
+        value: "false"
+      - key: OPTIONS_MIN_DTE
+        value: "7"
+      - key: OPTIONS_MAX_DTE
+        value: "30"
+      - key: OPTIONS_MAX_QUOTE_AGE_SECONDS
+        value: "30"
+      - key: OPTIONS_MAX_SPREAD_PCT
+        value: "12"
+      - key: OPTIONS_MIN_VOLUME
+        value: "10"
+      - key: OPTIONS_MIN_OPEN_INTEREST
+        value: "100"
+      - key: OPTIONS_CONTRACT_LIMIT
+        value: "3"
+      - key: EARNINGS_PROVIDER
+        value: finnhub
+      - key: EARNINGS_CACHE_SECONDS
+        value: "3600"
       - key: OPENAI_MODEL
         value: gpt-5-mini
       - key: OPENAI_DAILY_BUDGET_USD

@@ -270,17 +270,9 @@ class AlpacaProvider(MarketDataAdapter):
 
     @staticmethod
     def _session(timestamp: datetime) -> str:
-        from zoneinfo import ZoneInfo
+        from app.options.market_clock import market_session
 
-        eastern = timestamp.astimezone(ZoneInfo("America/New_York"))
-        minute = eastern.hour * 60 + eastern.minute
-        if 240 <= minute < 570:
-            return "pre_market"
-        if 570 <= minute < 960:
-            return "regular"
-        if 960 <= minute < 1200:
-            return "after_hours"
-        return "closed"
+        return market_session(timestamp).code
 
     def _merge_realtime(self, symbol, direct_quote, direct_trade, direct_bar, snapshot) -> Quote:
         q = self._newer(direct_quote, getattr(snapshot, "latest_quote", None))
