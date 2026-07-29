@@ -17,3 +17,4 @@ files.zip
 *.bat
 alembic/versions/__pycache__/
 .claude/settings.local.json
+server*.log

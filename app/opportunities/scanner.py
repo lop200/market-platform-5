@@ -152,6 +152,10 @@ def build_opportunity(
         strategy_name_en=strategy.name_en,
         market_regime=regime,
         current_price=round(quote.price, 4),
+        change_pct=round(
+            (quote.price / float(daily["close"].astype(float).iloc[-2]) - 1) * 100,
+            2,
+        ) if len(daily) >= 2 and float(daily["close"].astype(float).iloc[-2]) else 0.0,
         bid=round(float(quote.bid), 4),
         ask=round(float(quote.ask), 4),
         spread_pct=round(float(quote.spread_pct), 2),
@@ -180,7 +184,10 @@ def build_opportunity(
         reasons_ar=[strategy.reason, f"الحجم النسبي {indicators.get('relative_volume', 0):.2f}"],
         warnings_ar=warnings[:4],
         news_summary_ar="لا توجد أخبار متاحة من مزود رسمي" if not news else news[0].headline,
-        analysis_summary_ar="فرصة مشروطة؛ لا تُفعّل إلا بعد تحقق شرط الدخول ضمن مدة الصلاحية.",
+        analysis_summary_ar=(
+            "المعطيات الفنية متوافقة بصورة مشروطة؛ تبقى القراءة صالحة فقط بعد تحقق "
+            "الشرط الفني وضمن مدة الصلاحية."
+        ),
         suggested_shares=plan.shares,
         position_value_usd=plan.position_value_usd,
         max_loss_sar=plan.max_loss_sar,

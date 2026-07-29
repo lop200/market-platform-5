@@ -10,9 +10,9 @@
     *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#0b2740 0,var(--bg) 35%);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif;min-height:100vh}
     button,input{font:inherit}.wrap{width:min(1180px,100%);margin:auto;padding:14px}.top{display:grid;gap:12px;padding:16px;background:rgba(13,27,44,.94);border:1px solid var(--border);border-radius:18px;position:sticky;top:8px;z-index:5;backdrop-filter:blur(12px)}
     .brand{display:flex;justify-content:space-between;align-items:center;gap:10px}.brand h1{font-size:1.25rem;margin:0}.market{display:flex;gap:8px;flex-wrap:wrap}.pill{border:1px solid var(--border);padding:6px 10px;border-radius:999px;color:var(--muted);font-size:.78rem}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-left:6px}
-    .actions{display:grid;grid-template-columns:1fr;gap:9px}.btn{border:0;border-radius:12px;padding:12px 15px;cursor:pointer;font-weight:700}.primary{background:var(--green);color:#03200d}.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border)}.symbol{display:flex;gap:7px}.symbol input{min-width:0;flex:1;background:#071522;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:11px;text-transform:uppercase}
+    .actions{display:grid;grid-template-columns:1fr;gap:9px}.btn{border:0;border-radius:12px;padding:12px 15px;cursor:pointer;font-weight:700}.primary{background:var(--green);color:#03200d}.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border)}.symbol{display:flex;gap:7px;position:relative}.symbol input{min-width:0;flex:1;background:#071522;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:11px;text-transform:uppercase}.suggestions{display:none;position:absolute;top:calc(100% + 6px);right:0;left:0;z-index:20;max-height:300px;overflow:auto;background:#091827;border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 35px #020812cc}.suggestions.open{display:block}.suggestion{width:100%;display:flex;align-items:center;gap:10px;padding:11px 12px;border:0;border-bottom:1px solid #172f47;background:transparent;color:var(--text);cursor:pointer;text-align:right}.suggestion:last-child{border-bottom:0}.suggestion:hover,.suggestion.active{background:#12304a}.suggestion b{direction:ltr;color:var(--blue);font-family:ui-monospace,monospace;min-width:58px}.suggestion span{color:var(--muted);font-size:.84rem}.conclusion{margin:11px 0;padding:11px 12px;border-right:3px solid var(--blue);background:#0a2033;border-radius:10px;color:#dbeafe;line-height:1.65}.conclusion b{color:var(--blue)}
     .notice{margin:14px 0;padding:12px 14px;border:1px solid #674e13;background:#30270b;border-radius:12px;color:#fde68a;font-size:.86rem}.progress{display:none;margin:14px 0;background:var(--panel);border:1px solid var(--border);padding:14px;border-radius:14px}.bar{height:7px;background:#14283c;border-radius:9px;overflow:hidden;margin:10px 0}.bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--blue));transition:width .3s}
-    .grid{display:grid;gap:13px}.card{background:linear-gradient(145deg,var(--panel),#0a1725);border:1px solid var(--border);border-radius:17px;padding:15px;box-shadow:0 16px 35px #02081255}.head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.ticker{font:800 1.35rem ui-monospace,monospace;direction:ltr}.state{padding:6px 9px;border-radius:8px;background:#123421;color:#86efac;font-size:.76rem}.prices{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:13px 0}.metric{background:#091827;border:1px solid #172f47;border-radius:10px;padding:9px}.metric small{display:block;color:var(--muted);font-size:.7rem}.metric b{display:block;margin-top:4px;direction:ltr;text-align:right}
+    .grid{display:grid;gap:13px}.card{background:linear-gradient(145deg,var(--panel),#0a1725);border:1px solid var(--border);border-radius:17px;padding:15px;box-shadow:0 16px 35px #02081255}.head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.ticker{font:800 1.35rem ui-monospace,monospace;direction:ltr}.state{padding:6px 9px;border-radius:8px;background:#123421;color:#86efac;font-size:.76rem}.state.watch,.state.wait_confirmation{background:#3a2f0e;color:#fde68a}.state.expired,.state.no_trade{background:#263649;color:#cbd5e1}.prices{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:13px 0}.metric{background:#091827;border:1px solid #172f47;border-radius:10px;padding:9px}.metric small{display:block;color:var(--muted);font-size:.7rem}.metric b{display:block;margin-top:4px;direction:ltr;text-align:right}.positive{color:var(--green)}.negative{color:var(--red)}.card-actions{display:flex;justify-content:flex-end;margin-top:12px}.refresh{padding:8px 11px;font-size:.78rem}
     .strategy{color:var(--blue);font-weight:700}.trade{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:11px 0}.entry{border-right:3px solid var(--yellow)}.stop{border-right:3px solid var(--red)}.target{border-right:3px solid var(--green)}.reason{color:#cbd5e1;font-size:.88rem;line-height:1.7}.warning{color:#fda4af}.quality{display:flex;align-items:center;gap:10px}.score{font-size:1.55rem;font-weight:800;color:var(--green)}.foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px;margin-top:10px;color:var(--muted);font-size:.76rem}.empty{text-align:center;padding:50px 16px;color:var(--muted)}
     .timeline{display:flex;gap:5px;margin-top:10px}.step{height:4px;flex:1;border-radius:3px;background:#294158}.step.on{background:var(--green)}
     @media(min-width:720px){.top{grid-template-columns:1fr auto}.actions{grid-template-columns:auto 330px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wrap{padding:22px}.card{padding:18px}}
@@ -22,18 +22,18 @@
 <main class="wrap">
   <header class="top">
     <div>
-      <div class="brand"><h1>مرصاد الأسهم</h1><span class="pill"><i class="dot"></i><span id="provider">مزود البيانات</span></span></div>
+      <div class="brand"><h1>مرصاد الأسهم</h1><div class="market"><a class="pill" href="/results">النتائج المسجلة</a><span class="pill"><i class="dot"></i><span id="provider">مزود البيانات</span></span></div></div>
       <div class="market">
-        <span class="pill" id="riyadh">الرياض —</span><span class="pill" id="newyork">نيويورك —</span>
+        <span class="pill" id="marketState">حالة السوق —</span><span class="pill" id="riyadh">الرياض —</span><span class="pill" id="newyork">نيويورك —</span>
         <span class="pill" id="updated">آخر تحديث —</span>
       </div>
     </div>
     <div class="actions">
       <button class="btn primary" id="scan">مسح السوق واستخراج الفرص</button>
-      <form class="symbol" id="symbolForm"><input id="symbol" aria-label="رمز السهم" placeholder="مثال: SOUN" maxlength="10"><button class="btn secondary">تحليل سهم محدد</button></form>
+      <form class="symbol" id="symbolForm" autocomplete="off"><input id="symbol" aria-label="ابحث برمز السهم أو اسم الشركة" placeholder="اكتب NV أو NVIDIA" maxlength="40" aria-autocomplete="list" aria-controls="symbolSuggestions" aria-expanded="false"><div class="suggestions" id="symbolSuggestions" role="listbox"></div><button class="btn secondary">تحليل سهم محدد</button></form>
     </div>
   </header>
-  <div class="notice">المنصة لا تنفذ تداولًا آليًا ولا تضمن الربح. لا تدخل أي فرصة قبل تحقق الشرط، والتزم بحد المخاطرة.</div>
+  <div class="notice">المنصة لا تنفذ تداولًا آليًا ولا تضمن الربح. النتائج استنتاجات فنية مشروطة، والقرار ومسؤوليته على المستخدم.</div>
   <section class="progress" id="progress">
     <b id="progressTitle">جاري المسح</b><div class="bar"><span id="bar"></span></div>
     <div class="market"><span id="checked">0 سهم مفحوص</span><span id="excluded">0 مستبعد</span><span id="failure"></span></div>
@@ -46,20 +46,51 @@ function clocks(){const now=new Date();$("#riyadh").textContent="الرياض "+
 const money=n=>Number(n).toFixed(2);
 function card(o){
  const remain=Math.max(0,Math.ceil((new Date(o.expires_at)-new Date())/60000));
- return `<article class="card"><div class="head"><div><div class="ticker">${o.symbol}</div><small>${o.company_name}</small></div><span class="state">${o.status==="conditional_entry"?"دخول مشروط":o.status}</span></div>
- <div class="prices"><div class="metric"><small>السعر</small><b>$${money(o.current_price)}</b></div><div class="metric"><small>Bid / Ask</small><b>$${money(o.bid)} / $${money(o.ask)}</b></div><div class="metric"><small>السبريد</small><b>${money(o.spread_pct)}%</b></div></div>
+ const statusLabels={conditional_entry:"دخول مشروط",watch:"مراقبة",wait_confirmation:"انتظار تأكيد",expired:"منتهية",no_trade:"لا توجد صفقة"};
+ const change=Number(o.change_pct??0), changeClass=change>=0?"positive":"negative";
+ return `<article class="card"><div class="head"><div><div class="ticker">${o.symbol}</div><small>${o.company_name}</small></div><span class="state ${o.status}">${statusLabels[o.status]||o.status}</span></div>
+ <div class="conclusion"><b>الاستنتاج الفني:</b> ${o.analysis_summary_ar}</div>
+ <div class="prices"><div class="metric"><small>السعر / التغير</small><b>$${money(o.current_price)} <span class="${changeClass}">${change>=0?"+":""}${money(change)}%</span></b></div><div class="metric"><small>Bid / Ask</small><b>$${money(o.bid)} / $${money(o.ask)}</b></div><div class="metric"><small>السبريد</small><b>${money(o.spread_pct)}%</b></div></div>
  <div class="strategy">${o.strategy_name_ar} <small>(${o.strategy_name_en})</small></div>
  <div class="trade"><div class="metric entry"><small>منطقة الدخول</small><b>$${money(o.entry_zone.from)} – $${money(o.entry_zone.to)}</b></div><div class="metric stop"><small>وقف الخسارة</small><b>$${money(o.stop_loss)}</b></div>${o.targets.map(t=>`<div class="metric target"><small>${t.label}</small><b>$${money(t.price)}</b></div>`).join("")}</div>
  <p class="reason"><b>شرط الدخول:</b> ${o.entry_trigger}</p><p class="reason">${o.reasons_ar.slice(0,2).join(" • ")}</p><p class="reason warning">${o.warnings_ar.slice(0,2).join(" • ")}</p>
  <div class="quality"><span class="score">${o.overall_score}</span><span>درجة الجودة<br><small>العائد/المخاطرة ${o.risk_reward} — ${o.confidence_label}</small></span></div>
  <div class="timeline"><i class="step on"></i><i class="step"></i><i class="step"></i><i class="step"></i><i class="step"></i></div>
- <div class="foot"><span>${o.data_source}${o.data_feed?" / "+o.data_feed:""} — عمر البيانات ${o.quote_age_seconds}ث</span><span>تحديث السعر: الرياض ${new Intl.DateTimeFormat("ar-SA",{timeZone:"Asia/Riyadh",timeStyle:"short"}).format(new Date(o.quote_timestamp))} • نيويورك ${new Intl.DateTimeFormat("ar-SA",{timeZone:"America/New_York",timeStyle:"short"}).format(new Date(o.quote_timestamp))}</span><span>متبقي ${remain} دقيقة</span><span>${o.suggested_shares} سهم • مخاطرة ≈ ${money(o.max_loss_sar)} ر.س</span></div></article>`;
+ <div class="foot"><span>${o.data_source}${o.data_feed?" / "+o.data_feed:""} — عمر البيانات ${o.quote_age_seconds}ث</span><span>تحديث السعر: الرياض ${new Intl.DateTimeFormat("ar-SA",{timeZone:"Asia/Riyadh",timeStyle:"short"}).format(new Date(o.quote_timestamp))} • نيويورك ${new Intl.DateTimeFormat("ar-SA",{timeZone:"America/New_York",timeStyle:"short"}).format(new Date(o.quote_timestamp))}</span><span>متبقي ${remain} دقيقة</span><span>${o.suggested_shares} سهم • مخاطرة ≈ ${money(o.max_loss_sar)} ر.س</span></div>
+ <div class="card-actions">${o.opportunity_id?`<button class="btn secondary refresh" type="button" data-refresh-id="${o.opportunity_id}">تحديث هذا السهم فقط</button>`:""}</div></article>`;
 }
-function render(data){const list=data.opportunities||[];cards.innerHTML=list.length?list.map(card).join(""):`<div class="empty">${data.message_ar||"لا توجد فرص مناسبة حاليًا"}</div>`;if(data.scan?.provider)$("#provider").textContent=data.scan.provider;$("#updated").textContent="آخر تحديث "+new Intl.DateTimeFormat("ar-SA",{timeStyle:"short"}).format(new Date())}
+function render(data){const list=data.opportunities||[];cards.innerHTML=list.length?list.map(card).join(""):`<div class="empty">${data.message_ar||"لا توجد نتائج مستوفية للشروط حاليًا"}</div>`;if(data.scan?.provider)$("#provider").textContent=data.scan.provider;if(list[0]?.market_regime)$("#marketState").textContent="حالة السوق: "+({bullish:"صاعد",bearish:"هابط",choppy:"متذبذب",high_risk:"عالي الخطورة",low_liquidity:"سيولة ضعيفة",unsuitable:"غير مناسب"}[list[0].market_regime]||list[0].market_regime);$("#updated").textContent="آخر تحديث "+new Intl.DateTimeFormat("ar-SA",{timeStyle:"short"}).format(new Date());cards.querySelectorAll("[data-refresh-id]").forEach(button=>button.onclick=()=>start("/api/v1/opportunities/"+encodeURIComponent(button.dataset.refreshId)+"/refresh"))}
 async function latest(){try{render(await (await fetch("/api/v1/opportunities/latest")).json())}catch{cards.innerHTML='<div class="empty">تعذر تحميل آخر نتيجة محفوظة</div>'}}
 async function start(url){progress.style.display="block";$("#failure").textContent="";const res=await fetch(url,{method:"POST"});const job=await res.json();if(!res.ok){$("#failure").textContent=job.detail||"تعذر بدء المهمة";return}poll(job.run_id)}
 async function poll(id){const timer=setInterval(async()=>{try{const job=await(await fetch(`/api/v1/opportunities/scans/${id}`)).json();$("#bar").style.width=(job.progress_pct||0)+"%";$("#checked").textContent=`${job.symbols_scanned||0} سهم مفحوص`;$("#excluded").textContent=`${job.symbols_excluded||0} مستبعد`;$("#progressTitle").textContent=job.status==="running"?"جاري المسح":job.status==="completed"?"اكتمل المسح":"حالة المهمة: "+job.status;if(job.failure_reason)$("#failure").textContent=job.failure_reason;if(["completed","failed"].includes(job.status)){clearInterval(timer);render(job)}}catch{}},1200)}
-$("#scan").onclick=()=>start("/api/v1/opportunities/scans");$("#symbolForm").onsubmit=e=>{e.preventDefault();const s=$("#symbol").value.trim().toUpperCase();if(s)start("/api/v1/opportunities/symbols/"+encodeURIComponent(s))};latest();
+const symbolCatalog={{ symbol_catalog|tojson }}, symbolInput=$("#symbol"), suggestionBox=$("#symbolSuggestions");
+let visibleSuggestions=[], activeSuggestion=-1;
+const normalize=value=>value.trim().toLocaleLowerCase("en-US");
+function findSymbols(query){
+ const needle=normalize(query);if(!needle)return[];
+ return symbolCatalog.map(item=>{const symbol=item.symbol.toLowerCase(),name=item.name.toLowerCase();let rank=9;if(symbol.startsWith(needle))rank=0;else if(name.startsWith(needle))rank=1;else if(symbol.includes(needle))rank=2;else if(name.includes(needle))rank=3;return{...item,rank}}).filter(item=>item.rank<9).sort((a,b)=>a.rank-b.rank||a.symbol.localeCompare(b.symbol)).slice(0,8);
+}
+function closeSuggestions(){visibleSuggestions=[];activeSuggestion=-1;suggestionBox.classList.remove("open");suggestionBox.innerHTML="";symbolInput.setAttribute("aria-expanded","false")}
+function chooseSymbol(item){symbolInput.value=item.symbol;closeSuggestions();symbolInput.focus()}
+function drawSuggestions(){
+ visibleSuggestions=findSymbols(symbolInput.value);activeSuggestion=-1;
+ if(!visibleSuggestions.length){closeSuggestions();return}
+ suggestionBox.innerHTML=visibleSuggestions.map((item,index)=>`<button type="button" class="suggestion" role="option" data-index="${index}"><b>${item.symbol}</b><span>${item.name}</span></button>`).join("");
+ suggestionBox.classList.add("open");symbolInput.setAttribute("aria-expanded","true");
+ suggestionBox.querySelectorAll(".suggestion").forEach(button=>button.onclick=()=>chooseSymbol(visibleSuggestions[Number(button.dataset.index)]));
+}
+symbolInput.addEventListener("input",drawSuggestions);
+symbolInput.addEventListener("focus",()=>{if(symbolInput.value)drawSuggestions()});
+symbolInput.addEventListener("keydown",event=>{
+ if(!visibleSuggestions.length)return;
+ if(event.key==="ArrowDown"){event.preventDefault();activeSuggestion=(activeSuggestion+1)%visibleSuggestions.length}
+ else if(event.key==="ArrowUp"){event.preventDefault();activeSuggestion=(activeSuggestion-1+visibleSuggestions.length)%visibleSuggestions.length}
+ else if(event.key==="Enter"&&activeSuggestion>=0){event.preventDefault();chooseSymbol(visibleSuggestions[activeSuggestion]);return}
+ else if(event.key==="Escape"){closeSuggestions();return}else{return}
+ suggestionBox.querySelectorAll(".suggestion").forEach((button,index)=>button.classList.toggle("active",index===activeSuggestion));
+});
+document.addEventListener("click",event=>{if(!$("#symbolForm").contains(event.target))closeSuggestions()});
+$("#scan").onclick=()=>start("/api/v1/opportunities/scans");$("#symbolForm").onsubmit=e=>{e.preventDefault();const typed=symbolInput.value.trim();const exact=symbolCatalog.find(item=>item.symbol.toLowerCase()===typed.toLowerCase());const inferred=exact||findSymbols(typed)[0];const s=(inferred?.symbol||typed).toUpperCase();closeSuggestions();if(s)start("/api/v1/opportunities/symbols/"+encodeURIComponent(s))};latest();
 </script>
 </body>
 </html>

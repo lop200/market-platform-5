@@ -17,6 +17,11 @@ def test_page_is_fast_shell_and_mobile_rtl():
     assert 'name="viewport"' in html
     assert "@media(min-width:720px)" in html
     assert "مسح السوق واستخراج الفرص" in html
+    assert "symbolCatalog" in html
+    assert "NVIDIA" in html
+    assert 'aria-autocomplete="list"' in html
+    assert "تحديث هذا السهم فقط" in html
+    assert "حالة السوق" in html
     assert "OPENAI_API_KEY" not in html
 
 
@@ -37,3 +42,11 @@ def test_runtime_contains_no_removed_derivatives_or_legacy_ai():
 def test_no_removed_route_is_registered():
     paths = {route.path for route in app.routes if hasattr(route, "path")}
     assert not any("option" in path.lower() for path in paths)
+
+
+def test_results_page_is_arabic_rtl_and_factual():
+    response = TestClient(app).get("/results")
+    assert response.status_code == 200
+    assert 'dir="rtl"' in response.text
+    assert "النتائج المسجلة فعليًا" in response.text
+    assert "ليست Backtest" in response.text

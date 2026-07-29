@@ -46,6 +46,7 @@ class OpportunityResult(BaseModel):
     strategy_name_en: str
     market_regime: MarketRegime
     current_price: float
+    change_pct: float
     bid: float
     ask: float
     spread_pct: float

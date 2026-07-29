@@ -5,6 +5,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -15,7 +16,7 @@ from app.db.models import OpportunityAudit, StockCandidate, StockOpportunity, St
 from app.db.session import get_db
 from app.opportunities.jobs import create_scan
 from app.opportunities.scanner import expire_old_opportunities
-from app.opportunities.schemas import RiskSettingsInput, ScanStartResponse
+from app.opportunities.schemas import OpportunityStatus, RiskSettingsInput, ScanStartResponse
 
 router = APIRouter(prefix="/api/v1/opportunities", tags=["stock-opportunities"])
 _requests: dict[str, deque[float]] = defaultdict(deque)
@@ -42,6 +43,61 @@ def _run_payload(run: StockScanRun) -> dict:
     }
 
 
+def _opportunity_payload(row: StockOpportunity) -> dict:
+    return {**row.result_json, "opportunity_id": str(row.id)}
+
+
+def build_results_summary(db: Session) -> dict:
+    total = db.scalar(select(func.count(StockOpportunity.id))) or 0
+    audited = db.scalar(select(func.count(OpportunityAudit.id))) or 0
+    entered = db.scalar(select(func.count(OpportunityAudit.id)).where(OpportunityAudit.entry_triggered_at.is_not(None))) or 0
+    target1 = db.scalar(select(func.count(OpportunityAudit.id)).where(OpportunityAudit.target_1_hit.is_(True))) or 0
+    target2 = db.scalar(select(func.count(OpportunityAudit.id)).where(OpportunityAudit.target_2_hit.is_(True))) or 0
+    stopped = db.scalar(select(func.count(OpportunityAudit.id)).where(OpportunityAudit.stop_hit.is_(True))) or 0
+    average_rr = db.scalar(select(func.avg(StockOpportunity.risk_reward))) or 0
+
+    strategy_rows = db.execute(
+        select(StockOpportunity.strategy_id, func.count(StockOpportunity.id))
+        .group_by(StockOpportunity.strategy_id)
+        .order_by(func.count(StockOpportunity.id).desc())
+    ).all()
+    regime_rows = db.execute(
+        select(StockOpportunity.market_regime, func.count(StockOpportunity.id))
+        .group_by(StockOpportunity.market_regime)
+        .order_by(func.count(StockOpportunity.id).desc())
+    ).all()
+    session_counts: dict[str, int] = defaultdict(int)
+    for issued_at in db.scalars(select(StockOpportunity.issued_at)).all():
+        aware = issued_at.replace(tzinfo=timezone.utc) if issued_at.tzinfo is None else issued_at
+        eastern = aware.astimezone(ZoneInfo("America/New_York"))
+        minutes = eastern.hour * 60 + eastern.minute
+        session = (
+            "قبل السوق" if minutes < 570 else
+            "الافتتاح" if minutes < 600 else
+            "منتصف الجلسة" if minutes < 900 else
+            "الإغلاق" if minutes <= 960 else
+            "بعد الإغلاق"
+        )
+        session_counts[session] += 1
+
+    def pct(value: int) -> float:
+        return round(value / audited * 100, 1) if audited else 0
+
+    return {
+        "opportunities": total,
+        "audited_results": audited,
+        "entry_trigger_rate": pct(entered),
+        "target_1_rate": pct(target1),
+        "target_2_rate": pct(target2),
+        "stop_rate": pct(stopped),
+        "average_risk_reward": round(float(average_rr), 2),
+        "by_strategy": [{"name": name, "count": count} for name, count in strategy_rows],
+        "by_market_regime": [{"name": name, "count": count} for name, count in regime_rows],
+        "by_session": [{"name": name, "count": count} for name, count in session_counts.items()],
+        "note_ar": "هذه نتائج مسجلة فعليًا وليست Backtest أو ضمانًا للأداء.",
+    }
+
+
 @router.post("/scans", response_model=ScanStartResponse, dependencies=[Depends(rate_limit)])
 def start_scan() -> ScanStartResponse:
     run = create_scan()
@@ -62,10 +118,10 @@ def refresh_opportunity(opportunity_id: str, db: Session = Depends(get_db)) -> S
     try:
         opportunity_uuid = uuid.UUID(opportunity_id)
     except ValueError:
-        raise HTTPException(422, "معرف الفرصة غير صالح")
+        raise HTTPException(422, "معرف التحليل غير صالح")
     row = db.get(StockOpportunity, opportunity_uuid)
     if not row:
-        raise HTTPException(404, "الفرصة غير موجودة")
+        raise HTTPException(404, "التحليل غير موجود")
     run = create_scan(row.symbol)
     return ScanStartResponse(run_id=str(run.id), status=run.status, message_ar=f"بدأ تحديث {row.symbol} فقط")
 
@@ -83,9 +139,9 @@ def scan_status(run_id: str, db: Session = Depends(get_db)) -> dict:
         select(StockOpportunity).where(StockOpportunity.scan_run_id == run.id).order_by(StockOpportunity.overall_score.desc())
     ).all()
     payload = _run_payload(run)
-    payload["opportunities"] = [item.result_json for item in opportunities]
+    payload["opportunities"] = [_opportunity_payload(item) for item in opportunities]
     if run.status == "completed" and not opportunities:
-        payload["message_ar"] = "لا توجد فرص مناسبة حاليًا"
+        payload["message_ar"] = "لا توجد نتائج مستوفية للشروط حاليًا"
     return payload
 
 
@@ -94,31 +150,21 @@ def latest(db: Session = Depends(get_db)) -> dict:
     expire_old_opportunities(db)
     run = db.scalar(select(StockScanRun).order_by(StockScanRun.created_at.desc()).limit(1))
     rows = db.scalars(
-        select(StockOpportunity).order_by(StockOpportunity.issued_at.desc()).limit(get_settings().max_results)
+        select(StockOpportunity)
+        .where(StockOpportunity.status != OpportunityStatus.EXPIRED.value)
+        .order_by(StockOpportunity.issued_at.desc())
+        .limit(get_settings().max_results)
     ).all()
     return {
         "scan": _run_payload(run) if run else None,
-        "opportunities": [row.result_json for row in rows],
-        "message_ar": "لا توجد فرص مناسبة حاليًا" if not rows else None,
+        "opportunities": [_opportunity_payload(row) for row in rows],
+        "message_ar": "لا توجد نتائج مستوفية للشروط حاليًا" if not rows else None,
     }
 
 
 @router.get("/results/summary")
 def results_summary(db: Session = Depends(get_db)) -> dict:
-    total = db.scalar(select(func.count(StockOpportunity.id))) or 0
-    audited = db.scalar(select(func.count(OpportunityAudit.id))) or 0
-    entered = db.scalar(select(func.count(OpportunityAudit.id)).where(OpportunityAudit.entry_triggered_at.is_not(None))) or 0
-    target1 = db.scalar(select(func.count(OpportunityAudit.id)).where(OpportunityAudit.target_1_hit.is_(True))) or 0
-    target2 = db.scalar(select(func.count(OpportunityAudit.id)).where(OpportunityAudit.target_2_hit.is_(True))) or 0
-    stopped = db.scalar(select(func.count(OpportunityAudit.id)).where(OpportunityAudit.stop_hit.is_(True))) or 0
-    def pct(value: int) -> float:
-        return round(value / audited * 100, 1) if audited else 0
-    return {
-        "opportunities": total, "audited_results": audited,
-        "entry_trigger_rate": pct(entered), "target_1_rate": pct(target1),
-        "target_2_rate": pct(target2), "stop_rate": pct(stopped),
-        "note_ar": "هذه نتائج مسجلة فعليًا وليست Backtest أو ضمانًا للأداء.",
-    }
+    return build_results_summary(db)
 
 
 @router.get("/risk-settings")
