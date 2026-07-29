@@ -173,6 +173,7 @@ def build_opportunity(
         strategy_name_ar=strategy.name_ar,
         strategy_name_en=strategy.name_en,
         market_regime=regime,
+        session=quote.session,
         current_price=round(quote.price, 4),
         change_pct=round(
             (quote.price / float(daily["close"].astype(float).iloc[-2]) - 1) * 100,
@@ -250,10 +251,6 @@ def scan_market(
     universe_limit: int | None = None,
 ) -> list[OpportunityResult]:
     regime, regime_inputs = classify_market(provider)
-    try:
-        market_open = provider.is_market_open()
-    except Exception:
-        market_open = current_session() in {"open", "mid_session", "close"}
     db.add(MarketRegimeRecord(regime=regime.value, session=current_session(), inputs_json=regime_inputs))
     limit = max(1, min(int(universe_limit or settings.scan_universe_limit), 5000))
     symbols = provider.list_active_us_symbols(limit) or settings.configured_scan_symbols
@@ -337,11 +334,6 @@ def scan_market(
                 quote_override=quote_map.get(symbol),
                 daily_override=deep_daily_map.get(symbol),
             )
-            if result is not None and not market_open:
-                result = None
-                reasons = ["السوق مغلق؛ تُعرض القراءة للمراقبة دون خطة مباشرة"]
-                snapshot["watch_reason"] = reasons[0]
-                snapshot["activation_condition"] = "إعادة التحقق بعد افتتاح السوق ببيانات Bid/Ask حديثة"
             observed_price = snapshot.get("price")
             if observed_price is not None and (
                 (min_price is not None and observed_price < min_price)

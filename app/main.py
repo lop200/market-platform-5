@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="منصة تحليل الأسهم الأمريكية",
-    description="تحليل مشروط لأسهم أمريكية منخفضة السعر، دون تنفيذ تداول آلي أو ضمان للربح.",
+    description="تحليل مشروط للأسهم الأمريكية، دون تنفيذ تداول آلي أو ضمان للربح.",
     version="2.0.0",
     lifespan=lifespan,
 )

@@ -217,7 +217,11 @@ def scan_status(run_id: str, db: Session = Depends(get_db)) -> dict:
     ).all()
     payload = _run_payload(run)
     payload["breakdown"], payload["watchlist"] = _scan_breakdown(db, run)
-    payload["opportunities"] = [_opportunity_payload(item) for item in opportunities]
+    opportunity_payloads = [_opportunity_payload(item) for item in opportunities]
+    payload["opportunities"] = opportunity_payloads
+    payload["premarket_opportunities"] = [
+        item for item in opportunity_payloads if item.get("session") == "pre_market"
+    ]
     if run.status == "completed" and not opportunities:
         payload["message_ar"] = "لا توجد نتائج مستوفية للشروط حاليًا"
     return payload
@@ -256,11 +260,15 @@ def latest(db: Session = Depends(get_db)) -> dict:
         .limit(get_settings().max_results)
     ).all()
     breakdown, watchlist = _scan_breakdown(db, run) if run else ({}, [])
+    opportunity_payloads = [_opportunity_payload(row) for row in rows]
     return {
         "scan": _run_payload(run) if run else None,
         "breakdown": breakdown,
         "watchlist": watchlist,
-        "opportunities": [_opportunity_payload(row) for row in rows],
+        "opportunities": opportunity_payloads,
+        "premarket_opportunities": [
+            item for item in opportunity_payloads if item.get("session") == "pre_market"
+        ],
         "message_ar": "لا توجد نتائج مستوفية للشروط حاليًا" if not rows else None,
     }
 

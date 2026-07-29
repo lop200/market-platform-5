@@ -79,7 +79,7 @@ def test_nvda_analysis_ignores_scanner_price_range_and_remains_complete(db_sessi
     result = analyze_single_stock(
         db_session,
         provider,
-        Settings(stock_min_price=2, stock_max_price=10, news_provider="none"),
+        Settings(news_provider="none"),
         "NVDA",
     )
     assert result["symbol"] == "NVDA"

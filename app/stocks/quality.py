@@ -101,7 +101,7 @@ def evaluate_plan_data(
                     reasons.append("السعر والشموع غير متزامنين")
 
     if not market_open:
-        reasons.append("السوق مغلق؛ لا تُبنى خطة دخول مباشرة")
+        warnings.append("القراءة خارج الجلسة الرسمية؛ تعتمد صلاحيتها على حداثة Trade وQuote والسبريد.")
 
     return DataQualityGate(
         valid_for_plan=not reasons,

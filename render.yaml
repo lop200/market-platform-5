@@ -29,10 +29,6 @@ services:
         value: gpt-5-mini
       - key: OPENAI_DAILY_BUDGET_USD
         value: "1.00"
-      - key: STOCK_MIN_PRICE
-        value: "2"
-      - key: STOCK_MAX_PRICE
-        value: "10"
       - key: API_KEY
         sync: false
       - key: ACCESS_CODE_MAIN

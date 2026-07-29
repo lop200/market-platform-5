@@ -41,6 +41,12 @@ class FakeProvider(MarketDataAdapter):
     def is_market_open(self) -> bool: return True
 
 
+class PremarketProvider(FakeProvider):
+    def get_quote(self, symbol: str) -> Quote:
+        original = super().get_quote(symbol)
+        return Quote(**{**original.__dict__, "session": "pre_market"})
+
+
 def test_builds_schema_valid_entry_stop_targets(db_session):
     settings = Settings(
         min_avg_daily_volume=100_000, min_relative_volume=1,
@@ -56,6 +62,24 @@ def test_builds_schema_valid_entry_stop_targets(db_session):
     assert result.targets[0].price > result.entry_zone.from_price
     assert result.risk_reward >= settings.min_risk_reward
     assert result.expires_at > datetime.now(timezone.utc)
+
+
+def test_premarket_result_is_kept_and_labeled_separately(db_session):
+    result, reasons, _ = build_opportunity(
+        db_session,
+        PremarketProvider(),
+        Settings(
+            min_avg_daily_volume=100_000,
+            min_relative_volume=1,
+            max_spread_pct=2,
+            news_provider="none",
+        ),
+        "QQQ",
+        MarketRegime.BULLISH,
+    )
+    assert reasons == []
+    assert result is not None
+    assert result.session == "pre_market"
 
 
 def test_openai_schema_forbids_unknown_fields():

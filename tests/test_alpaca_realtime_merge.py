@@ -55,6 +55,43 @@ def test_snapshot_members_can_be_newer_than_direct_responses():
     assert result.trade_as_of == now.isoformat()
 
 
+def test_batch_quotes_fetches_quote_trade_bar_and_snapshot():
+    now = datetime.now(timezone.utc)
+    snapshot = SimpleNamespace(
+        latest_trade=item(now, price=181.42),
+        latest_quote=item(now, bid_price=181.40, ask_price=181.44),
+        minute_bar=item(now - timedelta(minutes=1), close=181.41, volume=50_000),
+    )
+
+    class DataClient:
+        def __init__(self):
+            self.calls = []
+
+        def get_stock_latest_quote(self, request):
+            self.calls.append("quote")
+            return {}
+
+        def get_stock_latest_trade(self, request):
+            self.calls.append("trade")
+            return {}
+
+        def get_stock_latest_bar(self, request):
+            self.calls.append("bar")
+            return {}
+
+        def get_stock_snapshot(self, request):
+            self.calls.append("snapshot")
+            return {"NVDA": snapshot}
+
+    provider = alpaca_provider()
+    provider._data_client = DataClient()
+    results = provider.get_quotes_many(["NVDA"])
+
+    assert provider._data_client.calls == ["quote", "trade", "bar", "snapshot"]
+    assert results["NVDA"].price == 181.42
+    assert results["NVDA"].price_source == "latest_trade"
+
+
 def test_session_uses_new_york_clock_with_utc_input():
     assert AlpacaProvider._session(datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc)) == "pre_market"
     assert AlpacaProvider._session(datetime(2026, 7, 29, 15, 0, tzinfo=timezone.utc)) == "regular"

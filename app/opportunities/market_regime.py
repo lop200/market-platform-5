@@ -10,6 +10,8 @@ from app.providers.base import MarketDataAdapter
 def current_session() -> str:
     now = datetime.now(ZoneInfo("America/New_York"))
     minutes = now.hour * 60 + now.minute
+    if minutes < 240:
+        return "closed"
     if minutes < 570:
         return "pre_market"
     if minutes < 600:
@@ -18,7 +20,9 @@ def current_session() -> str:
         return "mid_session"
     if minutes <= 960:
         return "close"
-    return "after_hours"
+    if minutes < 1200:
+        return "after_hours"
+    return "closed"
 
 
 def classify_market(provider: MarketDataAdapter) -> tuple[MarketRegime, dict]:

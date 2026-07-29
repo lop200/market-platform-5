@@ -42,13 +42,21 @@ def test_stale_quote_prevents_trade_plan():
     assert any("أقدم" in reason for reason in decision.reasons)
 
 
-def test_wide_spread_and_closed_market_prevent_plan():
+def test_wide_spread_prevents_plan_outside_regular_market():
     decision = evaluate_plan_data(
         quote(bid=3.0, ask=3.5), bars(), Settings(max_spread_pct=2), market_open=False,
     )
     assert not decision.valid_for_plan
     assert any("السبريد" in reason for reason in decision.reasons)
-    assert any("السوق مغلق" in reason for reason in decision.reasons)
+    assert any("خارج الجلسة الرسمية" in warning for warning in decision.warnings)
+
+
+def test_fresh_valid_quote_is_not_rejected_only_because_regular_market_is_closed():
+    decision = evaluate_plan_data(
+        quote(), bars(), Settings(max_spread_pct=2), market_open=False,
+    )
+    assert decision.valid_for_plan
+    assert not decision.reasons
 
 
 def test_bid_and_ask_timestamp_skew_is_rejected():

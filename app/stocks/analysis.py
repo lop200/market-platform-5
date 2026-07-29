@@ -279,7 +279,7 @@ def analyze_single_stock(
     try:
         market_open = provider.is_market_open() or bool(quote and quote.session == "pre_market")
     except Exception:
-        market_open = current_session() in {"open", "mid_session", "close"}
+        market_open = current_session() in {"pre_market", "open", "mid_session", "close"}
         warnings.append("تعذر التحقق المباشر من ساعة السوق")
     quality = evaluate_plan_data(quote, primary, settings, market_open=market_open)
     warnings.extend(quality.warnings)

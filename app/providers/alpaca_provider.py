@@ -195,31 +195,24 @@ class AlpacaProvider(MarketDataAdapter):
         trades = self._data_client.get_stock_latest_trade(
             StockLatestTradeRequest(symbol_or_symbols=unique, feed=self._feed)
         )
+        bars = self._data_client.get_stock_latest_bar(
+            StockLatestBarRequest(symbol_or_symbols=unique, feed=self._feed)
+        )
+        snapshots = self._data_client.get_stock_snapshot(
+            StockSnapshotRequest(symbol_or_symbols=unique, feed=self._feed)
+        )
         results: dict[str, Quote] = {}
         for symbol in unique:
-            q = quotes.get(symbol)
-            if q is None:
+            try:
+                results[symbol] = self._merge_realtime(
+                    symbol,
+                    quotes.get(symbol),
+                    trades.get(symbol),
+                    bars.get(symbol),
+                    snapshots.get(symbol),
+                )
+            except ValueError:
                 continue
-            trade = trades.get(symbol)
-            last = float(trade.price) if trade else None
-            mid = (q.bid_price + q.ask_price) / 2 if q.bid_price and q.ask_price else q.ask_price or q.bid_price
-            if not last and not mid:
-                continue
-            results[symbol] = Quote(
-                symbol=symbol,
-                price=float(last or mid),
-                bid=float(q.bid_price) if q.bid_price else None,
-                ask=float(q.ask_price) if q.ask_price else None,
-                volume=None,
-                as_of=q.timestamp.isoformat(),
-                is_delayed=False,
-                provider=self.provider_name,
-                feed=self._feed,
-                last_trade=last,
-                trade_as_of=trade.timestamp.isoformat() if trade else None,
-                bid_as_of=q.timestamp.isoformat(),
-                ask_as_of=q.timestamp.isoformat(),
-            )
         return results
 
     def get_company_profile(self, symbol: str) -> dict:

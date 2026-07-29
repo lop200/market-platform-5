@@ -18,7 +18,7 @@ def quote(**overrides) -> Quote:
 
 
 def test_data_quality_does_not_apply_scanner_price_range():
-    settings = Settings(stock_min_price=2, stock_max_price=5)
+    settings = Settings()
     assert evaluate_quote(quote(price=1.99, bid=1.98, ask=2.00), settings).accepted
     assert evaluate_quote(quote(price=500, bid=499, ask=501), settings).accepted
 

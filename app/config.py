@@ -31,8 +31,6 @@ class Settings(BaseSettings):
     openai_daily_budget_usd: float = Field(default=1.0, alias="OPENAI_DAILY_BUDGET_USD")
     openai_candidate_limit: int = Field(default=8, alias="OPENAI_CANDIDATE_LIMIT")
 
-    stock_min_price: float = Field(default=2.0, alias="STOCK_MIN_PRICE")
-    stock_max_price: float = Field(default=10.0, alias="STOCK_MAX_PRICE")
     min_avg_daily_volume: int = Field(default=500_000, alias="MIN_AVG_DAILY_VOLUME")
     min_relative_volume: float = Field(default=1.0, alias="MIN_RELATIVE_VOLUME")
     max_spread_pct: float = Field(default=2.0, alias="MAX_SPREAD_PCT")
