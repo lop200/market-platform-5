@@ -124,7 +124,7 @@ def test_single_symbol_route_never_starts_market_scan(monkeypatch):
     monkeypatch.setattr(
         routes_opportunities,
         "create_symbol_analysis",
-        lambda symbol: calls.append(symbol) or SimpleNamespace(id=uuid.uuid4(), status="queued"),
+        lambda symbol, **kwargs: calls.append((symbol, kwargs)) or SimpleNamespace(id=uuid.uuid4(), status="queued"),
     )
     monkeypatch.setattr(
         routes_opportunities,
@@ -133,7 +133,22 @@ def test_single_symbol_route_never_starts_market_scan(monkeypatch):
     )
     response = TestClient(app).post("/api/v1/opportunities/symbols/NVDA")
     assert response.status_code == 200
-    assert calls == ["NVDA"]
+    assert calls == [("NVDA", {"refresh": False})]
+
+
+def test_manual_symbol_refresh_bypasses_symbol_cache(monkeypatch):
+    from app.api import routes_opportunities
+
+    calls = []
+    monkeypatch.setattr(
+        routes_opportunities,
+        "create_symbol_analysis",
+        lambda symbol, **kwargs: calls.append((symbol, kwargs))
+        or SimpleNamespace(id=uuid.uuid4(), status="queued"),
+    )
+    response = TestClient(app).post("/api/v1/opportunities/symbols/QQQ?refresh=true")
+    assert response.status_code == 200
+    assert calls == [("QQQ", {"refresh": True})]
 
 
 def test_market_scan_price_filter_is_optional(monkeypatch):

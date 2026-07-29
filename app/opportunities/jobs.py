@@ -44,7 +44,7 @@ def create_scan(
         db.close()
 
 
-def create_symbol_analysis(symbol: str) -> StockScanRun:
+def create_symbol_analysis(symbol: str, *, refresh: bool = False) -> StockScanRun:
     with _lock:
         db = SessionLocal()
         try:
@@ -55,7 +55,7 @@ def create_symbol_analysis(symbol: str) -> StockScanRun:
             run_id = run.id
         finally:
             db.close()
-        _executor.submit(_execute_symbol, run_id, symbol)
+        _executor.submit(_execute_symbol, run_id, symbol, refresh)
     db = SessionLocal()
     try:
         return db.get(StockScanRun, run_id)
@@ -142,12 +142,14 @@ def _execute_scan(
         db.close()
 
 
-def _execute_symbol(run_id, symbol: str) -> None:
+def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
     db = SessionLocal()
     try:
         run, provider, health_started, telemetry_before = _prepare_run(db, run_id)
         if run is None or provider is None:
             return
+        if refresh:
+            provider.invalidate_symbol_cache(symbol)
         analysis = analyze_single_stock(db, provider, get_settings(), symbol)
         candidate = StockCandidate(
             scan_run_id=run.id,

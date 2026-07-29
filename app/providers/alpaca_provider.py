@@ -11,7 +11,13 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockBarsRequest, StockLatestQuoteRequest, StockLatestTradeRequest
+from alpaca.data.requests import (
+    StockBarsRequest,
+    StockLatestBarRequest,
+    StockLatestQuoteRequest,
+    StockLatestTradeRequest,
+    StockSnapshotRequest,
+)
 from alpaca.data.timeframe import TimeFrame
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import AssetClass, AssetStatus
@@ -106,29 +112,75 @@ class AlpacaProvider(MarketDataAdapter):
         return df
 
     def get_quote(self, symbol: str) -> Quote:
-        request = StockLatestQuoteRequest(symbol_or_symbols=symbol, feed=self._feed)
-        quotes = self._data_client.get_stock_latest_quote(request)
-        q = quotes[symbol]
+        quotes = self._data_client.get_stock_latest_quote(
+            StockLatestQuoteRequest(symbol_or_symbols=symbol, feed=self._feed)
+        )
         trades = self._data_client.get_stock_latest_trade(
             StockLatestTradeRequest(symbol_or_symbols=symbol, feed=self._feed)
         )
-        trade = trades.get(symbol)
-        last = float(trade.price) if trade else None
-        mid = (q.bid_price + q.ask_price) / 2 if q.bid_price and q.ask_price else q.ask_price or q.bid_price
+        bars = self._data_client.get_stock_latest_bar(
+            StockLatestBarRequest(symbol_or_symbols=symbol, feed=self._feed)
+        )
+        snapshots = self._data_client.get_stock_snapshot(
+            StockSnapshotRequest(symbol_or_symbols=symbol, feed=self._feed)
+        )
+        return self._merge_realtime(symbol, quotes.get(symbol), trades.get(symbol), bars.get(symbol), snapshots.get(symbol))
+
+    @staticmethod
+    def _newer(primary, fallback):
+        if primary is None:
+            return fallback
+        if fallback is None:
+            return primary
+        return primary if primary.timestamp >= fallback.timestamp else fallback
+
+    @staticmethod
+    def _session(timestamp: datetime) -> str:
+        from zoneinfo import ZoneInfo
+
+        eastern = timestamp.astimezone(ZoneInfo("America/New_York"))
+        minute = eastern.hour * 60 + eastern.minute
+        if 240 <= minute < 570:
+            return "pre_market"
+        if 570 <= minute < 960:
+            return "regular"
+        if 960 <= minute < 1200:
+            return "after_hours"
+        return "closed"
+
+    def _merge_realtime(self, symbol, direct_quote, direct_trade, direct_bar, snapshot) -> Quote:
+        q = self._newer(direct_quote, getattr(snapshot, "latest_quote", None))
+        trade = self._newer(direct_trade, getattr(snapshot, "latest_trade", None))
+        bar = self._newer(direct_bar, getattr(snapshot, "minute_bar", None))
+        candidates = []
+        if trade is not None:
+            candidates.append((trade.timestamp, float(trade.price), "latest_trade"))
+        if q is not None and q.bid_price and q.ask_price:
+            candidates.append((q.timestamp, (float(q.bid_price) + float(q.ask_price)) / 2, "latest_quote_mid"))
+        if bar is not None:
+            candidates.append((bar.timestamp, float(bar.close), "latest_minute_bar"))
+        if not candidates:
+            raise ValueError(f"no realtime snapshot data returned for symbol '{symbol}'")
+        newest_timestamp, price, source = max(candidates, key=lambda item: item[0])
         return Quote(
-            symbol=symbol,
-            price=float(last or mid),
-            bid=float(q.bid_price) if q.bid_price else None,
-            ask=float(q.ask_price) if q.ask_price else None,
-            volume=None,
-            as_of=q.timestamp.isoformat(),
-            is_delayed=False,
-            provider=self.provider_name,
-            feed=self._feed,
-            last_trade=last,
-            trade_as_of=trade.timestamp.isoformat() if trade else None,
-            bid_as_of=q.timestamp.isoformat(),
-            ask_as_of=q.timestamp.isoformat(),
+            symbol=symbol, price=price,
+            bid=float(q.bid_price) if q is not None and q.bid_price else None,
+            ask=float(q.ask_price) if q is not None and q.ask_price else None,
+            volume=int(bar.volume) if bar is not None and bar.volume is not None else None,
+            as_of=newest_timestamp.astimezone(timezone.utc).isoformat(),
+            is_delayed=False, provider=self.provider_name, feed=self._feed,
+            last_trade=float(trade.price) if trade is not None else None,
+            trade_as_of=trade.timestamp.astimezone(timezone.utc).isoformat() if trade is not None else None,
+            bid_as_of=q.timestamp.astimezone(timezone.utc).isoformat() if q is not None else None,
+            ask_as_of=q.timestamp.astimezone(timezone.utc).isoformat() if q is not None else None,
+            bar_as_of=bar.timestamp.astimezone(timezone.utc).isoformat() if bar is not None else None,
+            bar_close=float(bar.close) if bar is not None else None,
+            price_source=source,
+            snapshot_as_of=newest_timestamp.astimezone(timezone.utc).isoformat(),
+            # Session describes the current New York market phase. The source
+            # timestamps remain separate so stale after-hours data can never
+            # masquerade as a current pre-market quote.
+            session=self._session(datetime.now(timezone.utc)),
         )
 
     @property

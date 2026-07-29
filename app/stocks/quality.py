@@ -28,6 +28,8 @@ class DataQualityGate:
     trade_age_seconds: int | None
     bid_age_seconds: int | None
     ask_age_seconds: int | None
+    price_age_seconds: int | None
+    latest_bar_age_seconds: int | None
     candle_age_seconds: int | None
     quote_candle_skew_seconds: int | None
     market_open: bool
@@ -48,6 +50,8 @@ def evaluate_plan_data(
     trade_age = quote.trade_age_seconds if quote else None
     bid_age = quote.bid_age_seconds if quote else None
     ask_age = quote.ask_age_seconds if quote else None
+    price_age = quote.age_seconds if quote else None
+    latest_bar_age = quote.bar_age_seconds if quote else None
 
     if quote is None:
         reasons.append("السعر الحالي غير متوفر")
@@ -60,9 +64,10 @@ def evaluate_plan_data(
             reasons.append("Ask أقل من Bid")
         if quote.spread_pct is None or quote.spread_pct > settings.max_spread_pct:
             reasons.append("السبريد أعلى من الحد المسموح")
-        ages = [value for value in (trade_age, bid_age, ask_age) if value is not None]
-        if not ages or max(ages) > settings.max_quote_age_seconds:
-            reasons.append("السعر أو Bid/Ask أقدم من الحد المسموح")
+        if price_age is None or price_age > settings.max_quote_age_seconds:
+            reasons.append("أحدث سعر من Trade/Quote/Bar أقدم من الحد المسموح")
+        if bid_age is None or ask_age is None or max(bid_age, ask_age) > settings.max_quote_age_seconds:
+            reasons.append("Bid/Ask أقدم من الحد المسموح لبناء خطة")
         bid_time = _utc(quote.bid_as_of or quote.as_of)
         ask_time = _utc(quote.ask_as_of or quote.as_of)
         if bid_time and ask_time:
@@ -71,6 +76,7 @@ def evaluate_plan_data(
                 reasons.append("توقيت Bid وAsk غير متزامن")
         if quote.feed and quote.feed.lower() == "iex":
             warnings.append("البيانات من IEX وقد لا تمثل كامل السوق الأمريكي.")
+            warnings.append("قد لا يسجل IEX صفقة أو شمعة في كل دقيقة خلال pre-market.")
         if quote.is_delayed:
             warnings.append("بيانات المزود متأخرة")
 
@@ -82,12 +88,16 @@ def evaluate_plan_data(
         candle_time = _utc(execution_bars.index[-1])
         if candle_time:
             candle_age = max(0, int((datetime.now(timezone.utc) - candle_time).total_seconds()))
-            if market_open and candle_age > settings.max_candle_age_seconds:
+            fresh_realtime = price_age is not None and price_age <= settings.max_quote_age_seconds
+            iex_sparse_bar = bool(quote and quote.feed and quote.feed.lower() == "iex" and fresh_realtime)
+            if market_open and candle_age > settings.max_candle_age_seconds and not iex_sparse_bar:
                 reasons.append("آخر شمعة أقدم من الحد المسموح")
+            elif market_open and candle_age > settings.max_candle_age_seconds and iex_sparse_bar:
+                warnings.append("آخر شمعة قديمة، لكن Trade/Quote أحدث؛ استُخدم السعر الحديث.")
             quote_time = _utc(quote.as_of) if quote else None
             if quote_time:
                 quote_candle_skew = abs(int((quote_time - candle_time).total_seconds()))
-                if market_open and quote_candle_skew > settings.max_quote_candle_skew_seconds:
+                if market_open and quote_candle_skew > settings.max_quote_candle_skew_seconds and not iex_sparse_bar:
                     reasons.append("السعر والشموع غير متزامنين")
 
     if not market_open:
@@ -100,6 +110,8 @@ def evaluate_plan_data(
         trade_age_seconds=trade_age,
         bid_age_seconds=bid_age,
         ask_age_seconds=ask_age,
+        price_age_seconds=price_age,
+        latest_bar_age_seconds=latest_bar_age,
         candle_age_seconds=candle_age,
         quote_candle_skew_seconds=quote_candle_skew,
         market_open=market_open,

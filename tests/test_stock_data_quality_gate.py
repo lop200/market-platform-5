@@ -59,3 +59,22 @@ def test_bid_and_ask_timestamp_skew_is_rejected():
     )
     assert not decision.valid_for_plan
     assert any("غير متزامن" in reason for reason in decision.reasons)
+
+
+def test_fresh_iex_quote_allows_sparse_premarket_bar():
+    old_bar = (datetime.now(timezone.utc) - timedelta(hours=12)).isoformat()
+    decision = evaluate_plan_data(
+        quote(feed="iex", bar_as_of=old_bar),
+        bars(age_seconds=49_000),
+        Settings(
+            max_quote_age_seconds=90,
+            max_candle_age_seconds=120,
+            max_quote_candle_skew_seconds=180,
+        ),
+        market_open=True,
+    )
+    assert decision.valid_for_plan
+    assert decision.latest_bar_age_seconds is not None
+    assert decision.latest_bar_age_seconds > 40_000
+    assert any("Trade/Quote" in warning for warning in decision.warnings)
+    assert any("pre-market" in warning for warning in decision.warnings)

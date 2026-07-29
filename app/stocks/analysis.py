@@ -153,7 +153,16 @@ def _time_estimate(distance_pct: float | None, volatility: float | None, atr_pct
     }
 
 
-def _market_session_label() -> str:
+def _market_session_label(session: str | None = None) -> str:
+    if session:
+        direct = {
+            "pre_market": "قبل السوق",
+            "regular": "السوق مفتوح",
+            "after_hours": "بعد السوق",
+            "closed": "السوق مغلق",
+        }.get(session)
+        if direct:
+            return direct
     return {
         "pre_market": "قبل السوق",
         "open": "مفتوح — الافتتاح",
@@ -268,7 +277,7 @@ def analyze_single_stock(
         warnings.append("تعذر مزود الأخبار، واكتمل التحليل الفني دون أخبار")
 
     try:
-        market_open = provider.is_market_open()
+        market_open = provider.is_market_open() or bool(quote and quote.session == "pre_market")
     except Exception:
         market_open = current_session() in {"open", "mid_session", "close"}
         warnings.append("تعذر التحقق المباشر من ساعة السوق")
@@ -384,19 +393,23 @@ def analyze_single_stock(
             "updated_at": quote.as_of if quote else None,
             "age_seconds": quote.age_seconds if quote else None,
             "trade_timestamp": quote.trade_as_of or quote.as_of if quote else None,
+            "quote_timestamp": quote.bid_as_of or quote.ask_as_of or quote.as_of if quote else None,
             "bid_timestamp": quote.bid_as_of or quote.as_of if quote else None,
             "ask_timestamp": quote.ask_as_of or quote.as_of if quote else None,
+            "bar_timestamp": quote.bar_as_of if quote else None,
+            "price_source": quote.price_source if quote else "historical_bar",
             "trade_age_seconds": quality.trade_age_seconds,
             "bid_age_seconds": quality.bid_age_seconds,
             "ask_age_seconds": quality.ask_age_seconds,
             "last_candle_timestamp": (
+                quote.bar_as_of if quote and quote.bar_as_of else
                 primary.index[-1].isoformat() if primary is not None and not primary.empty else None
             ),
             "candle_age_seconds": quality.candle_age_seconds,
             "provider": quote.provider if quote else provider.provider_name,
             "feed": quote.feed if quote else None,
             "delayed": (quote.is_delayed or quote.age_seconds > settings.max_quote_age_seconds) if quote else True,
-            "market_session": _market_session_label(),
+            "market_session": _market_session_label(quote.session if quote else None),
         },
         "market": {"regime": regime.value, "inputs": regime_inputs},
         "trend": trend,

@@ -82,6 +82,20 @@ class ResilientMarketDataProvider(MarketDataAdapter):
             lambda: self.inner.get_quote(symbol),
         )
 
+    def invalidate_symbol_cache(self, symbol: str) -> int:
+        symbol = symbol.upper()
+        with self._lock:
+            keys = [
+                key for key in self._cache
+                if key == f"quote:{symbol}"
+                or key.startswith(f"intraday:{symbol}:")
+                or key.startswith(f"daily:{symbol}:")
+                or (key.startswith("quotes-many:") and symbol in key.split(":", 1)[1].split(","))
+            ]
+            for key in keys:
+                self._cache.pop(key, None)
+        return len(keys)
+
     def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame:
         return self._call(
             f"daily:{symbol}:{lookback_days}", self.settings.cache_ttl_ohlcv_daily_seconds,

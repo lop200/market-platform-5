@@ -182,11 +182,11 @@ def start_scan(
 
 
 @router.post("/symbols/{symbol}", response_model=ScanStartResponse, dependencies=[Depends(rate_limit)])
-def analyze_symbol(symbol: str) -> ScanStartResponse:
+def analyze_symbol(symbol: str, refresh: bool = Query(default=False)) -> ScanStartResponse:
     symbol = symbol.upper().strip()
     if not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,9}", symbol):
         raise HTTPException(422, "رمز السهم غير صالح")
-    run = create_symbol_analysis(symbol)
+    run = create_symbol_analysis(symbol, refresh=refresh)
     return ScanStartResponse(run_id=str(run.id), status=run.status, message_ar=f"بدأ تحليل {symbol} في الخلفية")
 
 

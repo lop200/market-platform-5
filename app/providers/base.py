@@ -25,6 +25,10 @@ class Quote:
     trade_as_of: str | None = None
     bid_as_of: str | None = None
     ask_as_of: str | None = None
+    bar_as_of: str | None = None
+    bar_close: float | None = None
+    price_source: str = "unknown"
+    snapshot_as_of: str | None = None
 
     @property
     def mid(self) -> float | None:
@@ -72,6 +76,10 @@ class Quote:
     def ask_age_seconds(self) -> int | None:
         return self.timestamp_age(self.ask_as_of or self.as_of)
 
+    @property
+    def bar_age_seconds(self) -> int | None:
+        return self.timestamp_age(self.bar_as_of)
+
 
 class MarketDataAdapter(ABC):
     @abstractmethod
@@ -107,6 +115,9 @@ class MarketDataAdapter(ABC):
 
     def telemetry_snapshot(self) -> dict[str, int]:
         return {"api_requests": 0, "cache_hits": 0, "requested_symbols": 0}
+
+    def invalidate_symbol_cache(self, symbol: str) -> int:
+        return 0
 
     @abstractmethod
     def estimated_cost_per_call(self) -> float: ...
