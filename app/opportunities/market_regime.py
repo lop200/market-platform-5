@@ -1,28 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
+from app.markets.clock import market_clock
 from app.opportunities.schemas import MarketRegime
 from app.providers.base import MarketDataAdapter
 
 
 def current_session() -> str:
-    now = datetime.now(ZoneInfo("America/New_York"))
-    minutes = now.hour * 60 + now.minute
-    if minutes < 240:
-        return "closed"
-    if minutes < 570:
-        return "pre_market"
-    if minutes < 600:
-        return "open"
-    if minutes < 900:
-        return "mid_session"
-    if minutes <= 960:
-        return "close"
-    if minutes < 1200:
-        return "after_hours"
-    return "closed"
+    return market_clock().session
 
 
 def classify_market(provider: MarketDataAdapter) -> tuple[MarketRegime, dict]:

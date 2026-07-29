@@ -34,7 +34,12 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ALPACA_DATA_FEED", "ALPACA_FEED"),
     )
     finnhub_api_key: str | None = Field(default=None, alias="FINNHUB_API_KEY")
+    fmp_api_key: str | None = Field(default=None, alias="FMP_API_KEY")
+    alpha_vantage_api_key: str | None = Field(default=None, alias="ALPHA_VANTAGE_API_KEY")
+    earnings_provider: str = Field(default="manual", alias="EARNINGS_PROVIDER")
+    earnings_cache_seconds: int = Field(default=3600, alias="EARNINGS_CACHE_SECONDS")
     news_provider: str = Field(default="none", alias="NEWS_PROVIDER")
+    sec_user_agent: str | None = Field(default=None, alias="SEC_USER_AGENT")
     social_sentiment_provider: str = Field(default="none", alias="SOCIAL_SENTIMENT_PROVIDER")
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
@@ -75,6 +80,8 @@ class Settings(BaseSettings):
     default_daily_loss_pct: float = Field(default=3.0, alias="DEFAULT_DAILY_LOSS_PCT")
     usd_sar_rate: float = Field(default=3.75, alias="USD_SAR_RATE")
     max_open_positions: int = Field(default=2, alias="MAX_OPEN_POSITIONS")
+    paper_trading_only: bool = Field(default=True, alias="PAPER_TRADING_ONLY")
+    trading_kill_switch: bool = Field(default=True, alias="TRADING_KILL_SWITCH")
 
     default_daily_cap_usd: float = Field(default=1.0, alias="DEFAULT_DAILY_CAP_USD")
     default_monthly_cap_usd: float = Field(default=20.0, alias="DEFAULT_MONTHLY_CAP_USD")

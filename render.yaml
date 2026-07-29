@@ -27,6 +27,12 @@ services:
         value: https://data.alpaca.markets
       - key: ALPACA_DATA_FEED
         value: sip
+      - key: EARNINGS_PROVIDER
+        value: manual
+      - key: PAPER_TRADING_ONLY
+        value: "true"
+      - key: TRADING_KILL_SWITCH
+        value: "true"
       - key: OPENAI_MODEL
         value: gpt-5-mini
       - key: OPENAI_DAILY_BUDGET_USD
@@ -42,4 +48,10 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: FINNHUB_API_KEY
+        sync: false
+      - key: FMP_API_KEY
+        sync: false
+      - key: ALPHA_VANTAGE_API_KEY
+        sync: false
+      - key: SEC_USER_AGENT
         sync: false

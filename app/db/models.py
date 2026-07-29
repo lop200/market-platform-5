@@ -178,6 +178,22 @@ class NewsItem(Base):
     risk_flags: Mapped[list] = mapped_column(JSONVariant, default=list)
 
 
+class EarningsCalendarEvent(Base):
+    __tablename__ = "earnings_calendar_events"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    symbol: Mapped[str] = mapped_column(String(10), index=True)
+    company_name: Mapped[str] = mapped_column(String(150), default="")
+    announced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    timing: Mapped[str] = mapped_column(String(20), default="unknown")
+    eps_estimate: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    revenue_estimate: Mapped[float | None] = mapped_column(Numeric(18, 2))
+    previous_eps: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    source: Mapped[str] = mapped_column(String(40), default="manual")
+    source_url: Mapped[str | None] = mapped_column(Text)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class MarketRegimeRecord(Base):
     __tablename__ = "market_regimes"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)

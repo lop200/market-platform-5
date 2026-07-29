@@ -5,6 +5,7 @@ pydantic-settings==2.14.2
 sqlalchemy==2.0.51
 alembic==1.14.0
 pandas==2.3.3
+pandas-market-calendars>=5.1,<6
 numpy==2.5.1
 yfinance==1.5.1
 alpaca-py==0.33.1

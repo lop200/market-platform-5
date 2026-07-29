@@ -4,10 +4,12 @@ from datetime import datetime, timedelta, timezone
 from math import isfinite
 
 import pandas as pd
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.db.models import NewsItem, UserRiskSettings
+from app.db.models import EarningsCalendarEvent, NewsItem, UserRiskSettings
+from app.earnings.service import EarningsEvent
 from app.opportunities.indicators import calculate_indicators
 from app.opportunities.market_regime import classify_market, current_session
 from app.opportunities.news import get_news_provider
@@ -154,22 +156,16 @@ def _time_estimate(distance_pct: float | None, volatility: float | None, atr_pct
 
 
 def _market_session_label(session: str | None = None) -> str:
-    if session:
-        direct = {
-            "pre_market": "قبل السوق",
-            "regular": "السوق مفتوح",
-            "after_hours": "بعد السوق",
-            "closed": "السوق مغلق",
-        }.get(session)
-        if direct:
-            return direct
-    return {
-        "pre_market": "قبل السوق",
-        "open": "مفتوح — الافتتاح",
-        "mid_session": "مفتوح",
-        "close": "مفتوح — قرب الإغلاق",
-        "after_hours": "بعد السوق",
-    }.get(current_session(), "مغلق")
+    labels = {
+        "overnight": "تداول ليلي",
+        "pre_market": "قبل الافتتاح",
+        "regular": "السوق مفتوح",
+        "after_hours": "بعد الإغلاق",
+        "closed": "السوق مغلق",
+        "holiday": "عطلة",
+        "half_day": "إغلاق مبكر",
+    }
+    return labels.get(session or current_session(), "السوق مغلق")
 
 
 def analyze_single_stock(
@@ -211,6 +207,34 @@ def analyze_single_stock(
     except Exception:
         profile = {}
         warnings.append("بيانات الشركة الأساسية غير متوفرة")
+
+    earnings_row = db.scalar(
+        select(EarningsCalendarEvent)
+        .where(
+            EarningsCalendarEvent.symbol == symbol,
+            EarningsCalendarEvent.announced_at >= started - timedelta(hours=12),
+        )
+        .order_by(EarningsCalendarEvent.announced_at)
+        .limit(1)
+    )
+    earnings_event = None
+    if earnings_row:
+        earnings_event = EarningsEvent(
+            symbol=earnings_row.symbol, company_name=earnings_row.company_name,
+            announced_at=earnings_row.announced_at, timing=earnings_row.timing,
+            eps_estimate=float(earnings_row.eps_estimate) if earnings_row.eps_estimate is not None else None,
+            revenue_estimate=float(earnings_row.revenue_estimate) if earnings_row.revenue_estimate is not None else None,
+            previous_eps=float(earnings_row.previous_eps) if earnings_row.previous_eps is not None else None,
+            source=earnings_row.source, source_url=earnings_row.source_url,
+        ).as_dict(started)
+        if 0 <= earnings_event["hours_remaining"] < 6:
+            warnings.append("إعلان الأرباح خلال أقل من 6 ساعات: خطر فجوة مرتفع ولا يُفترض ضمان وقف الخسارة.")
+        elif 0 <= earnings_event["hours_remaining"] < 24:
+            warnings.append("إعلان الأرباح خلال 24 ساعة: خُفّضت الثقة وارتفعت مخاطر الفجوة.")
+        elif 0 <= earnings_event["hours_remaining"] < 48:
+            warnings.append("إعلان الأرباح خلال 48 ساعة: يلزم حذر إضافي قبل فتح صفقة جديدة.")
+        elif 0 <= earnings_event["hours_remaining"] < 168:
+            warnings.append("إعلان الأرباح خلال 7 أيام: راقب مخاطر الحدث قبل الاحتفاظ بالسهم.")
 
     try:
         regime, regime_inputs = classify_market(provider)
@@ -279,7 +303,7 @@ def analyze_single_stock(
     try:
         market_open = provider.is_market_open() or bool(quote and quote.session == "pre_market")
     except Exception:
-        market_open = current_session() in {"pre_market", "open", "mid_session", "close"}
+        market_open = current_session() in {"pre_market", "regular", "half_day"}
         warnings.append("تعذر التحقق المباشر من ساعة السوق")
     quality = evaluate_plan_data(quote, primary, settings, market_open=market_open)
     warnings.extend(quality.warnings)
@@ -328,6 +352,13 @@ def analyze_single_stock(
     target_distance = targets[0]["profit_pct"] if targets else None
     atr_pct = float(indicators.get("atr") or 0) / price * 100 if price else None
     probabilities = _probabilities(indicators, regime, rr) if status == "conditional_entry" else None
+    if probabilities and probabilities.get("numeric") and earnings_event:
+        penalty = earnings_event["confidence_penalty"]
+        probabilities["entry"] = max(5, probabilities["entry"] - penalty)
+        probabilities["target_1"] = max(5, probabilities["target_1"] - penalty)
+        probabilities["target_2"] = max(5, probabilities["target_2"] - penalty)
+        probabilities["stop"] = min(90, probabilities["stop"] + penalty)
+        probabilities["confidence"] = "منخفضة" if penalty >= 15 else "متوسطة"
     time_estimate = (
         _time_estimate(target_distance, indicators.get("volatility"), atr_pct)
         if status == "conditional_entry" else None
@@ -498,6 +529,18 @@ def analyze_single_stock(
         "charts": {name: _bars(frame) for name, frame in frames.items()},
         "chart_levels": technical_levels,
         "news": news_items,
+        "earnings": earnings_event,
+        "event_classification": (
+            "ممنوع بسبب مخاطر الحدث"
+            if earnings_event and 0 <= earnings_event["hours_remaining"] < 6
+            else "مراقبة إعلان"
+            if earnings_event and 0 <= earnings_event["hours_remaining"] < 48
+            else "فرصة قبل الأرباح"
+            if earnings_event and 0 <= earnings_event["hours_remaining"] < 168
+            else "فرصة بعد الإعلان"
+            if earnings_event and earnings_event["hours_remaining"] < 0
+            else "فرصة فنية عادية"
+        ),
         "news_message": None if news_items else "لا توجد أخبار متاحة من مزود رسمي حاليًا.",
         "directional_bias": ({
             "label": (

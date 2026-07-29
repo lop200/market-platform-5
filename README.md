@@ -69,3 +69,14 @@ Copy-Item .env.example .env
 تفاصيل Render في `DEPLOY_AR.md`. جميع الاستدعاءات تتم من الخادم، ولا تُحفظ مفاتيح API في قاعدة البيانات.
 
 تحتفظ سلسلة Alembic التاريخية بأسماء migrations القديمة لضمان ترقية قواعد البيانات القائمة بأمان، لكن migration منصة الأسهم تحذف جداول المشتقات، ولا توجد لها Models أو Routes أو Templates في التطبيق التشغيلي.
+## 2027 dashboard and earnings
+
+The home page reads a saved dashboard snapshot and never waits for market,
+news, earnings, or OpenAI calls. NYSE sessions are calculated from
+`America/New_York` with the exchange calendar, including holidays and early
+closes, then rendered in Riyadh time.
+
+Earnings calendar adapters support `manual`, `finnhub`, `fmp`, and
+`alpha_vantage` through `EARNINGS_PROVIDER`. Provider refresh runs as a
+background task. Manual records remain explicitly unverified until reviewed.
+The repository remains stock-only and paper-analysis-only.
