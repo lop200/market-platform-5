@@ -2,7 +2,8 @@
 
 - The product is stock-only. Do not add derivatives, contract-chain, expiry, or contract-pricing features.
 - User-facing copy is Arabic and RTL. Code, tests, and commit messages are English.
-- Price eligibility is inclusive: `STOCK_MIN_PRICE <= price <= STOCK_MAX_PRICE`.
+- Scanner price eligibility is optional and inclusive when enabled:
+  `STOCK_MIN_PRICE <= price <= STOCK_MAX_PRICE`. Single-symbol analysis never applies it.
 - Never render a live opportunity without a fresh bid and ask, an acceptable spread, and a valid expiry.
 - All indicators, entry levels, stops, targets, risk/reward, and position sizing are deterministic Python.
 - OpenAI is a bounded reviewer. It receives only shortlisted structured data and must use strict Structured Outputs.

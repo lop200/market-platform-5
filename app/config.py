@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     openai_candidate_limit: int = Field(default=8, alias="OPENAI_CANDIDATE_LIMIT")
 
     stock_min_price: float = Field(default=2.0, alias="STOCK_MIN_PRICE")
-    stock_max_price: float = Field(default=5.0, alias="STOCK_MAX_PRICE")
+    stock_max_price: float = Field(default=10.0, alias="STOCK_MAX_PRICE")
     min_avg_daily_volume: int = Field(default=500_000, alias="MIN_AVG_DAILY_VOLUME")
     min_relative_volume: float = Field(default=1.0, alias="MIN_RELATIVE_VOLUME")
     max_spread_pct: float = Field(default=2.0, alias="MAX_SPREAD_PCT")
@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     max_quote_age_seconds: int = Field(default=90, alias="MAX_QUOTE_AGE_SECONDS")
     max_results: int = Field(default=5, alias="MAX_RESULTS")
     scan_universe_limit: int = Field(default=300, alias="SCAN_UNIVERSE_LIMIT")
+    scan_detailed_limit: int = Field(default=50, alias="SCAN_DETAILED_LIMIT")
     scan_symbols: str = Field(
         default="ACHR,AEVA,AMTX,APLT,ARBE,ATOS,BB,BLNK,BBAI,BNGO,CLSK,CLOV,CTM,EVGO,GEVO,GOEV,GRAB,HIMS,JOBY,KULR,LAES,LCID,LUNR,OPEN,PLUG,PSNY,QUBT,RGTI,RKLB,SERV,SOFI,SOUN,TMC,TLRY,VERI,WOLF",
         alias="SCAN_SYMBOLS",

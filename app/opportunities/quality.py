@@ -8,8 +8,6 @@ from app.providers.base import Quote
 def evaluate_quote(quote: Quote, settings: Settings) -> QualityDecision:
     reasons: list[str] = []
     warnings: list[str] = []
-    if not settings.stock_min_price <= quote.price <= settings.stock_max_price:
-        reasons.append("السعر خارج النطاق المسموح من 2 إلى 5 دولارات")
     if quote.bid is None or quote.ask is None or quote.bid <= 0 or quote.ask <= 0:
         reasons.append("بيانات العرض أو الطلب غير مكتملة")
     elif quote.ask < quote.bid:

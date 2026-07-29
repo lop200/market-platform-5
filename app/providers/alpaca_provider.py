@@ -89,6 +89,7 @@ class AlpacaProvider(MarketDataAdapter):
             "1m": TimeFrame.Minute,
             "5m": TimeFrame(5, TimeFrame.Minute.unit),
             "15m": TimeFrame(15, TimeFrame.Minute.unit),
+            "1h": TimeFrame.Hour,
         }
         timeframe = timeframe_map.get(interval)
         if timeframe is None:
@@ -126,6 +127,46 @@ class AlpacaProvider(MarketDataAdapter):
             feed=self._feed,
             last_trade=last,
         )
+
+    @property
+    def supports_batch_quotes(self) -> bool:
+        return True
+
+    def get_quotes_many(self, symbols: list[str]) -> dict[str, Quote]:
+        unique = list(dict.fromkeys(symbols))
+        quotes = self._data_client.get_stock_latest_quote(
+            StockLatestQuoteRequest(symbol_or_symbols=unique, feed=self._feed)
+        )
+        trades = self._data_client.get_stock_latest_trade(
+            StockLatestTradeRequest(symbol_or_symbols=unique, feed=self._feed)
+        )
+        results: dict[str, Quote] = {}
+        for symbol in unique:
+            q = quotes.get(symbol)
+            if q is None:
+                continue
+            trade = trades.get(symbol)
+            last = float(trade.price) if trade else None
+            mid = (q.bid_price + q.ask_price) / 2 if q.bid_price and q.ask_price else q.ask_price or q.bid_price
+            if not last and not mid:
+                continue
+            results[symbol] = Quote(
+                symbol=symbol,
+                price=float(last or mid),
+                bid=float(q.bid_price) if q.bid_price else None,
+                ask=float(q.ask_price) if q.ask_price else None,
+                volume=None,
+                as_of=q.timestamp.isoformat(),
+                is_delayed=False,
+                provider=self.provider_name,
+                feed=self._feed,
+                last_trade=last,
+            )
+        return results
+
+    def get_company_profile(self, symbol: str) -> dict:
+        asset = self._trading_client.get_asset(symbol)
+        return {"name": asset.name or symbol, "exchange": str(asset.exchange)}
 
     def list_active_us_symbols(self, limit: int = 1000) -> list[str]:
         request = GetAssetsRequest(status=AssetStatus.ACTIVE, asset_class=AssetClass.US_EQUITY)

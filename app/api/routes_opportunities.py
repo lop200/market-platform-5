@@ -7,14 +7,14 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db.models import OpportunityAudit, StockCandidate, StockOpportunity, StockScanRun, UserRiskSettings
 from app.db.session import get_db
-from app.opportunities.jobs import create_scan
+from app.opportunities.jobs import create_scan, create_symbol_analysis
 from app.opportunities.scanner import expire_old_opportunities
 from app.opportunities.schemas import OpportunityStatus, RiskSettingsInput, ScanStartResponse
 
@@ -40,6 +40,10 @@ def _run_payload(run: StockScanRun) -> dict:
         "symbols_excluded": run.symbols_excluded, "provider": run.provider,
         "failure_reason": run.failure_reason, "started_at": run.started_at,
         "completed_at": run.completed_at, "created_at": run.created_at,
+        "api_requests": run.api_requests, "cache_hits": run.cache_hits,
+        "openai_calls": run.openai_calls,
+        "openai_cost_usd": float(run.openai_cost_usd or 0),
+        "response_ms": run.response_ms,
     }
 
 
@@ -99,8 +103,19 @@ def build_results_summary(db: Session) -> dict:
 
 
 @router.post("/scans", response_model=ScanStartResponse, dependencies=[Depends(rate_limit)])
-def start_scan() -> ScanStartResponse:
-    run = create_scan()
+def start_scan(
+    all_prices: bool = Query(default=False),
+    min_price: float | None = Query(default=2, ge=0),
+    max_price: float | None = Query(default=10, gt=0),
+    universe_limit: int = Query(default=300, ge=1, le=1000),
+) -> ScanStartResponse:
+    if not all_prices and min_price is not None and max_price is not None and min_price > max_price:
+        raise HTTPException(422, "الحد الأدنى للسعر يجب ألا يتجاوز الحد الأعلى")
+    run = create_scan(
+        min_price=None if all_prices else min_price,
+        max_price=None if all_prices else max_price,
+        universe_limit=universe_limit,
+    )
     return ScanStartResponse(run_id=str(run.id), status=run.status, message_ar="بدأ مسح السوق في الخلفية")
 
 
@@ -109,7 +124,7 @@ def analyze_symbol(symbol: str) -> ScanStartResponse:
     symbol = symbol.upper().strip()
     if not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,9}", symbol):
         raise HTTPException(422, "رمز السهم غير صالح")
-    run = create_scan(symbol)
+    run = create_symbol_analysis(symbol)
     return ScanStartResponse(run_id=str(run.id), status=run.status, message_ar=f"بدأ تحليل {symbol} في الخلفية")
 
 
@@ -122,7 +137,7 @@ def refresh_opportunity(opportunity_id: str, db: Session = Depends(get_db)) -> S
     row = db.get(StockOpportunity, opportunity_uuid)
     if not row:
         raise HTTPException(404, "التحليل غير موجود")
-    run = create_scan(row.symbol)
+    run = create_symbol_analysis(row.symbol)
     return ScanStartResponse(run_id=str(run.id), status=run.status, message_ar=f"بدأ تحديث {row.symbol} فقط")
 
 
@@ -142,6 +157,23 @@ def scan_status(run_id: str, db: Session = Depends(get_db)) -> dict:
     payload["opportunities"] = [_opportunity_payload(item) for item in opportunities]
     if run.status == "completed" and not opportunities:
         payload["message_ar"] = "لا توجد نتائج مستوفية للشروط حاليًا"
+    return payload
+
+
+@router.get("/stocks/jobs/{run_id}")
+def symbol_analysis_status(run_id: str, db: Session = Depends(get_db)) -> dict:
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError:
+        raise HTTPException(422, "معرف المهمة غير صالح")
+    run = db.get(StockScanRun, run_uuid)
+    if not run:
+        raise HTTPException(404, "مهمة التحليل غير موجودة")
+    payload = _run_payload(run)
+    candidate = db.scalar(
+        select(StockCandidate).where(StockCandidate.scan_run_id == run.id).limit(1)
+    )
+    payload["analysis"] = candidate.snapshot_json if candidate else None
     return payload
 
 

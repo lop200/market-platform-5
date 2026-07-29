@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+import re
+
+from fastapi import APIRouter, HTTPException, Request
 from fastapi import Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -32,4 +34,16 @@ def results_dashboard(request: Request, db: Session = Depends(get_db)):
         request=request,
         name="results.html",
         context={"summary": build_results_summary(db)},
+    )
+
+
+@router.get("/stocks/{symbol}", response_class=HTMLResponse)
+def stock_dashboard(request: Request, symbol: str):
+    symbol = symbol.upper().strip()
+    if not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,9}", symbol):
+        raise HTTPException(422, "رمز السهم غير صالح")
+    return templates.TemplateResponse(
+        request=request,
+        name="stock.html",
+        context={"symbol": symbol},
     )

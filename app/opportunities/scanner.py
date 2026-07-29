@@ -56,8 +56,10 @@ def build_opportunity(
     symbol: str,
     regime: MarketRegime,
     scan_run_id=None,
+    quote_override: Quote | None = None,
+    daily_override=None,
 ) -> tuple[OpportunityResult | None, list[str], dict]:
-    quote = provider.get_quote(symbol)
+    quote = quote_override or provider.get_quote(symbol)
     quality = evaluate_quote(quote, settings)
     snapshot: dict = {
         "symbol": symbol,
@@ -69,7 +71,7 @@ def build_opportunity(
     }
     if not quality.accepted:
         return None, quality.reasons, snapshot
-    daily = provider.get_daily_ohlcv(symbol, 220)
+    daily = daily_override if daily_override is not None else provider.get_daily_ohlcv(symbol, 220)
     intraday = provider.get_intraday(symbol, "5m")
     if intraday is None or len(intraday) < 20 or len(daily) < 20:
         return None, ["لا توجد شموع كافية للتحليل متعدد الأطر"], snapshot
@@ -218,18 +220,64 @@ def persist_opportunity(db: Session, result: OpportunityResult, scan_run_id=None
     return row
 
 
-def scan_market(db: Session, provider: MarketDataAdapter, settings: Settings, run) -> list[OpportunityResult]:
+def scan_market(
+    db: Session,
+    provider: MarketDataAdapter,
+    settings: Settings,
+    run,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    universe_limit: int | None = None,
+) -> list[OpportunityResult]:
     regime, regime_inputs = classify_market(provider)
     db.add(MarketRegimeRecord(regime=regime.value, session=current_session(), inputs_json=regime_inputs))
-    symbols = provider.list_active_us_symbols(settings.scan_universe_limit) or settings.configured_scan_symbols
-    symbols = list(dict.fromkeys(symbols))[: settings.scan_universe_limit]
+    limit = max(1, min(int(universe_limit or settings.scan_universe_limit), 1000))
+    symbols = provider.list_active_us_symbols(limit) or settings.configured_scan_symbols
+    symbols = list(dict.fromkeys(symbols))[:limit]
     run.symbols_total = len(symbols)
     run.provider = provider.provider_name
     db.commit()
+    daily_map = provider.get_daily_ohlcv_many(symbols, 220) if provider.supports_batch_daily_ohlcv else {}
+    quote_map = provider.get_quotes_many(symbols) if provider.supports_batch_quotes else {}
+    eligible_symbols: list[str] = []
+    for symbol in symbols:
+        quote = quote_map.get(symbol)
+        if quote is not None:
+            if min_price is not None and quote.price < min_price:
+                continue
+            if max_price is not None and quote.price > max_price:
+                continue
+        eligible_symbols.append(symbol)
+
+    # The provider can batch-screen the whole universe, but expensive intraday
+    # analysis is limited to the most liquid coarse candidates.
+    def coarse_liquidity(symbol: str) -> float:
+        frame = daily_map.get(symbol)
+        if frame is None or frame.empty:
+            return 0.0
+        return float(frame["close"].iloc[-1]) * float(frame["volume"].tail(20).mean())
+
+    price_eligible_count = len(eligible_symbols)
+    eligible_symbols.sort(key=coarse_liquidity, reverse=True)
+    detailed_limit = max(1, min(settings.scan_detailed_limit, 100))
+    prefiltered_count = max(0, len(eligible_symbols) - detailed_limit)
+    eligible_symbols = eligible_symbols[:detailed_limit]
+
     accepted: list[OpportunityResult] = []
-    for index, symbol in enumerate(symbols, 1):
+    for index, symbol in enumerate(eligible_symbols, 1):
         try:
-            result, reasons, snapshot = build_opportunity(db, provider, settings, symbol, regime, run.id)
+            result, reasons, snapshot = build_opportunity(
+                db, provider, settings, symbol, regime, run.id,
+                quote_override=quote_map.get(symbol),
+                daily_override=daily_map.get(symbol),
+            )
+            observed_price = snapshot.get("price")
+            if observed_price is not None and (
+                (min_price is not None and observed_price < min_price)
+                or (max_price is not None and observed_price > max_price)
+            ):
+                result = None
+                reasons = ["السعر خارج نطاق الماسح المحدد"]
         except Exception as exc:
             result, reasons, snapshot = None, ["تعذر تحليل بيانات السهم"], {"error_type": type(exc).__name__}
         score = result.overall_score if result else 0
@@ -241,9 +289,10 @@ def scan_market(db: Session, provider: MarketDataAdapter, settings: Settings, ru
             accepted.append(result)
         run.symbols_scanned = index
         run.symbols_excluded = index - len(accepted)
-        run.progress_pct = int(index / max(len(symbols), 1) * 80)
+        run.progress_pct = int(index / max(len(eligible_symbols), 1) * 80)
         if index % 10 == 0:
             db.commit()
+    run.symbols_excluded += len(symbols) - price_eligible_count + prefiltered_count
     accepted.sort(key=lambda item: item.overall_score, reverse=True)
     shortlist = accepted[: settings.openai_candidate_limit]
     reviews = review_candidates(

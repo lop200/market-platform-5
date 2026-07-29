@@ -62,6 +62,13 @@ class MarketDataAdapter(ABC):
     ) -> dict[str, pd.DataFrame]:
         return {symbol: self.get_daily_ohlcv(symbol, lookback_days) for symbol in symbols}
 
+    @property
+    def supports_batch_quotes(self) -> bool:
+        return False
+
+    def get_quotes_many(self, symbols: list[str]) -> dict[str, Quote]:
+        return {symbol: self.get_quote(symbol) for symbol in symbols}
+
     @abstractmethod
     def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame | None: ...
 
@@ -70,6 +77,12 @@ class MarketDataAdapter(ABC):
 
     def list_active_us_symbols(self, limit: int = 1000) -> list[str]:
         return []
+
+    def get_company_profile(self, symbol: str) -> dict:
+        return {}
+
+    def telemetry_snapshot(self) -> dict[str, int]:
+        return {"api_requests": 0, "cache_hits": 0, "requested_symbols": 0}
 
     @abstractmethod
     def estimated_cost_per_call(self) -> float: ...

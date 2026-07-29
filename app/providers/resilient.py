@@ -24,6 +24,9 @@ class ResilientMarketDataProvider(MarketDataAdapter):
         self._failures = 0
         self._opened_at = 0.0
         self._lock = Lock()
+        self._api_requests = 0
+        self._cache_hits = 0
+        self._requested_symbols = 0
 
     @property
     def provider_name(self) -> str:
@@ -37,6 +40,8 @@ class ResilientMarketDataProvider(MarketDataAdapter):
         now = time.monotonic()
         cached = self._cache.get(key)
         if cached and cached[0] > now:
+            with self._lock:
+                self._cache_hits += 1
             return cached[1]
         if self._failures >= self.settings.circuit_breaker_failures:
             if now - self._opened_at < self.settings.circuit_breaker_reset_seconds:
@@ -47,6 +52,8 @@ class ResilientMarketDataProvider(MarketDataAdapter):
         last_error = None
         for attempt in range(self.settings.external_max_retries + 1):
             try:
+                with self._lock:
+                    self._api_requests += 1
                 value = operation()
                 with self._lock:
                     self._cache[key] = (now + ttl, value)
@@ -68,6 +75,8 @@ class ResilientMarketDataProvider(MarketDataAdapter):
         return replace(value, is_delayed=True) if isinstance(value, Quote) else value
 
     def get_quote(self, symbol: str) -> Quote:
+        with self._lock:
+            self._requested_symbols += 1
         return self._call(
             f"quote:{symbol}", self.settings.cache_ttl_quote_seconds,
             lambda: self.inner.get_quote(symbol),
@@ -80,10 +89,30 @@ class ResilientMarketDataProvider(MarketDataAdapter):
         )
 
     def get_daily_ohlcv_many(self, symbols: list[str], lookback_days: int) -> dict[str, pd.DataFrame]:
+        if not self.inner.supports_batch_daily_ohlcv:
+            return {symbol: self.get_daily_ohlcv(symbol, lookback_days) for symbol in symbols}
+        with self._lock:
+            self._requested_symbols += len(symbols)
         return self._call(
             f"daily-many:{','.join(symbols)}:{lookback_days}",
             self.settings.cache_ttl_ohlcv_daily_seconds,
             lambda: self.inner.get_daily_ohlcv_many(symbols, lookback_days),
+        )
+
+    @property
+    def supports_batch_quotes(self) -> bool:
+        return self.inner.supports_batch_quotes
+
+    def get_quotes_many(self, symbols: list[str]) -> dict[str, Quote]:
+        unique = list(dict.fromkeys(symbols))
+        if not self.inner.supports_batch_quotes:
+            return {symbol: self.get_quote(symbol) for symbol in unique}
+        with self._lock:
+            self._requested_symbols += len(unique)
+        return self._call(
+            f"quotes-many:{','.join(unique)}",
+            self.settings.cache_ttl_quote_seconds,
+            lambda: self.inner.get_quotes_many(unique),
         )
 
     def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame | None:
@@ -95,6 +124,20 @@ class ResilientMarketDataProvider(MarketDataAdapter):
 
     def list_active_us_symbols(self, limit: int = 1000) -> list[str]:
         return self._call("universe", 86_400, lambda: self.inner.list_active_us_symbols(limit))
+
+    def get_company_profile(self, symbol: str) -> dict:
+        return self._call(
+            f"profile:{symbol}", 86_400,
+            lambda: self.inner.get_company_profile(symbol),
+        )
+
+    def telemetry_snapshot(self) -> dict[str, int]:
+        with self._lock:
+            return {
+                "api_requests": self._api_requests,
+                "cache_hits": self._cache_hits,
+                "requested_symbols": self._requested_symbols,
+            }
 
     def estimated_cost_per_call(self) -> float:
         return self.inner.estimated_cost_per_call()

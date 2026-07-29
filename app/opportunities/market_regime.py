@@ -25,9 +25,14 @@ def classify_market(provider: MarketDataAdapter) -> tuple[MarketRegime, dict]:
     signals: dict[str, float | None] = {}
     positive = 0
     available = 0
-    for symbol in ("SPY", "QQQ", "IWM"):
+    symbols = ("SPY", "QQQ", "IWM")
+    frames = (
+        provider.get_daily_ohlcv_many(list(symbols), 40)
+        if provider.supports_batch_daily_ohlcv else {}
+    )
+    for symbol in symbols:
         try:
-            frame = provider.get_daily_ohlcv(symbol, 40)
+            frame = frames.get(symbol) if frames else provider.get_daily_ohlcv(symbol, 40)
             close = frame["close"].astype(float)
             change = float((close.iloc[-1] / close.iloc[-6] - 1) * 100)
             signals[symbol] = round(change, 2)

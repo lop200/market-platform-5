@@ -32,7 +32,7 @@ services:
       - key: STOCK_MIN_PRICE
         value: "2"
       - key: STOCK_MAX_PRICE
-        value: "5"
+        value: "10"
       - key: API_KEY
         sync: false
       - key: ACCESS_CODE_MAIN

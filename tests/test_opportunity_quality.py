@@ -17,12 +17,10 @@ def quote(**overrides) -> Quote:
     return Quote(**values)
 
 
-def test_price_filter_is_inclusive():
+def test_data_quality_does_not_apply_scanner_price_range():
     settings = Settings(stock_min_price=2, stock_max_price=5)
-    assert evaluate_quote(quote(price=2, bid=1.99, ask=2.01), settings).accepted
-    assert evaluate_quote(quote(price=5, bid=4.99, ask=5.01), settings).accepted
-    assert not evaluate_quote(quote(price=1.99), settings).accepted
-    assert not evaluate_quote(quote(price=5.01), settings).accepted
+    assert evaluate_quote(quote(price=1.99, bid=1.98, ask=2.00), settings).accepted
+    assert evaluate_quote(quote(price=500, bid=499, ask=501), settings).accepted
 
 
 def test_rejects_missing_book_and_wide_spread():
