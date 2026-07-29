@@ -124,6 +124,12 @@ def review_single_analysis(db: Session, settings: Settings, analysis: dict) -> d
     }
     if not analysis.get("data_quality", {}).get("valid_for_plan"):
         return base
+    if not settings.openai_api_key:
+        return {
+            **base,
+            "status": "not_configured",
+            "message_ar": "مراجعة OpenAI غير مهيأة في هذه البيئة. التحليل الرقمي الحتمي متاح بالكامل.",
+        }
     candidate = {
         "symbol": analysis["symbol"],
         "status": analysis["status"],

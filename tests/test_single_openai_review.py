@@ -42,3 +42,14 @@ def test_valid_data_enters_structured_openai_review(monkeypatch, db_session):
     assert result["status"] == "completed"
     assert result["ai_calls"] == 1
     assert result["model_name"] == "gpt-5-mini"
+
+
+def test_valid_data_without_openai_key_has_clear_status(db_session):
+    result = openai_review.review_single_analysis(
+        db_session,
+        Settings(openai_api_key=None),
+        {"data_quality": {"valid_for_plan": True}},
+    )
+    assert result["status"] == "not_configured"
+    assert "غير مهيأة" in result["message_ar"]
+    assert result["ai_calls"] == 0
