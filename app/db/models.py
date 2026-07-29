@@ -80,6 +80,7 @@ class StockScanRun(Base):
     __tablename__ = "stock_scan_runs"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
+    task_type: Mapped[str] = mapped_column(String(20), default="market_scan", index=True)
     progress_pct: Mapped[int] = mapped_column(Integer, default=0)
     symbols_total: Mapped[int] = mapped_column(Integer, default=0)
     symbols_scanned: Mapped[int] = mapped_column(Integer, default=0)

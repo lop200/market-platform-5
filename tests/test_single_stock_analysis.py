@@ -48,7 +48,10 @@ class SingleSymbolProvider(MarketDataAdapter):
     def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame:
         self.requested.append(symbol)
         count = 80
-        index = pd.date_range("2026-07-28 13:30", periods=count, freq="5min", tz="UTC")
+        index = pd.date_range(
+            end=datetime.now(timezone.utc), periods=count,
+            freq={"1m": "1min", "5m": "5min", "15m": "15min", "1h": "1h"}.get(interval, "5min"),
+        )
         return pd.DataFrame({
             "open": [125 + item * .05 for item in range(count)],
             "high": [125.3 + item * .05 for item in range(count)],
@@ -108,7 +111,8 @@ def test_stock_page_renders_even_before_or_without_an_opportunity():
     assert response.status_code == 200
     assert 'dir="rtl"' in response.text
     assert "لا يطبق فلتر سعر الماسح" in response.text
-    assert '<canvas id="chart">' in response.text
+    assert '<div id="chart">' in response.text
+    assert "lightweight-charts" in response.text
     assert 'id="decision"' in response.text
     assert "@media(min-width:760px)" in response.text
 
@@ -144,9 +148,12 @@ def test_market_scan_price_filter_is_optional(monkeypatch):
     client = TestClient(app)
     assert client.post("/api/v1/opportunities/scans?all_prices=true&universe_limit=50").status_code == 200
     assert captured[-1] == {"min_price": None, "max_price": None, "universe_limit": 50}
-    assert client.post("/api/v1/opportunities/scans?min_price=2&max_price=10").status_code == 200
+    assert client.post("/api/v1/opportunities/scans?all_prices=false&min_price=2&max_price=10").status_code == 200
     assert captured[-1]["min_price"] == 2
     assert captured[-1]["max_price"] == 10
+    assert client.post("/api/v1/opportunities/scans").status_code == 200
+    assert captured[-1]["min_price"] is None
+    assert captured[-1]["max_price"] is None
 
 
 class BatchProvider(SingleSymbolProvider):

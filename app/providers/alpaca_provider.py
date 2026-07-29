@@ -126,6 +126,9 @@ class AlpacaProvider(MarketDataAdapter):
             provider=self.provider_name,
             feed=self._feed,
             last_trade=last,
+            trade_as_of=trade.timestamp.isoformat() if trade else None,
+            bid_as_of=q.timestamp.isoformat(),
+            ask_as_of=q.timestamp.isoformat(),
         )
 
     @property
@@ -161,6 +164,9 @@ class AlpacaProvider(MarketDataAdapter):
                 provider=self.provider_name,
                 feed=self._feed,
                 last_trade=last,
+                trade_as_of=trade.timestamp.isoformat() if trade else None,
+                bid_as_of=q.timestamp.isoformat(),
+                ask_as_of=q.timestamp.isoformat(),
             )
         return results
 

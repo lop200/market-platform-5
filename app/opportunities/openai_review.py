@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field
@@ -108,3 +109,69 @@ def review_candidates(db: Session, settings: Settings, candidates: list[dict]) -
             ))
         db.commit()
         return {}
+
+
+def review_single_analysis(db: Session, settings: Settings, analysis: dict) -> dict:
+    """Review deterministic output once; never send invalid market data."""
+    base = {
+        "model_name": settings.openai_model,
+        "prompt_version": PROMPT_VERSION,
+        "status": "skipped_invalid_data",
+        "message_ar": "لم تُرسل البيانات إلى OpenAI لأنها غير صالحة لبناء خطة.",
+        "ai_calls": 0,
+        "ai_cost_estimate": 0.0,
+        "ai_analysis_timestamp": None,
+    }
+    if not analysis.get("data_quality", {}).get("valid_for_plan"):
+        return base
+    candidate = {
+        "symbol": analysis["symbol"],
+        "status": analysis["status"],
+        "strategy_id": analysis["strategy"]["id"],
+        "strategy_reason": analysis["strategy"]["reason"],
+        "trend": analysis["trend"],
+        "market_regime": analysis["market"]["regime"],
+        "quote": analysis["quote"],
+        "indicators": analysis["indicators"],
+        "trade_plan": analysis["trade_plan"],
+        "verified_news": [
+            {
+                "headline": item["headline"],
+                "source": item["source"],
+                "official": item["official"],
+                "impact": item["impact"],
+            }
+            for item in analysis.get("news", [])
+        ],
+    }
+    before = db.scalar(select(func.count(AIAnalysisLog.id))) or 0
+    reviews = review_candidates(db, settings, [candidate])
+    after = db.scalar(select(func.count(AIAnalysisLog.id))) or 0
+    review = reviews.get(analysis["symbol"])
+    if review:
+        latest = db.scalar(
+            select(AIAnalysisLog)
+            .where(AIAnalysisLog.symbol == analysis["symbol"])
+            .order_by(AIAnalysisLog.created_at.desc())
+            .limit(1)
+        )
+        return {
+            **base,
+            "status": "completed",
+            "message_ar": review.analysis_summary_ar,
+            "approved": review.approved,
+            "reasons_ar": review.reasons_ar,
+            "warnings_ar": review.warnings_ar,
+            "ai_calls": 1,
+            "ai_cost_estimate": float(latest.estimated_cost_usd or 0) if latest else 0.0,
+            "ai_analysis_timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    return {
+        **base,
+        "status": "cached" if before == after and settings.openai_api_key else "failed",
+        "message_ar": (
+            "المراجعة الذكية محفوظة لنفس بصمة البيانات."
+            if before == after and settings.openai_api_key
+            else "تعذر إجراء المراجعة الذكية"
+        ),
+    }

@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from app.db.models import AIAnalysisLog, ProviderHealth, StockCandidate, StockScanRun
 from app.db.session import SessionLocal
 from app.opportunities.scanner import scan_market
+from app.opportunities.openai_review import review_single_analysis
 from app.providers.factory import get_market_data_provider
 from app.stocks.analysis import analyze_single_stock
 
@@ -28,7 +29,7 @@ def create_scan(
     with _lock:
         db = SessionLocal()
         try:
-            run = StockScanRun(status="queued", symbols_total=0)
+            run = StockScanRun(status="queued", task_type="market_scan", symbols_total=0)
             db.add(run)
             db.commit()
             db.refresh(run)
@@ -47,7 +48,7 @@ def create_symbol_analysis(symbol: str) -> StockScanRun:
     with _lock:
         db = SessionLocal()
         try:
-            run = StockScanRun(status="queued", symbols_total=1)
+            run = StockScanRun(status="queued", task_type="single_symbol", symbols_total=1)
             db.add(run)
             db.commit()
             db.refresh(run)
@@ -148,16 +149,25 @@ def _execute_symbol(run_id, symbol: str) -> None:
         if run is None or provider is None:
             return
         analysis = analyze_single_stock(db, provider, get_settings(), symbol)
-        db.add(StockCandidate(
+        candidate = StockCandidate(
             scan_run_id=run.id,
             symbol=symbol,
             accepted=True,
             numeric_score=0,
             exclusion_reasons=[],
             snapshot_json=analysis,
-        ))
+        )
+        db.add(candidate)
         run.symbols_scanned = 1
         run.symbols_excluded = 0
+        run.status = "reviewing" if analysis["data_quality"]["valid_for_plan"] else "running"
+        db.commit()
+        analysis["ai_review"] = review_single_analysis(db, get_settings(), analysis)
+        analysis["system_usage"]["openai_calls"] = analysis["ai_review"]["ai_calls"]
+        analysis["system_usage"]["openai_cost_usd"] = analysis["ai_review"]["ai_cost_estimate"]
+        candidate.snapshot_json = analysis
+        db.add(candidate)
+        db.commit()
         _complete_run(db, run, provider, health_started, telemetry_before)
     except Exception as exc:
         _fail_run(db, run_id, exc)

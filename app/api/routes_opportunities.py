@@ -47,6 +47,68 @@ def _run_payload(run: StockScanRun) -> dict:
     }
 
 
+def _scan_breakdown(db: Session, run: StockScanRun) -> tuple[dict, list[dict]]:
+    rows = db.scalars(
+        select(StockCandidate)
+        .where(StockCandidate.scan_run_id == run.id)
+        .order_by(StockCandidate.numeric_score.desc())
+    ).all()
+    counts = {
+        "universe_total": run.symbols_total,
+        "data_fetched": 0,
+        "data_failed": 0,
+        "skipped": 0,
+        "technically_rejected": 0,
+        "candidates": 0,
+        "sent_to_openai": int(run.openai_calls or 0),
+        "final_opportunities": 0,
+    }
+    reasons: dict[str, int] = defaultdict(int)
+    watchlist: list[dict] = []
+    for row in rows:
+        snapshot = row.snapshot_json or {}
+        stage = snapshot.get("stage")
+        if stage == "failed":
+            counts["data_failed"] += 1
+        elif stage == "skipped":
+            counts["skipped"] += 1
+        else:
+            counts["data_fetched"] += 1
+            if row.accepted:
+                counts["candidates"] += 1
+            else:
+                counts["technically_rejected"] += 1
+        for reason in row.exclusion_reasons or []:
+            reasons[reason] += 1
+        if stage == "analyzed" and len(watchlist) < 10:
+            watchlist.append({
+                "symbol": row.symbol,
+                "score": float(row.numeric_score or 0),
+                "price": snapshot.get("price"),
+                "change_pct": snapshot.get("change_pct"),
+                "trend": snapshot.get("trend") or "غير مكتمل",
+                "liquidity": snapshot.get("liquidity"),
+                "volatility": snapshot.get("volatility"),
+                "support": snapshot.get("support"),
+                "resistance": snapshot.get("resistance"),
+                "reason": snapshot.get("watch_reason") or (
+                    row.exclusion_reasons[0] if row.exclusion_reasons else "لم تكتمل الإشارة"
+                ),
+                "activation_condition": snapshot.get("activation_condition")
+                or "انتظار اكتمال شروط الاستراتيجية",
+            })
+    counts["final_opportunities"] = db.scalar(
+        select(func.count(StockOpportunity.id)).where(StockOpportunity.scan_run_id == run.id)
+    ) or 0
+    counts["accounted_total"] = counts["data_fetched"] + counts["data_failed"] + counts["skipped"]
+    counts["invariant_ok"] = counts["accounted_total"] == counts["universe_total"]
+    counts["exclusion_reasons"] = [
+        {"reason": reason, "count": count}
+        for reason, count in sorted(reasons.items(), key=lambda item: item[1], reverse=True)
+    ]
+    return counts, watchlist
+
+
 def _opportunity_payload(row: StockOpportunity) -> dict:
     return {**row.result_json, "opportunity_id": str(row.id)}
 
@@ -104,10 +166,10 @@ def build_results_summary(db: Session) -> dict:
 
 @router.post("/scans", response_model=ScanStartResponse, dependencies=[Depends(rate_limit)])
 def start_scan(
-    all_prices: bool = Query(default=False),
-    min_price: float | None = Query(default=2, ge=0),
-    max_price: float | None = Query(default=10, gt=0),
-    universe_limit: int = Query(default=300, ge=1, le=1000),
+    all_prices: bool = Query(default=True),
+    min_price: float | None = Query(default=None, ge=0),
+    max_price: float | None = Query(default=None, gt=0),
+    universe_limit: int = Query(default=1000, ge=1, le=5000),
 ) -> ScanStartResponse:
     if not all_prices and min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(422, "الحد الأدنى للسعر يجب ألا يتجاوز الحد الأعلى")
@@ -154,6 +216,7 @@ def scan_status(run_id: str, db: Session = Depends(get_db)) -> dict:
         select(StockOpportunity).where(StockOpportunity.scan_run_id == run.id).order_by(StockOpportunity.overall_score.desc())
     ).all()
     payload = _run_payload(run)
+    payload["breakdown"], payload["watchlist"] = _scan_breakdown(db, run)
     payload["opportunities"] = [_opportunity_payload(item) for item in opportunities]
     if run.status == "completed" and not opportunities:
         payload["message_ar"] = "لا توجد نتائج مستوفية للشروط حاليًا"
@@ -180,15 +243,23 @@ def symbol_analysis_status(run_id: str, db: Session = Depends(get_db)) -> dict:
 @router.get("/latest")
 def latest(db: Session = Depends(get_db)) -> dict:
     expire_old_opportunities(db)
-    run = db.scalar(select(StockScanRun).order_by(StockScanRun.created_at.desc()).limit(1))
+    run = db.scalar(
+        select(StockScanRun)
+        .where(StockScanRun.task_type == "market_scan")
+        .order_by(StockScanRun.created_at.desc())
+        .limit(1)
+    )
     rows = db.scalars(
         select(StockOpportunity)
         .where(StockOpportunity.status != OpportunityStatus.EXPIRED.value)
         .order_by(StockOpportunity.issued_at.desc())
         .limit(get_settings().max_results)
     ).all()
+    breakdown, watchlist = _scan_breakdown(db, run) if run else ({}, [])
     return {
         "scan": _run_payload(run) if run else None,
+        "breakdown": breakdown,
+        "watchlist": watchlist,
         "opportunities": [_opportunity_payload(row) for row in rows],
         "message_ar": "لا توجد نتائج مستوفية للشروط حاليًا" if not rows else None,
     }

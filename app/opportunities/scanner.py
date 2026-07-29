@@ -69,8 +69,6 @@ def build_opportunity(
         "spread_pct": quote.spread_pct,
         "quote_age_seconds": quote.age_seconds,
     }
-    if not quality.accepted:
-        return None, quality.reasons, snapshot
     daily = daily_override if daily_override is not None else provider.get_daily_ohlcv(symbol, 220)
     intraday = provider.get_intraday(symbol, "5m")
     if intraday is None or len(intraday) < 20 or len(daily) < 20:
@@ -91,6 +89,25 @@ def build_opportunity(
         except Exception:
             quality.warnings.append(f"الإطار {interval} غير متوفر من المزود")
     snapshot["indicators"] = indicators
+    previous_close = float(daily["close"].astype(float).iloc[-2]) if len(daily) >= 2 else quote.price
+    snapshot.update({
+        "stage": "analyzed",
+        "change_pct": round((quote.price / previous_close - 1) * 100, 2) if previous_close else 0,
+        "trend": (
+            "صاعد" if (indicators.get("ema9") or 0) > (indicators.get("ema20") or 0)
+            else "هابط"
+        ),
+        "liquidity": round(float(quote.price) * float(indicators.get("average_volume") or 0), 0),
+        "volatility": indicators.get("volatility"),
+        "support": indicators.get("support"),
+        "resistance": indicators.get("resistance"),
+        "watch_reason": "لم تكتمل شروط الدخول الفني الحالية",
+        "activation_condition": "انتظار تأكيد حجم وشمعة فوق المقاومة أو ارتداد مؤكد من الدعم",
+    })
+    if not quality.accepted:
+        snapshot["watch_reason"] = quality.reasons[0]
+        snapshot["activation_condition"] = "تحديث السعر وBid/Ask وتقلص السبريد ثم إعادة فحص الإشارة"
+        return None, quality.reasons, snapshot
     if (indicators.get("average_volume") or 0) < settings.min_avg_daily_volume:
         return None, ["متوسط حجم التداول أقل من الحد المسموح"], snapshot
     if (indicators.get("relative_volume") or 0) < settings.min_relative_volume:
@@ -113,7 +130,10 @@ def build_opportunity(
             risk_flags=item.risk_flags,
         ))
 
-    strategy = select_strategy(indicators, quote.price, regime)
+    strategy = select_strategy(
+        indicators, quote.price, regime,
+        verified_news=any(item.is_official for item in news),
+    )
     if strategy.strategy_id == "no_trade":
         return None, [strategy.reason], snapshot
     atr = max(float(indicators.get("atr") or quote.price * 0.03), quote.price * 0.01)
@@ -230,23 +250,47 @@ def scan_market(
     universe_limit: int | None = None,
 ) -> list[OpportunityResult]:
     regime, regime_inputs = classify_market(provider)
+    try:
+        market_open = provider.is_market_open()
+    except Exception:
+        market_open = current_session() in {"open", "mid_session", "close"}
     db.add(MarketRegimeRecord(regime=regime.value, session=current_session(), inputs_json=regime_inputs))
-    limit = max(1, min(int(universe_limit or settings.scan_universe_limit), 1000))
+    limit = max(1, min(int(universe_limit or settings.scan_universe_limit), 5000))
     symbols = provider.list_active_us_symbols(limit) or settings.configured_scan_symbols
     symbols = list(dict.fromkeys(symbols))[:limit]
     run.symbols_total = len(symbols)
     run.provider = provider.provider_name
     db.commit()
-    daily_map = provider.get_daily_ohlcv_many(symbols, 220) if provider.supports_batch_daily_ohlcv else {}
     quote_map = provider.get_quotes_many(symbols) if provider.supports_batch_quotes else {}
+    run.progress_pct = 12
+    db.commit()
+    daily_map = provider.get_daily_ohlcv_many(symbols, 30) if provider.supports_batch_daily_ohlcv else {}
+    run.progress_pct = 28
+    run.symbols_scanned = len(quote_map)
+    db.commit()
     eligible_symbols: list[str] = []
+    staged: dict[str, tuple[str, list[str], dict]] = {}
     for symbol in symbols:
         quote = quote_map.get(symbol)
-        if quote is not None:
-            if min_price is not None and quote.price < min_price:
-                continue
-            if max_price is not None and quote.price > max_price:
-                continue
+        daily_frame = daily_map.get(symbol)
+        if quote is None or daily_frame is None or daily_frame.empty:
+            staged[symbol] = (
+                "failed", ["تعذر جلب البيانات"],
+                {"stage": "failed", "failure_category": "تعذر جلب البيانات"},
+            )
+            continue
+        if min_price is not None and quote.price < min_price:
+            staged[symbol] = (
+                "skipped", ["السعر خارج الفلتر الاختياري"],
+                {"stage": "skipped", "price": quote.price, "skip_category": "فلتر السعر"},
+            )
+            continue
+        if max_price is not None and quote.price > max_price:
+            staged[symbol] = (
+                "skipped", ["السعر خارج الفلتر الاختياري"],
+                {"stage": "skipped", "price": quote.price, "skip_category": "فلتر السعر"},
+            )
+            continue
         eligible_symbols.append(symbol)
 
     # The provider can batch-screen the whole universe, but expensive intraday
@@ -257,20 +301,47 @@ def scan_market(
             return 0.0
         return float(frame["close"].iloc[-1]) * float(frame["volume"].tail(20).mean())
 
-    price_eligible_count = len(eligible_symbols)
     eligible_symbols.sort(key=coarse_liquidity, reverse=True)
-    detailed_limit = max(1, min(settings.scan_detailed_limit, 100))
-    prefiltered_count = max(0, len(eligible_symbols) - detailed_limit)
-    eligible_symbols = eligible_symbols[:detailed_limit]
+    deep_limit = max(1, min(settings.scan_detailed_limit, 20))
+    deep_symbols = eligible_symbols[:deep_limit]
+    deep_daily_map = (
+        provider.get_daily_ohlcv_many(deep_symbols, 220)
+        if provider.supports_batch_daily_ohlcv and deep_symbols else {}
+    )
+    for symbol in eligible_symbols[deep_limit:]:
+        quote = quote_map[symbol]
+        frame = daily_map[symbol]
+        staged[symbol] = (
+            "skipped", ["خارج أفضل المرشحين بعد الترتيب الرقمي"],
+            {
+                "stage": "skipped", "skip_category": "الترتيب الرقمي",
+                "price": quote.price,
+                "liquidity": coarse_liquidity(symbol),
+                "change_pct": round(
+                    (quote.price / float(frame["close"].iloc[-2]) - 1) * 100, 2
+                ) if len(frame) >= 2 else 0,
+            },
+        )
+
+    for symbol, (_, reasons, snapshot) in staged.items():
+        db.add(StockCandidate(
+            scan_run_id=run.id, symbol=symbol, accepted=False,
+            numeric_score=0, exclusion_reasons=reasons, snapshot_json=snapshot,
+        ))
 
     accepted: list[OpportunityResult] = []
-    for index, symbol in enumerate(eligible_symbols, 1):
+    for index, symbol in enumerate(deep_symbols, 1):
         try:
             result, reasons, snapshot = build_opportunity(
                 db, provider, settings, symbol, regime, run.id,
                 quote_override=quote_map.get(symbol),
-                daily_override=daily_map.get(symbol),
+                daily_override=deep_daily_map.get(symbol),
             )
+            if result is not None and not market_open:
+                result = None
+                reasons = ["السوق مغلق؛ تُعرض القراءة للمراقبة دون خطة مباشرة"]
+                snapshot["watch_reason"] = reasons[0]
+                snapshot["activation_condition"] = "إعادة التحقق بعد افتتاح السوق ببيانات Bid/Ask حديثة"
             observed_price = snapshot.get("price")
             if observed_price is not None and (
                 (min_price is not None and observed_price < min_price)
@@ -280,21 +351,29 @@ def scan_market(
                 reasons = ["السعر خارج نطاق الماسح المحدد"]
         except Exception as exc:
             result, reasons, snapshot = None, ["تعذر تحليل بيانات السهم"], {"error_type": type(exc).__name__}
-        score = result.overall_score if result else 0
+        score = result.overall_score if result else min(
+            59,
+            round(
+                min(float(snapshot.get("indicators", {}).get("relative_volume") or 0), 3) * 12
+                + (20 if snapshot.get("trend") == "صاعد" else 8)
+                + (15 if snapshot.get("support") and snapshot.get("resistance") else 0)
+            ),
+        )
+        snapshot["stage"] = "candidate" if result else "analyzed"
+        snapshot["watch_reason"] = reasons[0] if reasons else snapshot.get("watch_reason")
         db.add(StockCandidate(
             scan_run_id=run.id, symbol=symbol, accepted=result is not None,
             numeric_score=score, exclusion_reasons=reasons, snapshot_json=snapshot,
         ))
         if result:
             accepted.append(result)
-        run.symbols_scanned = index
-        run.symbols_excluded = index - len(accepted)
-        run.progress_pct = int(index / max(len(eligible_symbols), 1) * 80)
+        run.symbols_scanned = len(quote_map)
+        run.symbols_excluded = len(staged) + index - len(accepted)
+        run.progress_pct = 35 + int(index / max(len(deep_symbols), 1) * 45)
         if index % 10 == 0:
             db.commit()
-    run.symbols_excluded += len(symbols) - price_eligible_count + prefiltered_count
     accepted.sort(key=lambda item: item.overall_score, reverse=True)
-    shortlist = accepted[: settings.openai_candidate_limit]
+    shortlist = accepted[: min(settings.openai_candidate_limit, 5)]
     reviews = review_candidates(
         db, settings,
         [

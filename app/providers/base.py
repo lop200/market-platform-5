@@ -22,6 +22,9 @@ class Quote:
     last_trade: float | None = None
     relative_volume: float | None = None
     session: str = "regular"
+    trade_as_of: str | None = None
+    bid_as_of: str | None = None
+    ask_as_of: str | None = None
 
     @property
     def mid(self) -> float | None:
@@ -47,6 +50,27 @@ class Quote:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return max(0, int((datetime.now(timezone.utc) - parsed).total_seconds()))
+
+    @staticmethod
+    def timestamp_age(value: str | None) -> int | None:
+        if not value:
+            return None
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return max(0, int((datetime.now(timezone.utc) - parsed).total_seconds()))
+
+    @property
+    def trade_age_seconds(self) -> int | None:
+        return self.timestamp_age(self.trade_as_of or self.as_of)
+
+    @property
+    def bid_age_seconds(self) -> int | None:
+        return self.timestamp_age(self.bid_as_of or self.as_of)
+
+    @property
+    def ask_age_seconds(self) -> int | None:
+        return self.timestamp_age(self.ask_as_of or self.as_of)
 
 
 class MarketDataAdapter(ABC):

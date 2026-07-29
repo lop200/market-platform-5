@@ -11,11 +11,11 @@ from app.db.models import NewsItem, UserRiskSettings
 from app.opportunities.indicators import calculate_indicators
 from app.opportunities.market_regime import classify_market, current_session
 from app.opportunities.news import get_news_provider
-from app.opportunities.quality import evaluate_quote
 from app.opportunities.risk import position_size, risk_reward
 from app.opportunities.schemas import MarketRegime
 from app.opportunities.strategies import select_strategy
 from app.providers.base import MarketDataAdapter, Quote
+from app.stocks.quality import evaluate_plan_data
 
 
 def _safe_number(value, digits: int = 4):
@@ -29,8 +29,16 @@ def _safe_number(value, digits: int = 4):
 def _bars(frame: pd.DataFrame | None, limit: int = 240) -> list[dict]:
     if frame is None or frame.empty:
         return []
+    work = frame.copy()
+    close = work["close"].astype(float)
+    work["ema9"] = close.ewm(span=9, adjust=False).mean()
+    work["ema20"] = close.ewm(span=20, adjust=False).mean()
+    work["ema50"] = close.ewm(span=50, adjust=False).mean()
+    typical = (work["high"] + work["low"] + work["close"]) / 3
+    cumulative_volume = work["volume"].astype(float).cumsum()
+    work["vwap"] = (typical * work["volume"]).cumsum() / cumulative_volume.replace(0, pd.NA)
     result = []
-    for index, row in frame.tail(limit).iterrows():
+    for index, row in work.tail(limit).iterrows():
         timestamp = index.isoformat() if hasattr(index, "isoformat") else str(index)
         result.append({
             "time": timestamp,
@@ -39,6 +47,10 @@ def _bars(frame: pd.DataFrame | None, limit: int = 240) -> list[dict]:
             "low": _safe_number(row.get("low")),
             "close": _safe_number(row.get("close")),
             "volume": int(row.get("volume") or 0),
+            "vwap": _safe_number(row.get("vwap")),
+            "ema9": _safe_number(row.get("ema9")),
+            "ema20": _safe_number(row.get("ema20")),
+            "ema50": _safe_number(row.get("ema50")),
         })
     return result
 
@@ -69,6 +81,24 @@ def _trend(indicators: dict) -> str:
         if ema9 < ema20 < ema50:
             return "هابط"
     return "جانبي"
+
+
+def _timeframe_reading(alignment: dict[str, str | None]) -> str:
+    short_up = alignment.get("1m") == "صاعد" and alignment.get("5m") == "صاعد"
+    short_down = alignment.get("1m") == "هابط" and alignment.get("5m") == "هابط"
+    daily = alignment.get("daily")
+    if short_up and daily == "هابط":
+        return "ارتداد لحظي صاعد داخل اتجاه يومي هابط — مخاطرة أعلى."
+    if short_down and daily == "صاعد":
+        return "هبوط لحظي داخل اتجاه يومي صاعد — تعارض فريمات."
+    values = [value for value in alignment.values() if value]
+    if values and all(value == "صاعد" for value in values):
+        return "توافق صاعد متعدد الفريمات."
+    if values and all(value == "هابط" for value in values):
+        return "توافق هابط متعدد الفريمات."
+    if len(set(values)) > 1:
+        return "تضارب فريمات — لا يوجد اتجاه تنفيذي واضح."
+    return "اتجاه جانبي أو بيانات أطر غير مكتملة."
 
 
 def _probabilities(indicators: dict, regime: MarketRegime, rr: float | None) -> dict:
@@ -146,13 +176,8 @@ def analyze_single_stock(
     missing: list[str] = []
 
     quote: Quote | None = None
-    quality_accepted = False
     try:
         quote = provider.get_quote(symbol)
-        quality = evaluate_quote(quote, settings)
-        quality_accepted = quality.accepted
-        warnings.extend(quality.warnings)
-        warnings.extend(quality.reasons)
     except Exception:
         missing.append("تعذر جلب السعر وBid/Ask")
 
@@ -188,7 +213,7 @@ def analyze_single_stock(
     primary = frames.get("5m")
     if daily is not None and primary is not None and len(daily) >= 20 and len(primary) >= 20:
         indicators = calculate_indicators(daily, primary)
-        for interval in ("1m", "15m"):
+        for interval in ("1m", "15m", "1h"):
             frame = frames.get(interval)
             if frame is not None and len(frame) >= 20:
                 closes = frame["close"].astype(float)
@@ -218,7 +243,42 @@ def analyze_single_stock(
     )
     dollar_volume = float(price * volume) if price and volume else None
 
-    strategy = select_strategy(indicators, price or 0, regime) if indicators and price else None
+    news_items = []
+    verified_recent_news = False
+    try:
+        news = get_news_provider(settings).get_news(symbol)
+        for item in news[:6]:
+            age_hours = max(0, int((started - item.published_at).total_seconds() / 3600))
+            verified_recent_news = verified_recent_news or (
+                item.is_official and age_hours <= 24 and item.classification not in {"قديم", "غير موثوق", "ترويجي"}
+            )
+            news_items.append({
+                "headline": item.headline, "source": item.source,
+                "published_at": item.published_at.isoformat(), "age": f"قبل {age_hours} ساعة",
+                "summary_ar": item.headline, "impact": item.classification,
+                "official": item.is_official, "risk_flags": item.risk_flags,
+            })
+            db.add(NewsItem(
+                symbol=symbol, headline=item.headline, source=item.source,
+                published_at=item.published_at, url=item.url,
+                classification=item.classification, is_official=item.is_official,
+                risk_flags=item.risk_flags,
+            ))
+    except Exception:
+        warnings.append("تعذر مزود الأخبار، واكتمل التحليل الفني دون أخبار")
+
+    try:
+        market_open = provider.is_market_open()
+    except Exception:
+        market_open = current_session() in {"open", "mid_session", "close"}
+        warnings.append("تعذر التحقق المباشر من ساعة السوق")
+    quality = evaluate_plan_data(quote, primary, settings, market_open=market_open)
+    warnings.extend(quality.warnings)
+    warnings.extend(quality.reasons)
+    strategy = (
+        select_strategy(indicators, price or 0, regime, verified_news=verified_recent_news)
+        if indicators and price else None
+    )
     status = "no_trade"
     status_ar = "لا توجد نقطة دخول مناسبة حاليًا"
     entry_from = entry_to = stop = rr = None
@@ -247,44 +307,34 @@ def analyze_single_stock(
                 "label": f"المستوى {index}",
                 "profit_pct": round((target / entry_from - 1) * 100, 2),
             } for index, target in enumerate(target_prices, 1)]
-            if strategy and strategy.strategy_id != "no_trade" and quality_accepted:
+            if strategy and strategy.strategy_id != "no_trade" and quality.valid_for_plan:
                 status = "conditional_entry"
                 status_ar = "دخول مشروط"
+
+    if status != "conditional_entry":
+        entry_from = entry_to = stop = rr = None
+        targets = []
 
     stop_distance_pct = round((entry_from - stop) / entry_from * 100, 2) if entry_from and stop else None
     target_distance = targets[0]["profit_pct"] if targets else None
     atr_pct = float(indicators.get("atr") or 0) / price * 100 if price else None
-    probabilities = _probabilities(indicators, regime, rr)
-    time_estimate = _time_estimate(target_distance, indicators.get("volatility"), atr_pct)
-    trend = _trend(indicators)
-
-    news_items = []
-    try:
-        news = get_news_provider(settings).get_news(symbol)
-        for item in news[:6]:
-            age_hours = max(0, int((started - item.published_at).total_seconds() / 3600))
-            news_items.append({
-                "headline": item.headline,
-                "source": item.source,
-                "published_at": item.published_at.isoformat(),
-                "age": f"قبل {age_hours} ساعة",
-                "summary_ar": item.headline,
-                "impact": item.classification,
-                "official": item.is_official,
-                "risk_flags": item.risk_flags,
-            })
-            db.add(NewsItem(
-                symbol=symbol, headline=item.headline, source=item.source,
-                published_at=item.published_at, url=item.url,
-                classification=item.classification, is_official=item.is_official,
-                risk_flags=item.risk_flags,
-            ))
-    except Exception:
-        warnings.append("تعذر مزود الأخبار، واكتمل التحليل الفني دون أخبار")
+    probabilities = _probabilities(indicators, regime, rr) if status == "conditional_entry" else None
+    time_estimate = (
+        _time_estimate(target_distance, indicators.get("volatility"), atr_pct)
+        if status == "conditional_entry" else None
+    )
+    alignment = {
+        "1m": indicators.get("trend_1m"),
+        "5m": _trend(indicators),
+        "15m": indicators.get("trend_15m"),
+        "1h": indicators.get("trend_1h"),
+        "daily": indicators.get("trend_daily"),
+    }
+    trend = _timeframe_reading(alignment)
 
     risk_row = _risk_settings(db, settings)
     plan = None
-    if entry_from and stop and targets:
+    if status == "conditional_entry" and entry_from and stop and targets:
         sized = position_size(
             float(risk_row.capital_sar), float(risk_row.max_risk_pct),
             entry_from, stop, [item["price"] for item in targets], settings.usd_sar_rate,
@@ -311,6 +361,8 @@ def analyze_single_stock(
         "stop": stop,
         "targets": [item["price"] for item in targets],
     }
+    valid_minutes = strategy.valid_minutes if strategy and status == "conditional_entry" else 0
+    expires_at = started + timedelta(minutes=valid_minutes) if valid_minutes else started
     result = {
         "symbol": symbol,
         "company_name": profile.get("name") or symbol,
@@ -331,6 +383,16 @@ def analyze_single_stock(
             "float_shares": profile.get("float_shares"),
             "updated_at": quote.as_of if quote else None,
             "age_seconds": quote.age_seconds if quote else None,
+            "trade_timestamp": quote.trade_as_of or quote.as_of if quote else None,
+            "bid_timestamp": quote.bid_as_of or quote.as_of if quote else None,
+            "ask_timestamp": quote.ask_as_of or quote.as_of if quote else None,
+            "trade_age_seconds": quality.trade_age_seconds,
+            "bid_age_seconds": quality.bid_age_seconds,
+            "ask_age_seconds": quality.ask_age_seconds,
+            "last_candle_timestamp": (
+                primary.index[-1].isoformat() if primary is not None and not primary.empty else None
+            ),
+            "candle_age_seconds": quality.candle_age_seconds,
             "provider": quote.provider if quote else provider.provider_name,
             "feed": quote.feed if quote else None,
             "delayed": (quote.is_delayed or quote.age_seconds > settings.max_quote_age_seconds) if quote else True,
@@ -338,16 +400,32 @@ def analyze_single_stock(
         },
         "market": {"regime": regime.value, "inputs": regime_inputs},
         "trend": trend,
+        "analysis_type": "intraday" if status == "conditional_entry" else "no_setup",
+        "generated_at": started.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "valid_for_minutes": valid_minutes,
+        "is_expired": valid_minutes == 0,
+        "data_quality": quality.as_dict(),
+        "data_quality_message": (
+            None if quality.valid_for_plan
+            else "البيانات الحالية غير صالحة لبناء دخول أو وقف أو أهداف."
+        ),
         "status": status,
         "status_ar": status_ar,
         "strategy": {
-            "id": strategy.strategy_id if strategy else "no_trade",
-            "name_ar": strategy.name_ar if strategy else "لا توجد استراتيجية مكتملة",
-            "name_en": strategy.name_en if strategy else "No Trade",
-            "reason": strategy.reason if strategy else "البيانات الفنية غير مكتملة",
-            "trigger": strategy.trigger if strategy else "انتظار اكتمال البيانات",
+            "id": strategy.strategy_id if strategy and status == "conditional_entry" else "no_trade",
+            "name_ar": strategy.name_ar if strategy and status == "conditional_entry" else "لا توجد خطة قابلة للتنفيذ",
+            "name_en": strategy.name_en if strategy and status == "conditional_entry" else "No Trade",
+            "reason": (
+                strategy.reason if strategy and status == "conditional_entry"
+                else "القراءة الحالية للمراقبة فقط بسبب جودة البيانات أو عدم اكتمال الشروط."
+            ),
+            "trigger": (
+                strategy.trigger if strategy and status == "conditional_entry"
+                else "انتظار Quote حديث ومتزامن وسوق مفتوح ثم إعادة التحليل."
+            ),
         },
-        "trade_plan": {
+        "trade_plan": ({
             "entry_from": entry_from,
             "entry_to": entry_to,
             "stop": stop,
@@ -355,8 +433,8 @@ def analyze_single_stock(
             "targets": targets,
             "risk_reward": rr,
             "stop_distance_pct": stop_distance_pct,
-            "valid_minutes": strategy.valid_minutes if strategy else 5,
-            "expires_at": (started + timedelta(minutes=strategy.valid_minutes if strategy else 5)).isoformat(),
+            "valid_minutes": valid_minutes,
+            "expires_at": expires_at.isoformat(),
             "invalidation": [
                 strategy.invalidation if strategy else "نقص البيانات",
                 "هبوط الحجم",
@@ -366,41 +444,62 @@ def analyze_single_stock(
             "strengths": [strategy.reason] if strategy and strategy.strategy_id != "no_trade" else [],
             "risks": warnings[:2] + missing[:2],
             "position_size": plan,
-        },
+        } if status == "conditional_entry" else None),
         "probabilities": probabilities,
         "probability_disclaimer": "تقدير احتمالي وليس ضمانًا أو نسبة نجاح تاريخية إلا عند ذكر ذلك صراحة.",
         "time_estimate": time_estimate,
-        "indicators": indicators,
-        "timeframe_alignment": {
-            "1m": indicators.get("trend_1m"),
-            "5m": trend,
-            "15m": indicators.get("trend_15m"),
-            "daily": indicators.get("trend_daily"),
+        "scenarios": {
+            "bullish": (
+                f"مراقبة ثبات السعر فوق المقاومة {float(indicators.get('resistance')):.2f} "
+                "مع تحسن الحجم والسبريد."
+                if indicators.get("resistance") else "انتظار مقاومة واضحة وتأكيد حجم."
+            ),
+            "bearish": (
+                f"كسر الدعم {float(indicators.get('support')):.2f} يبقي القراءة ضعيفة "
+                "ويلغي أي سيناريو صاعد."
+                if indicators.get("support") else "فقدان القاع الأخير يبقي المخاطر مرتفعة."
+            ),
         },
+        "indicators": indicators,
+        "timeframe_alignment": alignment,
         "charts": {name: _bars(frame) for name, frame in frames.items()},
         "chart_levels": technical_levels,
         "news": news_items,
         "news_message": None if news_items else "لا توجد أخبار متاحة من مزود رسمي حاليًا.",
-        "directional_bias": {
+        "directional_bias": ({
             "label": (
                 "ميل صاعد — يتوافق نظريًا مع Call" if trend == "صاعد" else
                 "ميل هابط — يتوافق نظريًا مع Put" if trend == "هابط" else
                 "محايد — لا يوجد انحياز واضح"
             ),
             "issued_at": started.isoformat(),
-            "valid_minutes": strategy.valid_minutes if strategy else 5,
+            "valid_minutes": valid_minutes,
             "warning": "هذا توصيف لاتجاه السهم فقط، وليس توصية بعقد أوبشن أو اختيار انتهاء أو سترايك.",
-        },
+        } if quality.valid_for_plan and "تضارب" not in trend else None),
         "missing_data": list(dict.fromkeys(missing)),
         "warnings": list(dict.fromkeys(warnings)),
         "system_usage": {
             "symbols_requested": 1 + sum(value is not None for value in regime_inputs.values()),
             "api_requests": after["api_requests"] - before["api_requests"],
+            "market_data_api_calls": after["api_requests"] - before["api_requests"],
             "cache_hits": after["cache_hits"] - before["cache_hits"],
             "provider": provider.provider_name,
             "response_ms": response_ms,
+            "total_response_time_ms": response_ms,
             "openai_calls": 0,
             "openai_cost_usd": 0.0,
+        },
+        "ai_review": {
+            "model_name": settings.openai_model,
+            "prompt_version": None,
+            "status": "pending" if quality.valid_for_plan else "skipped_invalid_data",
+            "message_ar": (
+                "بانتظار المراجعة الذكية" if quality.valid_for_plan
+                else "لم تُرسل البيانات إلى OpenAI لأنها غير صالحة لبناء خطة."
+            ),
+            "ai_calls": 0,
+            "ai_cost_estimate": 0.0,
+            "ai_analysis_timestamp": None,
         },
     }
     db.commit()

@@ -38,9 +38,12 @@ class Settings(BaseSettings):
     max_spread_pct: float = Field(default=2.0, alias="MAX_SPREAD_PCT")
     min_risk_reward: float = Field(default=1.8, alias="MIN_RISK_REWARD")
     max_quote_age_seconds: int = Field(default=90, alias="MAX_QUOTE_AGE_SECONDS")
+    max_quote_timestamp_skew_seconds: int = Field(default=5, alias="MAX_QUOTE_TIMESTAMP_SKEW_SECONDS")
+    max_candle_age_seconds: int = Field(default=180, alias="MAX_CANDLE_AGE_SECONDS")
+    max_quote_candle_skew_seconds: int = Field(default=180, alias="MAX_QUOTE_CANDLE_SKEW_SECONDS")
     max_results: int = Field(default=5, alias="MAX_RESULTS")
-    scan_universe_limit: int = Field(default=300, alias="SCAN_UNIVERSE_LIMIT")
-    scan_detailed_limit: int = Field(default=50, alias="SCAN_DETAILED_LIMIT")
+    scan_universe_limit: int = Field(default=1000, alias="SCAN_UNIVERSE_LIMIT")
+    scan_detailed_limit: int = Field(default=10, alias="SCAN_DETAILED_LIMIT")
     scan_symbols: str = Field(
         default="ACHR,AEVA,AMTX,APLT,ARBE,ATOS,BB,BLNK,BBAI,BNGO,CLSK,CLOV,CTM,EVGO,GEVO,GOEV,GRAB,HIMS,JOBY,KULR,LAES,LCID,LUNR,OPEN,PLUG,PSNY,QUBT,RGTI,RKLB,SERV,SOFI,SOUN,TMC,TLRY,VERI,WOLF",
         alias="SCAN_SYMBOLS",
