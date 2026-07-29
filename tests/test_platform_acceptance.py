@@ -16,11 +16,11 @@ def test_page_is_fast_shell_and_mobile_rtl():
     assert 'dir="rtl"' in html
     assert 'name="viewport"' in html
     assert "@media(min-width:720px)" in html
-    assert "من الإشارة إلى القرار" in html
+    assert "مسح السوق واستخراج الفرص" in html
     assert "symbolCatalog" in html
     assert "NVIDIA" in html
     assert 'aria-autocomplete="list"' in html
-    assert "صائد عقود الشركات" in html
+    assert "تحديث هذا السهم فقط" in html
     assert "حالة السوق" in html
     assert "OPENAI_API_KEY" not in html
 
@@ -44,6 +44,13 @@ def test_options_are_feature_gated_and_dashboard_route_is_registered():
     assert "/api/v1/dashboard" in paths
     assert "/api/v1/opportunities/symbols/{symbol}" in paths
     assert "OPTIONS_ENABLED" in (ROOT / ".env.example").read_text(encoding="utf-8")
+
+
+def test_stock_page_keeps_best_option_in_the_same_analysis_page():
+    html = TestClient(app).get("/stocks/AAPL").text
+    assert "صائد عقود الشركات" in html
+    assert "أفضل عقد لهذا السهم" in html
+    assert "ranked_contracts" in html
 
 
 def test_results_page_is_arabic_rtl_and_factual():

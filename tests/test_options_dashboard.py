@@ -201,18 +201,19 @@ def test_call_and_put_include_deterministic_targets_risk_and_cost():
         assert item.paper_trading_only
 
 
-def test_mobile_laptop_shell_has_no_horizontal_overflow_and_all_sections():
+def test_mobile_laptop_shell_preserves_base_site_and_same_page_options():
     html = TestClient(app).get("/").text
     assert 'dir="rtl"' in html
     assert 'name="viewport"' in html
     assert "overflow-x:hidden" in html
     assert "@media(min-width:720px)" in html
     assert "@media(min-width:1100px)" in html
-    for section_id in (
-        "home", "stocks", "pre", "regular", "after", "earnings",
-        "news", "analysis", "hunter", "watch", "settings",
-    ):
+    for section_id in ("opportunities", "premarketOpportunities", "watchlist"):
         assert f'id="{section_id}"' in html
+    stock_html = TestClient(app).get("/stocks/AAPL").text
+    assert "overflow-x:hidden" in stock_html
+    assert "@media(min-width:760px)" in stock_html
+    assert 'id="options"' in stock_html
 
 
 def test_dashboard_and_page_survive_without_openai_or_options_credentials():
