@@ -1,4 +1,0 @@
-# Extra dependency for production (Render/Postgres). Not needed for local dev — SRS AD-5
-# uses SQLite locally. psycopg2-binary currently has no prebuilt wheel for very new Python
-# versions; install this on the deployment target (pinned to Python 3.12 per CLAUDE.md).
-psycopg2-binary==2.9.10

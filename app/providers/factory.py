@@ -8,6 +8,7 @@ from functools import lru_cache
 
 from app.config import get_settings
 from app.providers.base import MarketDataAdapter
+from app.providers.resilient import ResilientMarketDataProvider
 
 
 @lru_cache
@@ -18,16 +19,18 @@ def get_market_data_provider() -> MarketDataAdapter:
     if name == "yfinance":
         from app.providers.yfinance_provider import YFinanceProvider
 
-        return YFinanceProvider()
+        return ResilientMarketDataProvider(YFinanceProvider(), settings)
 
     if name == "alpaca":
         from app.providers.alpaca_provider import AlpacaProvider
 
-        return AlpacaProvider(settings.alpaca_api_key, settings.alpaca_api_secret)
+        return ResilientMarketDataProvider(
+            AlpacaProvider(settings.alpaca_api_key, settings.alpaca_api_secret), settings
+        )
 
     if name == "finnhub":
         from app.providers.finnhub_provider import FinnhubProvider
 
-        return FinnhubProvider(settings.finnhub_api_key)
+        return ResilientMarketDataProvider(FinnhubProvider(settings.finnhub_api_key), settings)
 
     raise ValueError(f"unknown MARKET_DATA_PROVIDER '{settings.market_data_provider}'")

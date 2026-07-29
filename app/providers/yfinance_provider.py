@@ -1,4 +1,4 @@
-"""yfinance adapter — DEV FALLBACK ONLY. Never used in production paths (CLAUDE.md rule).
+"""yfinance adapter — development fallback only.
 
 Free, no API key required, but unofficial/unsupported — fine for local M0 smoke tests
 and for building the deterministic engine (M1) without needing a paid subscription yet.
@@ -53,6 +53,9 @@ class YFinanceProvider(MarketDataAdapter):
             volume=fast.get("lastVolume") or fast.get("last_volume"),
             as_of=datetime.now(timezone.utc).isoformat(),
             is_delayed=True,
+            provider=self.provider_name,
+            feed="unofficial",
+            last_trade=float(price),
         )
 
     def estimated_cost_per_call(self) -> float:

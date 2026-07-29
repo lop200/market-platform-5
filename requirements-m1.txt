@@ -1,5 +1,0 @@
-# Extra dependency needed starting M1 (deterministic indicators engine, SRS 10.1).
-# pandas-ta 0.4.71b0 requires numba==0.61.2, which does not yet support Python 3.14
-# (this machine currently has 3.14.3). Install this file from a Python 3.12 or 3.13
-# virtualenv, matching CLAUDE.md's pinned Python 3.12 — not needed for M0.
-pandas-ta==0.4.71b0

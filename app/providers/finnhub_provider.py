@@ -111,6 +111,9 @@ class FinnhubProvider(MarketDataAdapter):
             if data.get("t")
             else datetime.now(timezone.utc).isoformat(),
             is_delayed=False,
+            provider=self.provider_name,
+            feed="finnhub",
+            last_trade=float(price),
         )
 
     def estimated_cost_per_call(self) -> float:

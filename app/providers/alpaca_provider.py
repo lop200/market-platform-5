@@ -1,4 +1,4 @@
-"""Alpaca Market Data adapter — primary provider (CLAUDE.md, SRS 9.3).
+"""Alpaca Market Data adapter — primary production provider.
 
 Fully implemented but inert until ALPACA_API_KEY / ALPACA_API_SECRET are set in .env.
 Uses the free IEX real-time feed tier. Raises a clear error if credentials are missing
@@ -11,10 +11,13 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockBarsRequest, StockLatestQuoteRequest
+from alpaca.data.requests import StockBarsRequest, StockLatestQuoteRequest, StockLatestTradeRequest
 from alpaca.data.timeframe import TimeFrame
 from alpaca.trading.client import TradingClient
+from alpaca.trading.enums import AssetClass, AssetStatus
+from alpaca.trading.requests import GetAssetsRequest
 
+from app.config import get_settings
 from app.providers.base import MarketDataAdapter, Quote
 
 
@@ -29,11 +32,12 @@ class AlpacaProvider(MarketDataAdapter):
             )
         self._data_client = StockHistoricalDataClient(api_key, api_secret)
         self._trading_client = TradingClient(api_key, api_secret, paper=True)
+        self._feed = get_settings().alpaca_feed
 
     def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame:
         start = datetime.now(timezone.utc) - timedelta(days=int(lookback_days * 1.6) + 5)
         request = StockBarsRequest(
-            symbol_or_symbols=symbol, timeframe=TimeFrame.Day, start=start, feed="iex"
+            symbol_or_symbols=symbol, timeframe=TimeFrame.Day, start=start, feed=self._feed
         )
         bars = self._data_client.get_stock_bars(request).df
         if bars.empty:
@@ -57,7 +61,7 @@ class AlpacaProvider(MarketDataAdapter):
             symbol_or_symbols=unique_symbols,
             timeframe=TimeFrame.Day,
             start=start,
-            feed="iex",
+            feed=self._feed,
         )
         bars = self._data_client.get_stock_bars(request).df
         if bars.empty:
@@ -81,13 +85,17 @@ class AlpacaProvider(MarketDataAdapter):
         return results
 
     def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame | None:
-        timeframe_map = {"1m": TimeFrame.Minute, "5m": TimeFrame(5, TimeFrame.Minute.unit)}
+        timeframe_map = {
+            "1m": TimeFrame.Minute,
+            "5m": TimeFrame(5, TimeFrame.Minute.unit),
+            "15m": TimeFrame(15, TimeFrame.Minute.unit),
+        }
         timeframe = timeframe_map.get(interval)
         if timeframe is None:
             raise ValueError(f"unsupported intraday interval '{interval}'")
         start = datetime.now(timezone.utc) - timedelta(days=5)
         request = StockBarsRequest(
-            symbol_or_symbols=symbol, timeframe=timeframe, start=start, feed="iex"
+            symbol_or_symbols=symbol, timeframe=timeframe, start=start, feed=self._feed
         )
         bars = self._data_client.get_stock_bars(request).df
         if bars.empty:
@@ -97,19 +105,37 @@ class AlpacaProvider(MarketDataAdapter):
         return df
 
     def get_quote(self, symbol: str) -> Quote:
-        request = StockLatestQuoteRequest(symbol_or_symbols=symbol, feed="iex")
+        request = StockLatestQuoteRequest(symbol_or_symbols=symbol, feed=self._feed)
         quotes = self._data_client.get_stock_latest_quote(request)
         q = quotes[symbol]
+        trades = self._data_client.get_stock_latest_trade(
+            StockLatestTradeRequest(symbol_or_symbols=symbol, feed=self._feed)
+        )
+        trade = trades.get(symbol)
+        last = float(trade.price) if trade else None
         mid = (q.bid_price + q.ask_price) / 2 if q.bid_price and q.ask_price else q.ask_price or q.bid_price
         return Quote(
             symbol=symbol,
-            price=float(mid),
+            price=float(last or mid),
             bid=float(q.bid_price) if q.bid_price else None,
             ask=float(q.ask_price) if q.ask_price else None,
             volume=None,
             as_of=q.timestamp.isoformat(),
             is_delayed=False,
+            provider=self.provider_name,
+            feed=self._feed,
+            last_trade=last,
         )
+
+    def list_active_us_symbols(self, limit: int = 1000) -> list[str]:
+        request = GetAssetsRequest(status=AssetStatus.ACTIVE, asset_class=AssetClass.US_EQUITY)
+        assets = self._trading_client.get_all_assets(request)
+        allowed = {"NASDAQ", "NYSE", "AMEX", "ARCA", "BATS"}
+        return [
+            asset.symbol
+            for asset in assets
+            if asset.tradable and str(asset.exchange).split(".")[-1].upper() in allowed
+        ][:limit]
 
     def estimated_cost_per_call(self) -> float:
         # Free IEX tier: marginal cost per call is ~0 within plan limits (SRS 25.1).

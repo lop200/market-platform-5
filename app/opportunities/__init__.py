@@ -1,0 +1,1 @@
+"""Stock opportunity discovery domain."""
