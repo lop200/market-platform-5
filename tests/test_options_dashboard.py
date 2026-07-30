@@ -38,7 +38,9 @@ def stock(status: str = "conditional_entry", trend: str = "صاعد") -> dict:
                 ),
                 "risk_reward": 2.0,
                 "valid_minutes": 10,
-                "expires_at": "2026-07-30T15:10:00+00:00",
+                "expires_at": (
+                    datetime.now(timezone.utc) + timedelta(minutes=10)
+                ).isoformat(),
             }
             if valid else None
         ),

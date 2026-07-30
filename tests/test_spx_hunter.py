@@ -267,6 +267,10 @@ def test_mobile_shell_has_no_horizontal_scroll_and_modes():
     assert "قنّاص SPX" in html
     assert "اهرب الآن" in html
     assert "قنص مشروط" in html
+    assert "مؤشر SPX الخارجي" in html
+    assert '"symbol": "SP:SPX"' in html
+    assert "s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" in html
+    assert "لا يدخل في حسابات القنص" in html
 
 
 def test_spx_snapshot_endpoint_never_waits_for_provider():
