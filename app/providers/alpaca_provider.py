@@ -41,6 +41,7 @@ class AlpacaProvider(MarketDataAdapter):
         *,
         data_base_url: str = "https://data.alpaca.markets",
         feed: str = "sip",
+        overnight_feed: str = "boats",
     ):
         if not api_key or not api_secret:
             raise ValueError(
@@ -59,6 +60,83 @@ class AlpacaProvider(MarketDataAdapter):
         )
         self._trading_client = TradingClient(api_key, api_secret, paper=True)
         self._feed = feed.lower()
+        self._overnight_feed = overnight_feed.lower()
+
+    def _active_feed(self, now: datetime | None = None) -> str:
+        """Use BOATS/Overnight only during Alpaca's overnight stock session."""
+        return (
+            self._overnight_feed
+            if self._session(now or datetime.now(timezone.utc)) == "overnight"
+            else self._feed
+        )
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        return {
+            "APCA-API-KEY-ID": self._api_key,
+            "APCA-API-SECRET-KEY": self._api_secret,
+        }
+
+    def _raw_get(self, path: str, params: dict) -> dict:
+        with httpx.Client(timeout=12.0) as client:
+            response = client.get(
+                f"{self._data_base_url}{path}", params=params, headers=self._headers
+            )
+            response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def _raw_snapshot_quote(symbol: str, payload: dict, feed: str) -> Quote:
+        latest_quote = payload.get("latestQuote") or {}
+        latest_trade = payload.get("latestTrade") or {}
+        minute_bar = payload.get("minuteBar") or {}
+        quote_time = AlpacaProvider._parse_rfc3339(latest_quote.get("t"))
+        trade_time = AlpacaProvider._parse_rfc3339(latest_trade.get("t"))
+        bar_time = AlpacaProvider._parse_rfc3339(minute_bar.get("t"))
+        candidates: list[tuple[pd.Timestamp, float, str]] = []
+        if trade_time is not None and latest_trade.get("p") is not None:
+            candidates.append((trade_time, float(latest_trade["p"]), "latest_trade"))
+        if (
+            quote_time is not None
+            and latest_quote.get("bp") is not None
+            and latest_quote.get("ap") is not None
+        ):
+            candidates.append(
+                (
+                    quote_time,
+                    (float(latest_quote["bp"]) + float(latest_quote["ap"])) / 2,
+                    "latest_quote_mid",
+                )
+            )
+        if bar_time is not None and minute_bar.get("c") is not None:
+            candidates.append((bar_time, float(minute_bar["c"]), "latest_minute_bar"))
+        if not candidates:
+            raise ValueError(f"no overnight snapshot data returned for symbol '{symbol}'")
+        newest_time, price, source = max(candidates, key=lambda item: item[0])
+        return Quote(
+            symbol=symbol,
+            price=price,
+            bid=float(latest_quote["bp"]) if latest_quote.get("bp") is not None else None,
+            ask=float(latest_quote["ap"]) if latest_quote.get("ap") is not None else None,
+            volume=int(minute_bar["v"]) if minute_bar.get("v") is not None else None,
+            as_of=newest_time.isoformat(),
+            is_delayed=feed == "overnight" and trade_time is not None and (
+                datetime.now(timezone.utc) - trade_time.to_pydatetime()
+            ).total_seconds() > 60,
+            provider="alpaca",
+            feed=feed,
+            last_trade=(
+                float(latest_trade["p"]) if latest_trade.get("p") is not None else None
+            ),
+            session=AlpacaProvider._session(datetime.now(timezone.utc)),
+            trade_as_of=trade_time.isoformat() if trade_time is not None else None,
+            bid_as_of=quote_time.isoformat() if quote_time is not None else None,
+            ask_as_of=quote_time.isoformat() if quote_time is not None else None,
+            bar_as_of=bar_time.isoformat() if bar_time is not None else None,
+            bar_close=float(minute_bar["c"]) if minute_bar.get("c") is not None else None,
+            price_source=source,
+            snapshot_as_of=newest_time.isoformat(),
+        )
 
     def get_daily_ohlcv(self, symbol: str, lookback_days: int) -> pd.DataFrame:
         start = datetime.now(timezone.utc) - timedelta(days=int(lookback_days * 1.6) + 5)
@@ -121,8 +199,40 @@ class AlpacaProvider(MarketDataAdapter):
         if timeframe is None:
             raise ValueError(f"unsupported intraday interval '{interval}'")
         start = datetime.now(timezone.utc) - timedelta(days=5)
+        active_feed = self._active_feed()
+        if active_feed in {"boats", "overnight"}:
+            timeframe_value = {
+                "1m": "1Min", "5m": "5Min", "15m": "15Min", "1h": "1Hour"
+            }[interval]
+            payload = self._raw_get(
+                f"/v2/stocks/{symbol}/bars",
+                {
+                    "timeframe": timeframe_value,
+                    "start": start.isoformat(),
+                    "feed": active_feed,
+                    "limit": 10000,
+                },
+            )
+            bars = payload.get("bars") or []
+            if not bars:
+                return None
+            frame = pd.DataFrame(
+                [
+                    {
+                        "datetime": item["t"],
+                        "open": item["o"],
+                        "high": item["h"],
+                        "low": item["l"],
+                        "close": item["c"],
+                        "volume": item["v"],
+                    }
+                    for item in bars
+                ]
+            )
+            frame["datetime"] = pd.to_datetime(frame["datetime"], utc=True)
+            return frame.set_index("datetime")
         request = StockBarsRequest(
-            symbol_or_symbols=symbol, timeframe=timeframe, start=start, feed=self._feed
+            symbol_or_symbols=symbol, timeframe=timeframe, start=start, feed=active_feed
         )
         bars = self._data_client.get_stock_bars(request).df
         if bars.empty:
@@ -132,19 +242,28 @@ class AlpacaProvider(MarketDataAdapter):
         return df
 
     def get_quote(self, symbol: str) -> Quote:
+        active_feed = self._active_feed()
+        if active_feed in {"boats", "overnight"}:
+            payload = self._raw_get(
+                f"/v2/stocks/{symbol}/snapshot", {"feed": active_feed}
+            )
+            return self._raw_snapshot_quote(symbol, payload, active_feed)
         quotes = self._data_client.get_stock_latest_quote(
-            StockLatestQuoteRequest(symbol_or_symbols=symbol, feed=self._feed)
+            StockLatestQuoteRequest(symbol_or_symbols=symbol, feed=active_feed)
         )
         trades = self._data_client.get_stock_latest_trade(
-            StockLatestTradeRequest(symbol_or_symbols=symbol, feed=self._feed)
+            StockLatestTradeRequest(symbol_or_symbols=symbol, feed=active_feed)
         )
         bars = self._data_client.get_stock_latest_bar(
-            StockLatestBarRequest(symbol_or_symbols=symbol, feed=self._feed)
+            StockLatestBarRequest(symbol_or_symbols=symbol, feed=active_feed)
         )
         snapshots = self._data_client.get_stock_snapshot(
-            StockSnapshotRequest(symbol_or_symbols=symbol, feed=self._feed)
+            StockSnapshotRequest(symbol_or_symbols=symbol, feed=active_feed)
         )
-        return self._merge_realtime(symbol, quotes.get(symbol), trades.get(symbol), bars.get(symbol), snapshots.get(symbol))
+        return self._merge_realtime(
+            symbol, quotes.get(symbol), trades.get(symbol), bars.get(symbol),
+            snapshots.get(symbol), feed=active_feed,
+        )
 
     @staticmethod
     def _parse_rfc3339(value: str | None) -> pd.Timestamp | None:
@@ -163,12 +282,13 @@ class AlpacaProvider(MarketDataAdapter):
 
     def debug_market_data(self, symbol: str, *, bypass_cache: bool = True) -> dict:
         symbol = symbol.upper()
+        active_feed = self._active_feed()
         request_url = f"{self._data_base_url}/v2/stocks/{symbol}/snapshot"
         server_now = pd.Timestamp.now(tz="UTC")
         with httpx.Client(timeout=12.0) as client:
             response = client.get(
                 request_url,
-                params={"feed": self._feed},
+                params={"feed": active_feed},
                 headers={
                     "APCA-API-KEY-ID": self._api_key,
                     "APCA-API-SECRET-KEY": self._api_secret,
@@ -196,33 +316,36 @@ class AlpacaProvider(MarketDataAdapter):
         quote_live = quote_age is not None and quote_age < 10
         trade_live = trade_age is not None and trade_age < 30
         bar_acceptable = bar_age is not None and bar_age < 120
-        feed_is_sip = self._feed == "sip"
+        feed_is_supported = active_feed in {"sip", "boats", "overnight"}
         live = (
             response.status_code < 400
-            and feed_is_sip
+            and feed_is_supported
             and (quote_live or trade_live)
             and (bar_acceptable or not active_session)
         )
         if response.status_code >= 400:
             diagnostic_status = "alpaca_error"
             diagnostic_error = payload.get("message") or f"Alpaca HTTP {response.status_code}"
-        elif not feed_is_sip:
+        elif not feed_is_supported:
             diagnostic_status = "wrong_feed"
-            diagnostic_error = "مصدر البيانات ليس SIP؛ لا يمكن إثبات بيانات السوق الأمريكي الكاملة."
+            diagnostic_error = "مصدر البيانات لا يطابق جلسة السوق الحالية."
         elif live:
             diagnostic_status = "live"
             diagnostic_error = None
         else:
             diagnostic_status = "stale"
-            diagnostic_error = "بيانات SIP وصلت، لكن Quote وTrade لا يحققان حدود الحداثة المطلوبة."
+            diagnostic_error = (
+                f"بيانات {active_feed.upper()} وصلت، لكن Quote وTrade لا يحققان "
+                "حدود الحداثة المطلوبة."
+            )
 
         clean = {
             "symbol": symbol,
-            "data_feed": self._feed,
+            "data_feed": active_feed,
             "server_now_utc": server_now.isoformat(),
             "market_session": session,
-            "requested_feed": self._feed,
-            "snapshot_request_url": f"{request_url}?feed={self._feed}",
+            "requested_feed": active_feed,
+            "snapshot_request_url": f"{request_url}?feed={active_feed}",
             "alpaca_http_status": response.status_code,
             "latest_trade_price": latest_trade.get("p"),
             "latest_trade_timestamp": trade_time.isoformat() if trade_time is not None else None,
@@ -274,7 +397,9 @@ class AlpacaProvider(MarketDataAdapter):
 
         return market_session(timestamp).code
 
-    def _merge_realtime(self, symbol, direct_quote, direct_trade, direct_bar, snapshot) -> Quote:
+    def _merge_realtime(
+        self, symbol, direct_quote, direct_trade, direct_bar, snapshot, *, feed: str | None = None
+    ) -> Quote:
         q = self._newer(direct_quote, getattr(snapshot, "latest_quote", None))
         trade = self._newer(direct_trade, getattr(snapshot, "latest_trade", None))
         bar = self._newer(direct_bar, getattr(snapshot, "minute_bar", None))
@@ -294,7 +419,7 @@ class AlpacaProvider(MarketDataAdapter):
             ask=float(q.ask_price) if q is not None and q.ask_price else None,
             volume=int(bar.volume) if bar is not None and bar.volume is not None else None,
             as_of=newest_timestamp.astimezone(timezone.utc).isoformat(),
-            is_delayed=False, provider=self.provider_name, feed=self._feed,
+            is_delayed=False, provider=self.provider_name, feed=feed or self._feed,
             last_trade=float(trade.price) if trade is not None else None,
             trade_as_of=trade.timestamp.astimezone(timezone.utc).isoformat() if trade is not None else None,
             bid_as_of=q.timestamp.astimezone(timezone.utc).isoformat() if q is not None else None,
@@ -315,17 +440,36 @@ class AlpacaProvider(MarketDataAdapter):
 
     def get_quotes_many(self, symbols: list[str]) -> dict[str, Quote]:
         unique = list(dict.fromkeys(symbols))
+        active_feed = self._active_feed()
+        if active_feed in {"boats", "overnight"}:
+            payload = self._raw_get(
+                "/v2/stocks/snapshots",
+                {"symbols": ",".join(unique), "feed": active_feed},
+            )
+            snapshots = payload.get("snapshots") or payload
+            results: dict[str, Quote] = {}
+            for symbol in unique:
+                snapshot = snapshots.get(symbol)
+                if not snapshot:
+                    continue
+                try:
+                    results[symbol] = self._raw_snapshot_quote(
+                        symbol, snapshot, active_feed
+                    )
+                except ValueError:
+                    continue
+            return results
         quotes = self._data_client.get_stock_latest_quote(
-            StockLatestQuoteRequest(symbol_or_symbols=unique, feed=self._feed)
+            StockLatestQuoteRequest(symbol_or_symbols=unique, feed=active_feed)
         )
         trades = self._data_client.get_stock_latest_trade(
-            StockLatestTradeRequest(symbol_or_symbols=unique, feed=self._feed)
+            StockLatestTradeRequest(symbol_or_symbols=unique, feed=active_feed)
         )
         bars = self._data_client.get_stock_latest_bar(
-            StockLatestBarRequest(symbol_or_symbols=unique, feed=self._feed)
+            StockLatestBarRequest(symbol_or_symbols=unique, feed=active_feed)
         )
         snapshots = self._data_client.get_stock_snapshot(
-            StockSnapshotRequest(symbol_or_symbols=unique, feed=self._feed)
+            StockSnapshotRequest(symbol_or_symbols=unique, feed=active_feed)
         )
         results: dict[str, Quote] = {}
         for symbol in unique:
@@ -336,6 +480,7 @@ class AlpacaProvider(MarketDataAdapter):
                     trades.get(symbol),
                     bars.get(symbol),
                     snapshots.get(symbol),
+                    feed=active_feed,
                 )
             except ValueError:
                 continue

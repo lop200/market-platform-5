@@ -24,6 +24,8 @@ def analyze_options_after_stock(
     if provider is None:
         result = rank_option_chain(stock_analysis, [], settings)
         result.status = "provider_unavailable"
+        result.market["options_status"] = "opra_unavailable"
+        result.market["options_label_ar"] = "بيانات OPRA غير متاحة"
         result.warnings_ar.append("تعذر مزود OPRA؛ اكتمل تحليل السهم دون خيارات")
         return result
     try:
@@ -34,4 +36,3 @@ def analyze_options_after_stock(
         result.warnings_ar.append("فشل options API؛ اكتمل تحليل السهم دون تعطيل الصفحة")
         return result
     return rank_option_chain(stock_analysis, contracts, settings)
-

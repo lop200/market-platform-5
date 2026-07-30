@@ -86,6 +86,12 @@ def cache_get(db: Session, key: str) -> dict | None:
     return row.value
 
 
+def cache_get_any(db: Session, key: str) -> dict | None:
+    """Return a saved value even after expiry for resilient stale fallbacks."""
+    row = db.get(CacheEntry, key)
+    return row.value if row is not None else None
+
+
 def cache_set(db: Session, key: str, value: dict, expires_at: datetime) -> None:
     row = db.get(CacheEntry, key) or CacheEntry(key=key)
     row.value = value

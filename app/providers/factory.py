@@ -32,6 +32,7 @@ def get_market_data_provider() -> MarketDataAdapter:
                 settings.alpaca_api_secret,
                 data_base_url=settings.alpaca_data_base_url,
                 feed=settings.alpaca_feed,
+                overnight_feed=settings.alpaca_overnight_feed,
             ),
             settings,
         )

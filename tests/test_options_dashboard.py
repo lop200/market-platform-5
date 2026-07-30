@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -16,20 +16,29 @@ from app.options.service import analyze_options_after_stock
 NOW = datetime(2026, 7, 30, 15, 0, tzinfo=timezone.utc)
 
 
-def stock(status: str = "conditional_entry") -> dict:
+def stock(status: str = "conditional_entry", trend: str = "صاعد") -> dict:
     valid = status == "conditional_entry"
+    bearish = trend == "هابط"
     return {
         "symbol": "AAPL",
         "status": status,
-        "trend": "صاعد",
-        "quote": {"price": 200.0, "feed": "sip", "age_seconds": 2},
+        "trend": trend,
+        "quote": {
+            "price": 200.0, "bid": 199.95, "ask": 200.05,
+            "feed": "sip", "age_seconds": 2,
+        },
         "data_quality": {"valid_for_plan": valid},
         "trade_plan": (
             {
                 "entry_from": 200.0,
-                "stop": 196.0,
-                "targets": [{"price": 208.0}, {"price": 212.0}],
+                "stop": 204.0 if bearish else 196.0,
+                "targets": (
+                    [{"price": 192.0}, {"price": 188.0}]
+                    if bearish else [{"price": 208.0}, {"price": 212.0}]
+                ),
                 "risk_reward": 2.0,
+                "valid_minutes": 10,
+                "expires_at": "2026-07-30T15:10:00+00:00",
             }
             if valid else None
         ),
@@ -101,8 +110,8 @@ def test_holidays_and_early_closes_are_not_actionable_as_regular_options():
     holiday = market_session(datetime(2026, 12, 25, 16, 0, tzinfo=timezone.utc))
     good_friday = market_session(datetime(2026, 4, 3, 16, 0, tzinfo=timezone.utc))
     early_close_after = market_session(datetime(2026, 11, 27, 19, 0, tzinfo=timezone.utc))
-    assert holiday.code == "closed" and not holiday.options_actionable
-    assert good_friday.code == "closed" and not good_friday.options_actionable
+    assert holiday.code == "holiday" and not holiday.options_actionable
+    assert good_friday.code == "holiday" and not good_friday.options_actionable
     assert early_close_after.code == "after_hours" and not early_close_after.options_actionable
 
 
@@ -116,7 +125,8 @@ def test_dte_zero_one_and_outside_7_30_are_rejected():
     ]
     result = rank_option_chain(stock(), contracts, enabled(), now=NOW)
     assert [item.symbol for item in result.ranked_contracts] == ["VALID"]
-    assert result.rejection_reasons["dte"] == 4
+    assert result.rejection_reasons["expired_or_0_1dte"] == 2
+    assert result.rejection_reasons["dte"] == 2
 
 
 def test_wide_spread_low_liquidity_stale_and_missing_greeks_are_rejected():
@@ -180,7 +190,7 @@ def test_options_api_failure_does_not_break_stock_analysis():
 
 
 def test_call_and_put_include_deterministic_targets_risk_and_cost():
-    result = rank_option_chain(
+    call_result = rank_option_chain(
         stock(),
         [
             contract("AAPL260814C00200000", OptionType.CALL),
@@ -189,9 +199,21 @@ def test_call_and_put_include_deterministic_targets_risk_and_cost():
         enabled(),
         now=NOW,
     )
-    assert result.best_call and result.best_put
-    for item in (result.best_call, result.best_put):
-        assert item.contract_cost == item.ask * 100
+    put_result = rank_option_chain(
+        stock(trend="هابط"),
+        [
+            contract("AAPL260814C00200000", OptionType.CALL),
+            contract("AAPL260814P00200000", OptionType.PUT),
+        ],
+        enabled(),
+        now=NOW,
+    )
+    assert call_result.best_call and call_result.best_put is None
+    assert put_result.best_put and put_result.best_call is None
+    assert call_result.rejection_reasons["direction_mismatch"] == 1
+    assert put_result.rejection_reasons["direction_mismatch"] == 1
+    for item in (call_result.best_call, put_result.best_put):
+        assert item.contract_cost == item.entry_price * 100
         assert item.target_2 > item.target_1 > item.mid > item.stop_loss
         assert 0 <= item.liquidity_score <= 100
         assert 0 <= item.suitability_score <= 100
@@ -199,6 +221,72 @@ def test_call_and_put_include_deterministic_targets_risk_and_cost():
         assert item.feed == "opra"
         assert item.quote_age_seconds == 0
         assert item.paper_trading_only
+        assert len(item.target_scenarios) == 3
+        assert item.ranking_components["direction"] == 100
+        assert item.entry_price != item.last
+        assert item.intrinsic_value >= 0
+        assert item.extrinsic_value >= 0
+        assert item.volume_oi_ratio > 0
+        assert item.exit_conditions_ar
+
+
+def test_closed_pre_market_and_after_hours_never_show_entry_now():
+    for instant in (
+        datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc),
+        datetime(2026, 7, 30, 21, 0, tzinfo=timezone.utc),
+    ):
+        stock_case = stock()
+        stock_case["trade_plan"]["expires_at"] = (instant + timedelta(minutes=10)).isoformat()
+        result = rank_option_chain(
+            stock_case,
+            [
+                contract(
+                    "AAPL260814C00200000",
+                    OptionType.CALL,
+                    quote_timestamp=instant,
+                )
+            ],
+            enabled(),
+            now=instant,
+        )
+        assert result.ranked_contracts
+        best = result.ranked_contracts[0]
+        assert not best.actionable
+        assert "دخول مشروط بعد افتتاح السوق" in best.entry_instruction_ar
+        assert "السوق مغلق" in best.status_badges_ar
+        assert result.market["next_options_open_at"]
+
+
+def test_delta_direction_invalid_quote_and_deep_otm_are_rejected():
+    wrong_delta = contract("DELTA", OptionType.CALL)
+    wrong_delta.delta = .2
+    deep = contract("DEEP", OptionType.CALL)
+    deep.strike = 225
+    result = rank_option_chain(
+        stock(),
+        [
+            contract("PUT", OptionType.PUT),
+            contract("CROSSED", OptionType.CALL, bid=5, ask=4),
+            wrong_delta,
+            deep,
+        ],
+        enabled(),
+        now=NOW,
+    )
+    assert result.status == "no_contract"
+    assert result.rejection_reasons["direction_mismatch"] == 1
+    assert result.rejection_reasons["invalid_quote"] == 1
+    assert result.rejection_reasons["delta"] == 1
+    assert result.rejection_reasons["deep_otm"] == 1
+
+
+def test_missing_quote_timestamp_is_stale_and_never_actionable():
+    missing_time = contract("NO_TIME", OptionType.CALL)
+    missing_time.quote_timestamp = None
+    result = rank_option_chain(stock(), [missing_time], enabled(), now=NOW)
+    assert result.status == "no_contract"
+    assert result.rejection_reasons["stale_quote"] == 1
+    assert result.market["options_status"] == "stale"
 
 
 def test_mobile_laptop_shell_preserves_base_site_and_same_page_options():
@@ -210,6 +298,12 @@ def test_mobile_laptop_shell_preserves_base_site_and_same_page_options():
     assert "@media(min-width:1100px)" in html
     for section_id in ("opportunities", "premarketOpportunities", "watchlist"):
         assert f'id="{section_id}"' in html
+    for session_id in (
+        "overnightHours", "premarketHours", "regularHours", "afterHours"
+    ):
+        assert f'id="{session_id}"' in html
+    assert "الأسهم + أوبشن الشركات" in html
+    assert "الأسهم فقط" in html
     stock_html = TestClient(app).get("/stocks/AAPL").text
     assert "overflow-x:hidden" in stock_html
     assert "@media(min-width:760px)" in stock_html

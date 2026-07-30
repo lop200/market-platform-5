@@ -16,6 +16,7 @@ def item(timestamp, **values):
 def alpaca_provider():
     instance = object.__new__(AlpacaProvider)
     instance._feed = "iex"
+    instance._overnight_feed = "iex"
     return instance
 
 
@@ -100,6 +101,18 @@ def test_session_uses_new_york_clock_with_utc_input():
     assert AlpacaProvider._session(datetime(2026, 7, 29, 21, 0, tzinfo=timezone.utc)) == "after_hours"
 
 
+def test_overnight_session_switches_to_boats_and_regular_returns_to_sip():
+    provider = alpaca_provider()
+    provider._feed = "sip"
+    provider._overnight_feed = "boats"
+    assert provider._active_feed(
+        datetime(2026, 7, 30, 1, 0, tzinfo=timezone.utc)
+    ) == "boats"
+    assert provider._active_feed(
+        datetime(2026, 7, 30, 15, 0, tzinfo=timezone.utc)
+    ) == "sip"
+
+
 def test_rfc3339_nanoseconds_are_parsed_as_utc():
     parsed = AlpacaProvider._parse_rfc3339("2026-07-29T08:15:32.123456789Z")
     assert parsed is not None
@@ -151,6 +164,7 @@ def test_debug_snapshot_uses_data_endpoint_and_never_returns_keys(monkeypatch):
     provider._api_secret = "test-secret"
     provider._data_base_url = "https://data.alpaca.markets"
     provider._feed = "sip"
+    provider._active_feed = lambda now=None: "sip"
     result = provider.debug_market_data("QQQ")
 
     assert result["http_status"] == 200

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
         default="sip",
         validation_alias=AliasChoices("ALPACA_DATA_FEED", "ALPACA_FEED"),
     )
+    alpaca_overnight_feed: str = Field(
+        default="boats", alias="ALPACA_OVERNIGHT_FEED"
+    )
     alpaca_options_feed: str = Field(default="opra", alias="ALPACA_OPTIONS_FEED")
     options_enabled: bool = Field(default=False, alias="OPTIONS_ENABLED")
     options_min_dte: int = Field(default=7, alias="OPTIONS_MIN_DTE")
@@ -42,8 +45,27 @@ class Settings(BaseSettings):
     options_min_volume: int = Field(default=10, alias="OPTIONS_MIN_VOLUME")
     options_min_open_interest: int = Field(default=100, alias="OPTIONS_MIN_OPEN_INTEREST")
     options_contract_limit: int = Field(default=3, alias="OPTIONS_CONTRACT_LIMIT")
+    options_min_abs_delta: float = Field(default=0.35, alias="OPTIONS_MIN_ABS_DELTA")
+    options_max_abs_delta: float = Field(default=0.65, alias="OPTIONS_MAX_ABS_DELTA")
+    options_max_otm_pct: float = Field(default=8.0, alias="OPTIONS_MAX_OTM_PCT")
+    options_max_capital_pct: float = Field(default=35.0, alias="OPTIONS_MAX_CAPITAL_PCT")
+    options_max_premium_loss_pct: float = Field(
+        default=35.0, alias="OPTIONS_MAX_PREMIUM_LOSS_PCT"
+    )
+    options_earnings_risk_days: int = Field(default=7, alias="OPTIONS_EARNINGS_RISK_DAYS")
     earnings_provider: str = Field(default="finnhub", alias="EARNINGS_PROVIDER")
-    earnings_cache_seconds: int = Field(default=3600, alias="EARNINGS_CACHE_SECONDS")
+    earnings_cache_seconds: int = Field(default=14_400, alias="EARNINGS_CACHE_SECONDS")
+    earnings_today_cache_seconds: int = Field(
+        default=3_600, alias="EARNINGS_TODAY_CACHE_SECONDS"
+    )
+    earnings_calendar_limit: int = Field(default=120, alias="EARNINGS_CALENDAR_LIMIT")
+    earnings_enrichment_limit: int = Field(
+        default=24, alias="EARNINGS_ENRICHMENT_LIMIT"
+    )
+    earnings_review_days: int = Field(default=10, alias="EARNINGS_REVIEW_DAYS")
+    earnings_no_new_entry_days: int = Field(
+        default=2, alias="EARNINGS_NO_NEW_ENTRY_DAYS"
+    )
     finnhub_api_key: str | None = Field(default=None, alias="FINNHUB_API_KEY")
     news_provider: str = Field(default="none", alias="NEWS_PROVIDER")
     social_sentiment_provider: str = Field(default="none", alias="SOCIAL_SENTIMENT_PROVIDER")

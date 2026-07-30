@@ -13,8 +13,9 @@ class PositionPlan:
 
 
 def risk_reward(entry: float, stop: float, target: float) -> float:
-    risk = entry - stop
-    return round((target - entry) / risk, 2) if risk > 0 else 0.0
+    risk = abs(entry - stop)
+    reward = abs(target - entry)
+    return round(reward / risk, 2) if risk > 0 else 0.0
 
 
 def position_size(
@@ -27,7 +28,7 @@ def position_size(
 ) -> PositionPlan:
     capital_usd = capital_sar / usd_sar_rate
     risk_budget_usd = capital_usd * risk_pct / 100
-    risk_per_share = max(entry - stop, 0)
+    risk_per_share = abs(entry - stop)
     if risk_per_share <= 0:
         return PositionPlan(0, 0, 0, 0, [])
     by_risk = int(risk_budget_usd / risk_per_share + 1e-9)
@@ -35,7 +36,7 @@ def position_size(
     shares = max(0, min(by_risk, by_cash))
     value = shares * entry
     loss_sar = shares * risk_per_share * usd_sar_rate
-    profits = [round(shares * max(target - entry, 0) * usd_sar_rate, 2) for target in targets]
+    profits = [round(shares * abs(target - entry) * usd_sar_rate, 2) for target in targets]
     return PositionPlan(
         shares=shares,
         position_value_usd=round(value, 2),

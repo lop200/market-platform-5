@@ -24,6 +24,10 @@ async def lifespan(app: FastAPI):
     started = settings.enable_self_audit_scheduler and not os.environ.get("PYTEST_CURRENT_TEST")
     if started:
         start_audit_scheduler()
+    if settings.finnhub_api_key and not os.environ.get("PYTEST_CURRENT_TEST"):
+        # Warm the saved earnings calendar without delaying application startup
+        # or any web response. The service itself serves cache/stale fallback.
+        routes_dashboard._executor.submit(routes_dashboard._refresh_earnings)
     yield
     if started:
         stop_audit_scheduler()
@@ -58,6 +62,10 @@ def health() -> dict:
         "env": settings.app_env,
         "market_data_provider": provider_status,
         "stock_feed": settings.alpaca_feed if settings.market_data_provider == "alpaca" else settings.market_data_provider,
+        "stock_overnight_feed": (
+            settings.alpaca_overnight_feed
+            if settings.market_data_provider == "alpaca" else None
+        ),
         "options_enabled": settings.options_enabled,
         "options_feed": settings.alpaca_options_feed if settings.options_enabled else "disabled",
         "paper_trading_only": True,

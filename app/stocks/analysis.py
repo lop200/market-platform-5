@@ -292,29 +292,45 @@ def analyze_single_stock(
     status_ar = "لا توجد نقطة دخول مناسبة حاليًا"
     entry_from = entry_to = stop = rr = None
     targets: list[dict] = []
-    if quote and quote.ask and price and indicators:
+    if quote and quote.ask and quote.bid and price and indicators:
         atr = max(float(indicators.get("atr") or price * .02), price * .005)
         support = float(indicators.get("support") or price - atr)
         resistance = float(indicators.get("resistance") or price + atr)
-        entry_from = round(max(float(quote.ask), resistance + .01), 2) if strategy and strategy.strategy_id in {
-            "volume_breakout", "opening_range_breakout"
-        } else round(max(float(quote.ask), price), 2)
-        stop = round(max(.01, min(support - .01, entry_from - atr * .8)), 2)
-        if entry_from > stop:
-            risk = entry_from - stop
+        bearish_plan = bool(strategy and "breakdown" in strategy.strategy_id)
+        if bearish_plan:
+            entry_from = round(min(float(quote.bid), support - .01), 2)
+            stop = round(max(resistance + .01, entry_from + atr * .8), 2)
+        else:
+            entry_from = (
+                round(max(float(quote.ask), resistance + .01), 2)
+                if strategy and strategy.strategy_id in {
+                    "volume_breakout", "opening_range_breakout"
+                }
+                else round(max(float(quote.ask), price), 2)
+            )
+            stop = round(max(.01, min(support - .01, entry_from - atr * .8)), 2)
+        if entry_from != stop:
+            risk = abs(entry_from - stop)
             target_prices = [
-                round(entry_from + risk * settings.min_risk_reward, 2),
-                round(entry_from + risk * (settings.min_risk_reward + 1), 2),
+                round(entry_from + (-1 if bearish_plan else 1) * risk * settings.min_risk_reward, 2),
+                round(entry_from + (-1 if bearish_plan else 1) * risk * (settings.min_risk_reward + 1), 2),
             ]
-            resistance_2 = round(max(target_prices[-1], resistance + atr), 2)
-            if resistance_2 > target_prices[-1] * 1.01:
-                target_prices.append(resistance_2)
-            entry_to = round(entry_from + min(atr * .2, entry_from * .01), 2)
+            extension = round(
+                entry_from + (-1 if bearish_plan else 1)
+                * risk * (settings.min_risk_reward + 1.8),
+                2,
+            )
+            if extension > 0:
+                target_prices.append(extension)
+            entry_to = round(
+                entry_from + (-1 if bearish_plan else 1) * min(atr * .2, entry_from * .01),
+                2,
+            )
             rr = risk_reward(entry_from, stop, target_prices[0])
             targets = [{
                 "price": target,
                 "label": f"المستوى {index}",
-                "profit_pct": round((target / entry_from - 1) * 100, 2),
+                "profit_pct": round(abs(target / entry_from - 1) * 100, 2),
             } for index, target in enumerate(target_prices, 1)]
             if strategy and strategy.strategy_id != "no_trade" and quality.valid_for_plan:
                 status = "conditional_entry"
@@ -324,7 +340,7 @@ def analyze_single_stock(
         entry_from = entry_to = stop = rr = None
         targets = []
 
-    stop_distance_pct = round((entry_from - stop) / entry_from * 100, 2) if entry_from and stop else None
+    stop_distance_pct = round(abs(entry_from - stop) / entry_from * 100, 2) if entry_from and stop else None
     target_distance = targets[0]["profit_pct"] if targets else None
     atr_pct = float(indicators.get("atr") or 0) / price * 100 if price else None
     probabilities = _probabilities(indicators, regime, rr) if status == "conditional_entry" else None
@@ -385,6 +401,8 @@ def analyze_single_stock(
     feed = quote.feed.lower() if quote and quote.feed else None
     if feed == "sip" and (fresh_quote or fresh_trade) and acceptable_bar:
         data_status = "live_sip"
+    elif feed in {"boats", "overnight"} and (fresh_quote or fresh_trade) and acceptable_bar:
+        data_status = "live_overnight"
     elif feed != "sip" and (fresh_quote or fresh_trade) and acceptable_bar:
         data_status = "live_partial"
     elif quote and quote.age_seconds <= settings.max_quote_age_seconds:
@@ -402,6 +420,8 @@ def analyze_single_stock(
             "spread": _safe_number(quote.spread) if quote else None,
             "spread_pct": _safe_number(quote.spread_pct, 2) if quote else None,
             "change_pct": _safe_number(change_pct, 2),
+            "latest_trade": _safe_number(quote.last_trade) if quote else None,
+            "last_bar": _safe_number(quote.bar_close) if quote else None,
             "volume": volume,
             "average_volume": _safe_number(average_volume, 0),
             "relative_volume": indicators.get("relative_volume"),
@@ -479,7 +499,7 @@ def analyze_single_stock(
             "position_size": plan,
         } if status == "conditional_entry" else None),
         "probabilities": probabilities,
-        "probability_disclaimer": "تقدير احتمالي وليس ضمانًا أو نسبة نجاح تاريخية إلا عند ذكر ذلك صراحة.",
+        "probability_disclaimer": "النسب تقديرية مبنية على البيانات الحالية وليست ضمانًا للربح. هذا التقدير ليس ضمانًا.",
         "time_estimate": time_estimate,
         "scenarios": {
             "bullish": (

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Protocol
 
 import httpx
@@ -68,7 +68,11 @@ class AlpacaOptionProvider:
                 trade = snapshot.get("latestTrade") or {}
                 daily = snapshot.get("dailyBar") or {}
                 greeks = snapshot.get("greeks") or {}
-                timestamp = quote.get("t") or trade.get("t")
+                quote_timestamp = quote.get("t")
+                trade_timestamp = trade.get("t")
+                parse_time = lambda value: (
+                    datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+                )
                 contracts.append(RawOptionContract(
                     symbol=contract_symbol,
                     underlying_symbol=root,
@@ -77,6 +81,7 @@ class AlpacaOptionProvider:
                     expiration=expiry,
                     bid=quote.get("bp"),
                     ask=quote.get("ap"),
+                    last=trade.get("p"),
                     volume=daily.get("v"),
                     open_interest=snapshot.get("openInterest"),
                     delta=greeks.get("delta"),
@@ -84,13 +89,10 @@ class AlpacaOptionProvider:
                     theta=greeks.get("theta"),
                     vega=greeks.get("vega"),
                     iv=snapshot.get("impliedVolatility"),
-                    quote_timestamp=(
-                        datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-                        if timestamp else datetime.now(timezone.utc)
-                    ),
+                    quote_timestamp=parse_time(quote_timestamp),
+                    trade_timestamp=parse_time(trade_timestamp),
                     feed=self.feed,
                 ))
             except (TypeError, ValueError):
                 continue
         return contracts
-

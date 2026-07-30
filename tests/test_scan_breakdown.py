@@ -1,5 +1,41 @@
+from datetime import datetime, timedelta, timezone
+
 from app.api.routes_opportunities import _scan_breakdown
+from app.config import Settings
 from app.db.models import StockCandidate, StockScanRun
+from app.opportunities.scanner import _fresh_for_scan
+from app.providers.base import Quote
+
+
+def overnight_quote(*, quote_seconds: int, bar_seconds: int) -> Quote:
+    now = datetime.now(timezone.utc)
+    quote_time = (now - timedelta(seconds=quote_seconds)).isoformat()
+    bar_time = (now - timedelta(seconds=bar_seconds)).isoformat()
+    return Quote(
+        symbol="GRAB",
+        price=3.35,
+        bid=3.33,
+        ask=3.36,
+        volume=100,
+        as_of=quote_time,
+        is_delayed=False,
+        provider="alpaca",
+        feed="boats",
+        session="overnight",
+        bid_as_of=quote_time,
+        ask_as_of=quote_time,
+        bar_as_of=bar_time,
+    )
+
+
+def test_overnight_scanner_excludes_stale_or_inactive_symbols():
+    settings = Settings(max_quote_age_seconds=90, max_candle_age_seconds=180)
+    assert _fresh_for_scan(
+        overnight_quote(quote_seconds=5, bar_seconds=60), settings
+    )
+    assert not _fresh_for_scan(
+        overnight_quote(quote_seconds=190, bar_seconds=60_000), settings
+    )
 
 
 def test_scan_breakdown_is_accounted_and_builds_watchlist(db_session):

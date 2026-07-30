@@ -28,6 +28,15 @@ def dashboard(request: Request):
     )
 
 
+@router.get("/earnings", response_class=HTMLResponse)
+def earnings_dashboard(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="earnings.html",
+        context={},
+    )
+
+
 @router.get("/results", response_class=HTMLResponse)
 def results_dashboard(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(

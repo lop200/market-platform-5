@@ -27,6 +27,8 @@ services:
         value: https://data.alpaca.markets
       - key: ALPACA_DATA_FEED
         value: sip
+      - key: ALPACA_OVERNIGHT_FEED
+        value: boats
       - key: ALPACA_OPTIONS_FEED
         value: opra
       - key: OPTIONS_ENABLED
@@ -45,10 +47,32 @@ services:
         value: "100"
       - key: OPTIONS_CONTRACT_LIMIT
         value: "3"
+      - key: OPTIONS_MIN_ABS_DELTA
+        value: "0.35"
+      - key: OPTIONS_MAX_ABS_DELTA
+        value: "0.65"
+      - key: OPTIONS_MAX_OTM_PCT
+        value: "8"
+      - key: OPTIONS_MAX_CAPITAL_PCT
+        value: "35"
+      - key: OPTIONS_MAX_PREMIUM_LOSS_PCT
+        value: "35"
+      - key: OPTIONS_EARNINGS_RISK_DAYS
+        value: "7"
       - key: EARNINGS_PROVIDER
         value: finnhub
       - key: EARNINGS_CACHE_SECONDS
+        value: "14400"
+      - key: EARNINGS_TODAY_CACHE_SECONDS
         value: "3600"
+      - key: EARNINGS_CALENDAR_LIMIT
+        value: "120"
+      - key: EARNINGS_ENRICHMENT_LIMIT
+        value: "24"
+      - key: EARNINGS_REVIEW_DAYS
+        value: "10"
+      - key: EARNINGS_NO_NEW_ENTRY_DAYS
+        value: "2"
       - key: OPENAI_MODEL
         value: gpt-5-mini
       - key: OPENAI_DAILY_BUDGET_USD

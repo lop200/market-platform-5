@@ -30,6 +30,32 @@ from app.providers.base import MarketDataAdapter, Quote
 from app.providers.factory import get_option_data_provider
 
 
+def _fresh_for_scan(quote: Quote, settings: Settings) -> bool:
+    """Exclude inactive/stale symbols before ranking or watchlist creation."""
+    if (
+        quote.bid is None
+        or quote.ask is None
+        or quote.bid <= 0
+        or quote.ask < quote.bid
+    ):
+        return False
+    quote_ages = [
+        age for age in (quote.bid_age_seconds, quote.ask_age_seconds)
+        if age is not None
+    ]
+    if not quote_ages or max(quote_ages) > settings.max_quote_age_seconds:
+        return False
+    if quote.session == "overnight":
+        if (quote.feed or "").lower() not in {"boats", "overnight"}:
+            return False
+        if (
+            quote.bar_age_seconds is None
+            or quote.bar_age_seconds > settings.max_candle_age_seconds
+        ):
+            return False
+    return True
+
+
 def _quote_time(quote: Quote) -> datetime:
     value = datetime.fromisoformat(quote.as_of.replace("Z", "+00:00"))
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
@@ -278,6 +304,28 @@ def scan_market(
                 {"stage": "failed", "failure_category": "تعذر جلب البيانات"},
             )
             continue
+        if not _fresh_for_scan(quote, settings):
+            staged[symbol] = (
+                "skipped",
+                ["بيانات الجلسة الحالية قديمة أو لا يوجد نشاط حديث كافٍ"],
+                {
+                    "stage": "skipped",
+                    "skip_category": "بيانات قديمة أو سهم غير نشط",
+                    "price": quote.price,
+                    "feed": quote.feed,
+                    "quote_age_seconds": max(
+                        (
+                            age for age in (
+                                quote.bid_age_seconds, quote.ask_age_seconds
+                            )
+                            if age is not None
+                        ),
+                        default=None,
+                    ),
+                    "bar_age_seconds": quote.bar_age_seconds,
+                },
+            )
+            continue
         if min_price is not None and quote.price < min_price:
             staged[symbol] = (
                 "skipped", ["السعر خارج الفلتر الاختياري"],
@@ -379,13 +427,21 @@ def scan_market(
             "symbol": item.symbol,
             "status": "conditional_entry",
             "trend": "هابط" if "breakdown" in item.strategy_id else "صاعد",
-            "quote": {"price": item.current_price, "feed": item.data_feed},
+            "quote": {
+                "price": item.current_price,
+                "bid": item.bid,
+                "ask": item.ask,
+                "age_seconds": item.quote_age_seconds,
+                "feed": item.data_feed,
+            },
             "data_quality": {"valid_for_plan": True},
             "trade_plan": {
                 "entry_from": item.entry_zone.from_price,
                 "stop": item.stop_loss,
                 "targets": [{"price": target.price} for target in item.targets],
                 "risk_reward": item.risk_reward,
+                "valid_minutes": item.valid_for_minutes,
+                "expires_at": item.expires_at.isoformat(),
             },
         }
         item.options = analyze_options_after_stock(

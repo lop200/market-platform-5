@@ -35,7 +35,8 @@ def calculate_indicators(daily: pd.DataFrame, intraday: pd.DataFrame) -> dict[st
         "ema9": float(close.ewm(span=9, adjust=False).mean().iloc[-1]),
         "ema20": float(close.ewm(span=20, adjust=False).mean().iloc[-1]),
         "ema50": float(close.ewm(span=50, adjust=False).mean().iloc[-1]),
-        "sma200": float(daily_close.rolling(200).mean().iloc[-1]) if len(daily_close) >= 200 else None,
+        "ema200": float(daily_close.ewm(span=200, adjust=False).mean().iloc[-1])
+        if len(daily_close) >= 200 else None,
         "rsi": float((100 - 100 / (1 + rs)).iloc[-1]),
         "macd": float(macd.iloc[-1]),
         "macd_signal": float(macd.ewm(span=9, adjust=False).mean().iloc[-1]),
@@ -48,6 +49,8 @@ def calculate_indicators(daily: pd.DataFrame, intraday: pd.DataFrame) -> dict[st
         "session_low": float(intraday["low"].min()),
         "opening_range_high": float(intraday["high"].head(15).max()),
         "opening_range_low": float(intraday["low"].head(15).min()),
+        "previous_day_high": float(daily["high"].iloc[-2]) if len(daily) >= 2 else None,
+        "previous_day_low": float(daily["low"].iloc[-2]) if len(daily) >= 2 else None,
         "gap_pct": float((intraday["open"].iloc[0] / daily_close.iloc[-2] - 1) * 100)
         if len(daily_close) >= 2
         else 0,

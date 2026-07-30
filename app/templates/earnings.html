@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07111d">
+  <title>تقويم إعلانات الشركات — مرصاد</title>
+  <style>
+    :root{--bg:#07111d;--surface:#0e1927;--surface2:#142236;--line:#253a53;--text:#f3f7fc;--muted:#91a2b8;--green:#3ed29a;--yellow:#f5c45c;--red:#ff7380;--blue:#69b9ff}
+    *{box-sizing:border-box}html,body{overflow-x:hidden}body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif}.shell{width:min(1320px,100%);margin:auto;padding:10px}.topbar,.hero,.stats,.filters,.event{background:var(--surface);border:1px solid var(--line);border-radius:16px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:9px;padding:10px 12px;position:sticky;top:5px;z-index:20}.brand{display:flex;align-items:center;gap:9px;min-width:0}.icon{width:39px;height:39px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(145deg,#1c4e77,#122b45);color:var(--blue);flex:none}.brand h1{font-size:1rem;margin:0}.brand small,.muted{color:var(--muted)}.button,.back{border:1px solid var(--line);background:var(--surface2);color:var(--text);border-radius:10px;padding:9px 11px;font:inherit;text-decoration:none;cursor:pointer}.button.primary{background:var(--blue);color:#061827;border:0;font-weight:800}.hero{padding:16px;margin:11px 0;background:linear-gradient(135deg,#102b45,#0e1927)}.hero h2{font-size:1.35rem;margin:4px 0 7px}.hero p{margin:0;color:#c7d3e0;line-height:1.7}.status-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}.chip,.badge{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:5px 8px;font-size:.69rem}.chip.live{color:#8df0c3;background:#12382c;border-color:#286f55}.chip.stale{color:#ffe09a;background:#413617;border-color:#725c23}.chip.error{color:#ffb3ba;background:#401c23;border-color:#74303b}.notice{display:none;margin:10px 0;padding:12px;border-radius:12px;background:#3c2f16;border:1px solid #765c22;color:#ffe5a7;line-height:1.65;font-size:.78rem}.notice.show{display:block}.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:10px;margin-bottom:10px}.stat{min-width:0;background:#091522;border-radius:10px;padding:10px}.stat small{display:block;color:var(--muted);font-size:.65rem}.stat b{display:block;font-size:1.25rem;margin-top:4px}.tabs{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 9px}.tab{white-space:nowrap;border:1px solid var(--line);background:var(--surface);color:#cbd7e4;border-radius:999px;padding:8px 11px;cursor:pointer}.tab.active{background:#17466b;color:#fff;border-color:#3479aa}.filters{display:grid;grid-template-columns:1fr;gap:8px;padding:10px;margin-bottom:12px}.filters input,.filters select{width:100%;min-width:0;background:#08131f;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}.checks{display:flex;flex-wrap:wrap;gap:6px}.check{display:flex;align-items:center;gap:5px;background:#0b1724;border:1px solid var(--line);border-radius:999px;padding:7px 9px;font-size:.72rem}.day{margin:0 0 16px}.day-title{display:flex;justify-content:space-between;align-items:end;gap:8px;margin:0 2px 8px}.day-title h2{font-size:1rem;margin:0}.day-title span{font-size:.7rem;color:var(--muted)}.session{margin:0 0 11px}.session-title{font-size:.78rem;color:var(--blue);margin:0 2px 7px}.events{display:grid;gap:9px}.event{padding:13px;min-width:0}.event-head{display:flex;justify-content:space-between;align-items:start;gap:9px}.company{min-width:0}.symbol{direction:ltr;color:var(--blue);font-size:1.12rem}.company-name{display:block;color:#c9d5e2;font-size:.75rem;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.badge.before{background:#173b57;color:#9bd4ff}.badge.after{background:#302651;color:#c9b7ff}.badge.unknown{background:#303743;color:#ced6df}.badge.beat{background:#163d2e;color:#8aefbf}.badge.miss{background:#48232a;color:#ffb0b7}.badge.match{background:#3d351c;color:#ffe094}.countdown{font-size:1rem;font-weight:850;margin:11px 0;color:var(--yellow)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.metric{background:#08131f;border-radius:9px;padding:8px;min-width:0}.metric small{display:block;color:var(--muted);font-size:.64rem}.metric b{display:block;margin-top:4px;font-size:.82rem;overflow-wrap:anywhere}.metric.positive{border-right:2px solid var(--green)}.metric.negative{border-right:2px solid var(--red)}.result-box{margin-top:10px;padding:10px;border-radius:10px;background:#0a1721;border:1px solid var(--line)}.result-box h3{font-size:.83rem;margin:0 0 8px}.warning{margin:10px 0 0;padding:9px;border-right:3px solid var(--yellow);background:#201d15;border-radius:8px;color:#eadfbe;font-size:.75rem;line-height:1.6}.accordion{margin-top:9px;border-top:1px solid var(--line);padding-top:8px}.accordion summary{cursor:pointer;color:#d5e1ec;font-size:.78rem;font-weight:700}.scenario-grid{display:grid;gap:7px;margin-top:8px}.scenario{padding:9px;background:#08131f;border-radius:9px;font-size:.73rem;line-height:1.6}.scenario.positive{border-right:3px solid var(--green)}.scenario.neutral{border-right:3px solid var(--yellow)}.scenario.negative{border-right:3px solid var(--red)}.actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}.actions a{text-align:center;text-decoration:none;color:var(--blue);border:1px solid var(--line);border-radius:9px;padding:8px;font-size:.75rem}.empty{text-align:center;padding:28px;border:1px dashed var(--line);border-radius:14px;color:var(--muted)}.footer-note{margin:14px 0;padding:12px;border-radius:12px;background:#1c1813;border:1px solid #4d3c25;color:#e6d8bd;line-height:1.65;font-size:.74rem}
+    @media(min-width:720px){.shell{padding:14px}.stats{grid-template-columns:repeat(6,minmax(0,1fr))}.filters{grid-template-columns:1.1fr .8fr .8fr}.checks{grid-column:1/-1}.events{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:repeat(4,minmax(0,1fr))}.scenario-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media(min-width:1120px){.events{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand"><span class="icon" aria-hidden="true"><svg width="25" height="25" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M7 3v4M17 3v4M3 10h18M8 15h3l2-3 2 6 2-3h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><h1>إعلانات الشركات</h1><small>تقويم Finnhub المنظم</small></div></div>
+    <a class="back" href="/">الرئيسية</a>
+  </header>
+
+  <section class="hero">
+    <small>المصدر الوحيد: Finnhub</small>
+    <h2>الموعد، التوقعات، والنتيجة في مكان واحد</h2>
+    <p>وقت نيويورك هو المرجع، ويُحوّل تلقائيًا إلى الرياض عند توفر ساعة مؤكدة. لا يتم اختلاق وقت عندما يعيد Finnhub تاريخًا فقط.</p>
+    <div class="status-row"><span class="chip" id="connection">حالة Finnhub: —</span><span class="chip" id="updated">آخر تحديث: —</span><span class="chip" id="age">عمر البيانات: —</span><span class="chip" id="cache">Cache: —</span></div>
+  </section>
+  <div class="notice" id="notice"></div>
+
+  <section class="stats">
+    <div class="stat"><small>إعلانات اليوم</small><b id="todayStat">0</b></div>
+    <div class="stat"><small>إعلانات الغد</small><b id="tomorrowStat">0</b></div>
+    <div class="stat"><small>قائمة المراقبة</small><b id="watchStat">0</b></div>
+    <div class="stat"><small>قبل الافتتاح</small><b id="beforeStat">0</b></div>
+    <div class="stat"><small>بعد الإغلاق</small><b id="afterStat">0</b></div>
+    <div class="stat"><small>تم الإعلان</small><b id="reportedStat">0</b></div>
+  </section>
+
+  <nav class="tabs" aria-label="نطاق التقويم">
+    <button class="tab active" data-tab="today">اليوم</button>
+    <button class="tab" data-tab="tomorrow">غدًا</button>
+    <button class="tab" data-tab="week">هذا الأسبوع</button>
+    <button class="tab" data-tab="next_week">الأسبوع القادم</button>
+    <button class="tab" data-tab="reported">تم الإعلان</button>
+    <button class="tab" data-tab="watchlist">قائمة المراقبة</button>
+  </nav>
+
+  <section class="filters">
+    <input id="search" placeholder="ابحث بالرمز أو اسم الشركة" aria-label="بحث">
+    <select id="sector"><option value="">كل القطاعات</option></select>
+    <select id="session"><option value="">كل أوقات الإعلان</option><option value="before_market">قبل الافتتاح</option><option value="after_market">بعد الإغلاق</option><option value="unspecified">وقت غير محدد</option></select>
+    <div class="checks">
+      <label class="check"><input type="checkbox" id="watchOnly"> قائمة المراقبة</label>
+      <label class="check"><input type="checkbox" id="hasEps"> يوجد EPS متوقع</label>
+      <label class="check"><input type="checkbox" id="hasRevenue"> يوجد Revenue متوقع</label>
+      <label class="check"><input type="checkbox" id="hasResults"> صدرت النتائج</label>
+      <label class="check"><input type="checkbox" id="beatOnly"> Beat</label>
+      <label class="check"><input type="checkbox" id="missOnly"> Miss</label>
+      <button class="button primary" id="refresh" type="button">تحديث Finnhub</button>
+    </div>
+  </section>
+
+  <section id="calendar"><div class="empty">جارٍ قراءة آخر تقويم محفوظ…</div></section>
+  <p class="footer-note">هذه البيانات للمراجعة وليست توصية شراء. لا يظهر اتجاه مؤكد قبل الأرباح، وقد تحدث فجوة سعرية أو IV Crush. السيناريوهات تقديرية ويجب ربطها بتحليل السهم والبيانات الحديثة.</p>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+let events=[],activeTab="today",meta={};
+const safe=v=>v!==null&&v!==undefined&&Number.isFinite(Number(v));
+const dash=v=>v===null||v===undefined||v===""?"—":String(v);
+const dec=(v,d=2)=>safe(v)?Number(v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}):"—";
+function compact(v){if(!safe(v))return"—";const n=Number(v),a=Math.abs(n);if(a>=1e9)return(n/1e9).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" مليار";if(a>=1e6)return(n/1e6).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" مليون";if(a>=1e3)return(n/1e3).toLocaleString("en-US",{maximumFractionDigits:2})+" ألف";return n.toLocaleString("en-US",{maximumFractionDigits:2})}
+const dateAr=v=>new Intl.DateTimeFormat("ar-SA",{weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:"America/New_York"}).format(new Date(v+"T12:00:00Z"));
+const shortDate=v=>v?new Intl.DateTimeFormat("ar-SA",{year:"numeric",month:"short",day:"numeric",timeZone:"America/New_York"}).format(new Date(v+"T12:00:00Z")):"—";
+const timeIn=(v,zone)=>v?new Intl.DateTimeFormat("ar-SA",{hour:"2-digit",minute:"2-digit",timeZone:zone,timeZoneName:"short"}).format(new Date(v)):"—";
+const metric=(l,v,cls="")=>`<div class="metric ${cls}"><small>${l}</small><b>${dash(v)}</b></div>`;
+function badgeClass(item){return item.earnings_hour==="before_market"?"before":item.earnings_hour==="after_market"?"after":"unknown"}
+function resultBadge(item){const map={beat:["beat","تفوق"],miss:["miss","أقل من المتوقع"],match:["match","مطابق"],mixed:["match","مختلط"],incomplete:["unknown","بيانات ناقصة"]},x=map[item.result_status]||["unknown","قادم"];return `<span class="badge ${x[0]}">${x[1]}</span>`}
+function scenarioCard(s,key){if(!s)return"";const names={positive:"إيجابي",neutral:"محايد",negative:"سلبي"};return `<div class="scenario ${key}"><b>${s.label_ar||names[key]}</b><p>${s.conditions_ar||"—"}</p>${metric(key==="positive"?"مستوى الاختراق":key==="negative"?"مستوى الكسر":"الدعم",dec(s.breakout_level??s.breakdown_level??s.support))}${metric(key==="neutral"?"المقاومة":key==="negative"?"الإبطال":"الهدف التالي",dec(s.resistance??s.invalidation_level??s.next_target))}</div>`}
+function card(item){
+  const passed=item.has_passed;
+  const result=passed?`<div class="result-box"><h3>${item.result_label_ar}</h3><div class="grid">${metric("EPS الفعلي",dec(item.eps_actual),safe(item.eps_surprise)&&item.eps_surprise>=0?"positive":"negative")}${metric("EPS المتوقع",dec(item.eps_estimate))}${metric("EPS Surprise",safe(item.eps_surprise_percent)?dec(item.eps_surprise_percent)+"%":"—")}${metric("الإيرادات الفعلية",compact(item.revenue_actual),safe(item.revenue_surprise)&&item.revenue_surprise>=0?"positive":"negative")}${metric("الإيرادات المتوقعة",compact(item.revenue_estimate))}${metric("Revenue Surprise",safe(item.revenue_surprise_percent)?dec(item.revenue_surprise_percent)+"%":"—")}${metric("حركة السهم بعد الإعلان",safe(item.stock_move_after_announcement_percent)?dec(item.stock_move_after_announcement_percent)+"%":"—")}${metric("الجلسة التالية",safe(item.next_session_move_percent)?dec(item.next_session_move_percent)+"%":"—")}</div></div>`:"";
+  const s=item.scenarios||{};
+  return `<article class="event"><div class="event-head"><div class="company"><b class="symbol">${item.symbol}</b><span class="company-name">${dash(item.company_name)}</span></div><div class="badges"><span class="badge ${badgeClass(item)}">${item.session_label}</span>${passed?resultBadge(item):`<span class="badge unknown">${item.appointment_status_ar}</span>`}${item.is_watchlist?'<span class="badge beat">مراقبة</span>':""}</div></div><div class="countdown">${item.remaining_text_ar}</div><div class="grid">${metric("التاريخ",shortDate(item.earnings_date))}${metric("القطاع",item.sector)}${metric("وقت نيويورك",timeIn(item.event_time_new_york,"America/New_York"))}${metric("وقت الرياض",timeIn(item.event_time_riyadh,"Asia/Riyadh"))}${metric("EPS المتوقع",dec(item.eps_estimate))}${metric("EPS السابق",dec(item.eps_previous))}${metric("Revenue المتوقع",compact(item.revenue_estimate))}${metric("Revenue السابق",compact(item.revenue_previous))}${metric("عدد المحللين",item.number_of_analysts)}${metric("القيمة السوقية",compact(item.market_cap))}${metric("مخاطر الإعلان",item.earnings_risk_ar)}${metric("آخر تحديث",item.last_updated?new Date(item.last_updated).toLocaleString("ar-SA"):"—")}</div>${result}<p class="warning">${item.prevent_new_entry?"يُمنع الدخول الجديد لقرب الإعلان.":item.warning_required?"تحتاج الفرصة إلى تحذير أرباح وإدارة مخاطر إضافية.":"يسمح بتحليل فني عادي مع مراقبة الحدث."}${item.iv_crush_warning?" خطر IV Crush قائم للعقود قبل الإعلان.":""}</p><details class="accordion"><summary>توقعات ما قبل الإعلان</summary><div class="grid">${metric("EPS المتوقع",dec(item.eps_estimate))}${metric("Revenue المتوقع",compact(item.revenue_estimate))}${metric("مقارنة بالربع السابق",safe(item.eps_previous)&&safe(item.eps_estimate)?dec(item.eps_estimate-item.eps_previous):"—")}${metric("اتجاه التقديرات",item.estimate_direction)}${metric("عدد المحللين",item.number_of_analysts)}${metric("مدى التقديرات",safe(item.estimate_range_low)||safe(item.estimate_range_high)?`${dec(item.estimate_range_low)} – ${dec(item.estimate_range_high)}`:"—")}${metric("متوسط الحركة التاريخية",safe(item.historical_average_move_percent)?dec(item.historical_average_move_percent)+"%":"—")}${metric("الحركة الضمنية",safe(item.implied_move_percent)?dec(item.implied_move_percent)+"%":"—")}${metric("IV",safe(item.current_iv)?dec(item.current_iv*100)+"%":"—")}${metric("IV Crush",item.iv_crush_warning?"تحذير":"—")}</div></details><details class="accordion"><summary>سيناريوهات ما بعد الإعلان</summary><div class="scenario-grid">${scenarioCard(s.positive,"positive")}${scenarioCard(s.neutral,"neutral")}${scenarioCard(s.negative,"negative")}</div><p class="warning">هذه سيناريوهات تقديرية وليست توقعًا مؤكدًا.</p></details><div class="actions"><a href="/stocks/${encodeURIComponent(item.symbol)}">تحليل السهم</a><a href="https://finnhub.io/" target="_blank" rel="noopener noreferrer">المصدر: Finnhub</a></div></article>`;
+}
+function tabMatch(item){const d=Number(item.remaining_days);if(activeTab==="today")return item.is_today&&!item.has_passed;if(activeTab==="tomorrow")return item.is_tomorrow&&!item.has_passed;if(activeTab==="week")return !item.has_passed&&d>=0&&d<=7;if(activeTab==="next_week")return !item.has_passed&&d>7&&d<=14;if(activeTab==="reported")return item.has_passed;if(activeTab==="watchlist")return item.is_watchlist;return true}
+function filtered(){
+  const q=$("#search").value.trim().toUpperCase(),sector=$("#sector").value,session=$("#session").value;
+  return events.filter(item=>tabMatch(item)&&(!q||item.symbol.includes(q)||(item.company_name||"").toUpperCase().includes(q))&&(!sector||item.sector===sector)&&(!session||item.earnings_hour===session)&&(!$("#watchOnly").checked||item.is_watchlist)&&(!$("#hasEps").checked||safe(item.eps_estimate))&&(!$("#hasRevenue").checked||safe(item.revenue_estimate))&&(!$("#hasResults").checked||item.has_passed)&&(!$("#beatOnly").checked||item.result_status==="beat")&&(!$("#missOnly").checked||item.result_status==="miss"));
+}
+function render(){
+  const list=filtered();
+  if(!list.length){$("#calendar").innerHTML='<div class="empty">لا توجد إعلانات مطابقة لهذه التبويبة والفلاتر في آخر بيانات Finnhub المحفوظة.</div>';return}
+  const dates=[...new Set(list.map(x=>x.earnings_date))].sort();
+  $("#calendar").innerHTML=dates.map(day=>{const dayItems=list.filter(x=>x.earnings_date===day),sessions=[["before_market","قبل الافتتاح"],["after_market","بعد الإغلاق"],["unspecified","وقت غير محدد"]];return `<section class="day"><div class="day-title"><h2>${dateAr(day)}</h2><span>${dayItems.length} شركة</span></div>${sessions.map(([code,label])=>{const rows=dayItems.filter(x=>x.earnings_hour===code);return rows.length?`<section class="session"><h3 class="session-title">${label}</h3><div class="events">${rows.map(card).join("")}</div></section>`:""}).join("")}</section>`}).join("");
+}
+function updateMeta(data){
+  meta=data.meta||{};const stats=data.stats||{};
+  $("#todayStat").textContent=stats.today||0;$("#tomorrowStat").textContent=stats.tomorrow||0;$("#watchStat").textContent=stats.watchlist||0;$("#beforeStat").textContent=stats.before_market||0;$("#afterStat").textContent=stats.after_market||0;$("#reportedStat").textContent=stats.reported||0;
+  const state=meta.connection_status==="connected"?(meta.is_stale?"stale":"live"):"error";$("#connection").className="chip "+state;$("#connection").textContent="Finnhub: "+(meta.connection_label_ar||"—");$("#updated").textContent="آخر تحديث: "+(meta.updated_at?new Date(meta.updated_at).toLocaleString("ar-SA"):"—");$("#age").textContent="عمر البيانات: "+(safe(meta.age_seconds)?Math.floor(meta.age_seconds/60)+" دقيقة":"—");$("#cache").textContent="Cache: "+(meta.cache_hit?"مستخدم":"تحديث جديد");
+  if(meta.is_stale||meta.last_error){$("#notice").classList.add("show");$("#notice").innerHTML=`<b>آخر بيانات محفوظة</b><br>${dash(meta.last_error)}<br>آخر تحديث ناجح: ${meta.last_success_at?new Date(meta.last_success_at).toLocaleString("ar-SA"):"—"}`}else $("#notice").classList.remove("show");
+}
+async function load(){
+  try{const response=await fetch("/api/v1/dashboard/earnings"),data=await response.json();events=data.items||[];updateMeta(data);$("#sector").innerHTML='<option value="">كل القطاعات</option>'+(data.sectors||[]).map(x=>`<option>${x}</option>`).join("");if(!events.some(x=>x.is_today&&!x.has_passed)){activeTab=events.some(x=>x.is_tomorrow&&!x.has_passed)?"tomorrow":events.some(x=>!x.has_passed&&Number(x.remaining_days)>=0&&Number(x.remaining_days)<=7)?"week":events.some(x=>!x.has_passed&&Number(x.remaining_days)<=14)?"next_week":events.some(x=>x.has_passed)?"reported":"week";document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===activeTab))}render()}catch{$("#notice").classList.add("show");$("#notice").textContent="تعذر تحميل التقويم المحفوظ. بقية الموقع ما زالت تعمل.";$("#calendar").innerHTML='<div class="empty">اضغط إعادة المحاولة.</div>'}
+}
+document.querySelectorAll(".tab").forEach(tab=>tab.onclick=()=>{activeTab=tab.dataset.tab;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===tab));render()});
+["search","sector","session","watchOnly","hasEps","hasRevenue","hasResults","beatOnly","missOnly"].forEach(id=>$("#"+id).addEventListener(id==="search"?"input":"change",render));
+$("#refresh").onclick=async()=>{const b=$("#refresh");b.disabled=true;b.textContent="جارٍ تحديث Finnhub…";await fetch("/api/v1/dashboard/refresh-events",{method:"POST"});setTimeout(async()=>{await load();b.disabled=false;b.textContent="تحديث Finnhub"},5000)};
+load();
+</script>
+</body>
+</html>

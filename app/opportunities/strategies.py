@@ -47,6 +47,23 @@ def select_strategy(
             return StrategyChoice("no_trade", "لا صفقة", "No Trade", 0, "الانعكاس المبالغ فيه معطل في السوق الهابط", "انتظر استعادة مستوى", "لا يوجد دخول", 5)
         return StrategyChoice("oversold_reversal", "انعكاس مبالغ فيه", "Oversold Reversal", 68, "تشبع بيعي قرب دعم، ويحتاج تأكيدًا إضافيًا", f"استعادة {price:.2f} بحجم متزايد وتباعد إيجابي", "كسر الدعم")
     ema9, ema20, ema50 = ind.get("ema9") or 0, ind.get("ema20") or 0, ind.get("ema50") or 0
+    support = ind.get("support")
+    if (
+        ema9 < ema20 < ema50
+        and (ind.get("macd") or 0) < (ind.get("macd_signal") or 0)
+        and support is not None
+        and price <= support * 1.005
+        and rv >= 1.2
+    ):
+        return StrategyChoice(
+            "support_breakdown",
+            "كسر دعم مع اتجاه هابط",
+            "Support Breakdown",
+            82,
+            "السهم يكسر الدعم مع ترتيب متوسطات هابط وزخم سلبي",
+            f"إغلاق شمعة 5 دقائق أسفل {support:.2f} مع استمرار الحجم",
+            f"العودة والثبات أعلى الدعم {support:.2f}",
+        )
     if ema9 > ema20 > ema50 and (ind.get("macd") or 0) > (ind.get("macd_signal") or 0):
         if price <= ema9 * 1.01 and price >= ema20 * 0.995:
             return StrategyChoice(
@@ -73,6 +90,7 @@ STRATEGY_REGISTRY = {
         ("gap_and_go", "الفجوة والانطلاق"),
         ("opening_range_breakout", "اختراق نطاق الافتتاح"),
         ("oversold_reversal", "انعكاس مبالغ فيه"),
+        ("support_breakdown", "كسر دعم مع اتجاه هابط"),
         ("no_trade", "لا صفقة"),
     ]
 }

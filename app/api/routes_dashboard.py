@@ -8,11 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db import repository
 from app.db.models import NewsItem, StockCandidate, StockOpportunity, StockScanRun
 from app.db.session import SessionLocal, get_db
-from app.events.earnings import fetch_earnings_calendar
-from app.options.market_clock import market_session
+from app.events.earnings import (
+    calendar_stats,
+    get_earnings_snapshot,
+    refresh_earnings_cache,
+)
+from app.options.market_clock import market_session, serialize_market_session
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="company-events")
@@ -43,6 +46,26 @@ def _serialize_opportunity(row: StockOpportunity) -> dict:
     return {**(row.result_json or {}), "opportunity_id": str(row.id)}
 
 
+def _watchlist_symbols(db: Session) -> set[str]:
+    symbols = {
+        str(item.get("symbol") or "").upper()
+        for item in _latest_single_analyses(db)
+        if item.get("symbol")
+    }
+    rows = db.scalars(
+        select(StockOpportunity)
+        .where(StockOpportunity.status != "expired")
+        .order_by(StockOpportunity.issued_at.desc())
+        .limit(20)
+    ).all()
+    symbols.update(
+        str((row.result_json or {}).get("symbol") or "").upper()
+        for row in rows
+        if (row.result_json or {}).get("symbol")
+    )
+    return symbols
+
+
 @router.get("")
 def dashboard_snapshot(db: Session = Depends(get_db)) -> dict:
     """Read only saved results so page rendering never waits on external services."""
@@ -56,7 +79,7 @@ def dashboard_snapshot(db: Session = Depends(get_db)) -> dict:
     ).all()
     analyses = _latest_single_analyses(db)
     news = db.scalars(select(NewsItem).order_by(NewsItem.published_at.desc()).limit(12)).all()
-    earnings = repository.cache_get(db, "events:earnings:next14d") or {"items": []}
+    earnings = get_earnings_snapshot(db)
     near = [
         item for item in analyses
         if item.get("status") != "conditional_entry" and item.get("data_quality", {}).get("score", 0) >= 55
@@ -76,15 +99,13 @@ def dashboard_snapshot(db: Session = Depends(get_db)) -> dict:
     ]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "market": {
-            "session": clock.code,
-            "label_ar": clock.label_ar,
-            "options_open": clock.options_actionable,
-            "new_york": clock.new_york_time.isoformat(),
-            "riyadh": clock.riyadh_time.isoformat(),
-        },
+        "market": serialize_market_session(clock),
         "feeds": {
             "stocks": settings.alpaca_feed if settings.market_data_provider == "alpaca" else settings.market_data_provider,
+            "stocks_overnight": (
+                settings.alpaca_overnight_feed
+                if settings.market_data_provider == "alpaca" else None
+            ),
             "options": settings.alpaca_options_feed if settings.options_enabled else "disabled",
         },
         "options_enabled": settings.options_enabled,
@@ -99,6 +120,18 @@ def dashboard_snapshot(db: Session = Depends(get_db)) -> dict:
         "best_put": max(puts, key=lambda item: item.get("ranking_score", 0), default=None),
         "analyses": analyses,
         "earnings": earnings.get("items", [])[:30],
+        "earnings_meta": {
+            "provider": "finnhub",
+            "updated_at": earnings.get("updated_at"),
+            "cache_seconds": settings.earnings_cache_seconds,
+            "public_display_source": "Finnhub",
+            "connection_status": earnings.get("connection_status"),
+            "connection_label_ar": earnings.get("connection_label_ar"),
+            "is_stale": earnings.get("is_stale", False),
+            "last_success_at": earnings.get("last_success_at"),
+            "last_error": earnings.get("last_error"),
+            "cache_hit": earnings.get("cache_hit", False),
+        },
         "news": [
             {
                 "symbol": item.symbol,
@@ -113,16 +146,59 @@ def dashboard_snapshot(db: Session = Depends(get_db)) -> dict:
     }
 
 
+@router.get("/earnings")
+def earnings_snapshot(db: Session = Depends(get_db)) -> dict:
+    """Return normalized cached Finnhub data only; never wait on Finnhub here."""
+    payload = get_earnings_snapshot(db)
+    watchlist = _watchlist_symbols(db)
+    items = [
+        {
+            **item,
+            "is_watchlist": str(item.get("symbol") or "").upper() in watchlist,
+        }
+        for item in payload.get("items", [])
+    ]
+    updated = payload.get("updated_at")
+    age_seconds = None
+    if updated:
+        try:
+            stamp = datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            age_seconds = max(
+                0, int((datetime.now(timezone.utc) - stamp).total_seconds())
+            )
+        except (TypeError, ValueError):
+            age_seconds = None
+    return {
+        "items": items,
+        "stats": calendar_stats(items),
+        "sectors": sorted(
+            {str(item["sector"]) for item in items if item.get("sector")}
+        ),
+        "meta": {
+            "source": "Finnhub",
+            "updated_at": updated,
+            "age_seconds": age_seconds,
+            "connection_status": payload.get("connection_status"),
+            "connection_label_ar": payload.get("connection_label_ar"),
+            "is_stale": payload.get("is_stale", False),
+            "last_success_at": payload.get("last_success_at"),
+            "last_error": payload.get("last_error"),
+            "cache_hit": payload.get("cache_hit", False),
+        },
+    }
+
+
 def _refresh_earnings() -> None:
     db = SessionLocal()
     try:
         settings = get_settings()
-        items = fetch_earnings_calendar(settings)
-        repository.cache_set(
+        refresh_earnings_cache(
             db,
-            "events:earnings:next14d",
-            {"items": items, "updated_at": datetime.now(timezone.utc).isoformat()},
-            datetime.now(timezone.utc) + timedelta(seconds=settings.earnings_cache_seconds),
+            settings,
+            force=True,
+            watchlist=_watchlist_symbols(db),
         )
     except Exception:
         db.rollback()

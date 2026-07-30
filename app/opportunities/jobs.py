@@ -10,11 +10,17 @@ from app.config import Settings, get_settings
 from sqlalchemy import func, select
 
 from app.db.models import AIAnalysisLog, ProviderHealth, StockCandidate, StockScanRun
+from app.db import repository
 from app.db.session import SessionLocal
 from app.opportunities.scanner import scan_market
 from app.opportunities.openai_review import review_single_analysis
 from app.options.service import analyze_options_after_stock
 from app.providers.factory import get_market_data_provider, get_option_data_provider
+from app.events.earnings import (
+    attach_stock_earnings_context,
+    event_for_symbol,
+    get_earnings_snapshot,
+)
 from app.stocks.analysis import analyze_single_stock
 
 logger = logging.getLogger(__name__)
@@ -153,6 +159,28 @@ def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
             provider.invalidate_symbol_cache(symbol)
         settings = get_settings()
         analysis = analyze_single_stock(db, provider, settings, symbol)
+        earnings_cache = get_earnings_snapshot(db)
+        analysis["earnings"] = attach_stock_earnings_context(
+            analysis,
+            event_for_symbol(earnings_cache, symbol),
+        )
+        if (
+            analysis.get("earnings", {}).get("prevent_new_entry")
+            and analysis.get("status") == "conditional_entry"
+        ):
+            analysis["status"] = "no_trade"
+            analysis["status_ar"] = "ممنوع دخول جديد لقرب إعلان الأرباح"
+            analysis["trade_plan"] = None
+            analysis["valid_for_minutes"] = 0
+            analysis["is_expired"] = True
+            analysis["warnings"] = list(
+                dict.fromkeys(
+                    [
+                        *(analysis.get("warnings") or []),
+                        "مخاطر إعلان الأرباح تمنع الدخول الجديد حاليًا.",
+                    ]
+                )
+            )
         option_provider = None
         if settings.options_enabled and analysis.get("status") == "conditional_entry":
             try:
