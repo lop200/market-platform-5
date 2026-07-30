@@ -165,7 +165,7 @@ def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
             event_for_symbol(earnings_cache, symbol),
         )
         if (
-            analysis.get("earnings", {}).get("prevent_new_entry")
+            _earnings_prevents_entry(analysis)
             and analysis.get("status") == "conditional_entry"
         ):
             analysis["status"] = "no_trade"
@@ -214,6 +214,12 @@ def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
         _fail_run(db, run_id, exc)
     finally:
         db.close()
+
+
+def _earnings_prevents_entry(analysis: dict) -> bool:
+    """Missing earnings data is normal and must never break stock analysis."""
+    earnings = analysis.get("earnings") or {}
+    return bool(earnings.get("prevent_new_entry"))
 
 
 def shutdown_jobs() -> None:

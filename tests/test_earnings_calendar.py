@@ -19,6 +19,7 @@ from app.events.finnhub import (
 )
 from app.events.schemas import EarningsEvent
 from app.main import app
+from app.opportunities.jobs import _earnings_prevents_entry
 
 
 NOW = datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc)
@@ -234,3 +235,11 @@ def test_home_has_earnings_icon():
     home = client.get("/").text
     assert 'href="/earnings"' in home
     assert "تقويم الإعلانات" in home
+
+
+def test_missing_earnings_never_breaks_stock_analysis():
+    assert _earnings_prevents_entry({"earnings": None}) is False
+    assert _earnings_prevents_entry({}) is False
+    assert _earnings_prevents_entry(
+        {"earnings": {"prevent_new_entry": True}}
+    ) is True
