@@ -37,6 +37,16 @@ def earnings_dashboard(request: Request):
     )
 
 
+@router.get("/news", response_class=HTMLResponse)
+def news_dashboard(request: Request):
+    return templates.TemplateResponse(request=request, name="news.html", context={})
+
+
+@router.get("/spx", response_class=HTMLResponse)
+def spx_dashboard(request: Request):
+    return templates.TemplateResponse(request=request, name="spx.html", context={})
+
+
 @router.get("/results", response_class=HTMLResponse)
 def results_dashboard(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(

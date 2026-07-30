@@ -8,12 +8,15 @@ from sqlalchemy import select
 
 from app.db.models import OpportunityAudit, OpportunityEvent, StockOpportunity
 from app.db.session import SessionLocal
+from app.config import get_settings
+from app.news.service import UnifiedNewsService
 from app.opportunities.audit import evaluate_timeline
 from app.providers.factory import get_market_data_provider
 
 logger = logging.getLogger(__name__)
 _stop = Event()
 _thread: Thread | None = None
+_last_news_poll: datetime | None = None
 
 
 def run_audit_cycle() -> int:
@@ -103,6 +106,41 @@ def _add_event_once(db, opportunity_id, event_type: str, price: float, occurred_
 def _loop() -> None:
     while not _stop.wait(60):
         run_audit_cycle()
+        run_news_cycle()
+
+
+def run_news_cycle() -> int:
+    """Bounded background refresh; never runs in a web request."""
+    global _last_news_poll
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    if (
+        _last_news_poll is not None
+        and (now - _last_news_poll).total_seconds()
+        < max(300, min(600, settings.sec_poll_seconds))
+    ):
+        return 0
+    _last_news_poll = now
+    db = SessionLocal()
+    try:
+        service = UnifiedNewsService(db, settings)
+        service.ensure_default_sources()
+        service.refresh_market(force=True)
+        symbols = db.scalars(
+            select(StockOpportunity.symbol)
+            .where(StockOpportunity.status == "conditional_entry")
+            .distinct()
+            .limit(20)
+        ).all()
+        for symbol in symbols:
+            service.get_symbol_news(symbol, force=True)
+        return len(symbols)
+    except Exception as exc:
+        db.rollback()
+        logger.warning("News background cycle failed: %s", type(exc).__name__)
+        return 0
+    finally:
+        db.close()
 
 
 def start_audit_scheduler() -> None:

@@ -89,3 +89,25 @@ services:
         sync: false
       - key: FINNHUB_API_KEY
         sync: false
+      - key: NEWS_PROVIDER
+        value: finnhub
+      - key: SEC_NEWS_ENABLED
+        value: "true"
+      - key: SEC_USER_AGENT
+        sync: false
+      - key: SEC_POLL_SECONDS
+        value: "600"
+      - key: X_API_BEARER_TOKEN
+        sync: false
+      - key: X_NEWS_ENABLED
+        value: "false"
+      - key: X_DAILY_READ_LIMIT
+        value: "100"
+      - key: X_MAX_POSTS_PER_QUERY
+        value: "10"
+      - key: X_ALLOWED_ACCOUNTS
+        value: ""
+      - key: X_ALLOWED_KEYWORDS
+        value: ""
+      - key: X_CACHE_SECONDS
+        value: "300"

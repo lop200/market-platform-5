@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
         # Warm the saved earnings calendar without delaying application startup
         # or any web response. The service itself serves cache/stale fallback.
         routes_dashboard._executor.submit(routes_dashboard._refresh_earnings)
+        routes_dashboard._news_executor.submit(routes_dashboard._refresh_news)
     yield
     if started:
         stop_audit_scheduler()

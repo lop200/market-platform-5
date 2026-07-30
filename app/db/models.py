@@ -178,6 +178,21 @@ class NewsItem(Base):
     risk_flags: Mapped[list] = mapped_column(JSONVariant, default=list)
 
 
+class TrustedNewsSource(Base):
+    __tablename__ = "trusted_news_sources"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    source_type: Mapped[str] = mapped_column(String(30), index=True)
+    source_name: Mapped[str] = mapped_column(String(120))
+    account_id: Mapped[str | None] = mapped_column(String(100))
+    username: Mapped[str | None] = mapped_column(String(100), index=True)
+    domain: Mapped[str | None] = mapped_column(String(180), index=True)
+    category: Mapped[str] = mapped_column(String(30), index=True)
+    reliability_score: Mapped[int] = mapped_column(SmallInteger, default=50)
+    is_official: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
 class MarketRegimeRecord(Base):
     __tablename__ = "market_regimes"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)

@@ -38,7 +38,10 @@ Copy-Item .env.example .env
 - `MARKET_DATA_PROVIDER=alpaca`: موصى به للإنتاج، مع `ALPACA_DATA_FEED=sip` للأسهم و`ALPACA_OVERNIGHT_FEED=boats` للتداول الليلي.
 - `ALPACA_OPTIONS_FEED=opra`: بيانات عقود الشركات عند توفر صلاحية OPRA في الحساب.
 - `MARKET_DATA_PROVIDER=yfinance`: تطوير محلي، بيانات غير رسمية ومتأخرة وقد يغيب Bid/Ask، لذلك قد يرفض حارس الجودة الفرصة.
-- `NEWS_PROVIDER=finnhub`: أخبار اختيارية. عند غيابها يظهر ذلك صراحة.
+- `NEWS_PROVIDER=finnhub`: طبقة الأخبار الموحدة للشركات والسوق.
+- `SEC_NEWS_ENABLED=true` و`SEC_USER_AGENT`: تفعيل SEC EDGAR الرسمي. يجب أن يعرّف User-Agent التطبيق ووسيلة تواصل.
+- `X_NEWS_ENABLED=false`: يبقى X مغلقًا افتراضيًا، ولا يعمل دون `X_API_BEARER_TOKEN` وقائمة `X_ALLOWED_ACCOUNTS` وحد يومي.
+- واجهات الأخبار: `/news` لنبض السوق و`/spx` لسياق قنّاص SPX. جميع عمليات التحديث الخارجية تعمل في الخلفية مع Cache وآخر نسخة محفوظة.
 
 قائمة الإكمال التلقائي محلية ومنتقاة لتسريع الإدخال، وليست قائمة إدراج رسمية أو بديلًا عن Universe مزود السوق.
 

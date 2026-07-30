@@ -15,10 +15,12 @@ from app.events.earnings import (
     get_earnings_snapshot,
     refresh_earnings_cache,
 )
+from app.news.service import UnifiedNewsService
 from app.options.market_clock import market_session, serialize_market_session
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="company-events")
+_news_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="market-news")
 
 
 def _latest_single_analyses(db: Session) -> list[dict]:
@@ -210,3 +212,69 @@ def _refresh_earnings() -> None:
 def refresh_events() -> dict:
     _executor.submit(_refresh_earnings)
     return {"status": "queued", "message_ar": "بدأ تحديث الأرباح في الخلفية"}
+
+
+@router.get("/news")
+def news_snapshot(db: Session = Depends(get_db)) -> dict:
+    payload = UnifiedNewsService(db, get_settings()).market_snapshot()
+    watchlist = _watchlist_symbols(db)
+    items = list(payload.get("items", []))
+    seen = {str(item.get("id")) for item in items}
+    for analysis in _latest_single_analyses(db):
+        symbol = str(analysis.get("symbol") or "").upper()
+        for item in analysis.get("news", []):
+            identifier = str(item.get("id") or "")
+            if not identifier or identifier in seen:
+                continue
+            seen.add(identifier)
+            items.append({
+                **item,
+                "source_type": item.get("source_type") or "finnhub",
+                "source_name": item.get("source") or "Finnhub",
+                "symbols": [symbol],
+                "market_scope": "company",
+                "sentiment": item.get("impact") or "neutral",
+                "is_official": bool(item.get("official")),
+            })
+    items.sort(
+        key=lambda item: (
+            item.get("impact_score", 0),
+            item.get("published_at", ""),
+        ),
+        reverse=True,
+    )
+    return {
+        **payload,
+        "items": [
+            {
+                **item,
+                "is_watchlist": bool(
+                    set(item.get("symbols") or []) & watchlist
+                ),
+            }
+            for item in items[:100]
+        ],
+    }
+
+
+@router.get("/spx")
+def spx_news_context(db: Session = Depends(get_db)) -> dict:
+    return UnifiedNewsService(db, get_settings()).spx_context()
+
+
+def _refresh_news() -> None:
+    db = SessionLocal()
+    try:
+        service = UnifiedNewsService(db, get_settings())
+        service.ensure_default_sources()
+        service.refresh_market(force=True)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+@router.post("/refresh-news")
+def refresh_news() -> dict:
+    _news_executor.submit(_refresh_news)
+    return {"status": "queued", "message_ar": "بدأ تحديث نبض السوق في الخلفية"}

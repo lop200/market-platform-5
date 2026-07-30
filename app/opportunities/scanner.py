@@ -10,16 +10,15 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db.models import (
     MarketRegimeRecord,
-    NewsItem,
     OpportunityEvent,
     OpportunityTarget,
     StockCandidate,
     StockOpportunity,
     UserRiskSettings,
 )
+from app.news.service import UnifiedNewsService
 from app.opportunities.indicators import calculate_indicators
 from app.opportunities.market_regime import classify_market, current_session
-from app.opportunities.news import get_news_provider
 from app.opportunities.openai_review import review_candidates
 from app.options.service import analyze_options_after_stock
 from app.opportunities.quality import evaluate_quote
@@ -141,22 +140,14 @@ def build_opportunity(
     if (indicators.get("relative_volume") or 0) < settings.min_relative_volume:
         return None, ["الحجم النسبي أقل من الحد المسموح"], snapshot
 
-    news_provider = get_news_provider(settings)
     try:
-        news = news_provider.get_news(symbol)
+        news = UnifiedNewsService(db, settings).get_symbol_news(symbol)
     except Exception:
         news = []
         quality.warnings.append("تعذر مزود الأخبار؛ لم يتم اختراع أخبار بديلة")
     risk_flags = sorted({flag for item in news for flag in item.risk_flags})
-    if risk_flags:
+    if any(item.prevent_entry for item in news):
         return None, ["مخاطر جوهرية في الأخبار: " + "، ".join(risk_flags)], snapshot
-    for item in news:
-        db.add(NewsItem(
-            symbol=symbol, headline=item.headline, source=item.source,
-            published_at=item.published_at, url=item.url,
-            classification=item.classification, is_official=item.is_official,
-            risk_flags=item.risk_flags,
-        ))
 
     strategy = select_strategy(
         indicators, quote.price, regime,

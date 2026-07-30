@@ -155,11 +155,18 @@ def review_single_analysis(db: Session, settings: Settings, analysis: dict) -> d
                 "official": item["official"],
                 "impact": item["impact"],
             }
-            for item in analysis.get("news", [])
+            for item in sorted(
+                [
+                    item for item in analysis.get("news", [])
+                    if item.get("official") or item.get("reliability_score", 0) >= 70
+                ],
+                key=lambda item: item.get("impact_score", 0),
+                reverse=True,
+            )[:5]
         ],
         "ranked_option_contracts": (
-            analysis.get("options", {}).get("ranked_contracts", [])[:3]
-            if analysis.get("options", {}).get("stock_first_gate_passed") else []
+            (analysis.get("options") or {}).get("ranked_contracts", [])[:3]
+            if (analysis.get("options") or {}).get("stock_first_gate_passed") else []
         ),
     }
     before = db.scalar(select(func.count(AIAnalysisLog.id))) or 0

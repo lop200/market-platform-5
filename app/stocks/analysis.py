@@ -7,10 +7,10 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.db.models import NewsItem, UserRiskSettings
+from app.db.models import UserRiskSettings
+from app.news.service import UnifiedNewsService
 from app.opportunities.indicators import calculate_indicators
 from app.opportunities.market_regime import classify_market, current_session
-from app.opportunities.news import get_news_provider
 from app.opportunities.risk import position_size, risk_reward
 from app.opportunities.schemas import MarketRegime
 from app.opportunities.strategies import select_strategy
@@ -254,25 +254,45 @@ def analyze_single_stock(
 
     news_items = []
     verified_recent_news = False
+    news_prevent_entry = False
+    news_raise_risk = False
+    news_invalidates_analysis = False
     try:
-        news = get_news_provider(settings).get_news(symbol)
+        news = UnifiedNewsService(db, settings).get_symbol_news(
+            symbol,
+            direction=indicators.get("trend") if indicators else None,
+            analysis_issued_at=started,
+        )
         for item in news[:6]:
             age_hours = max(0, int((started - item.published_at).total_seconds() / 3600))
             verified_recent_news = verified_recent_news or (
-                item.is_official and age_hours <= 24 and item.classification not in {"قديم", "غير موثوق", "ترويجي"}
+                item.is_official and age_hours <= 24 and item.reliability_score >= 80
+            )
+            news_prevent_entry = news_prevent_entry or item.prevent_entry
+            news_raise_risk = news_raise_risk or item.raise_risk
+            news_invalidates_analysis = (
+                news_invalidates_analysis or item.invalidates_previous_analysis
             )
             news_items.append({
-                "headline": item.headline, "source": item.source,
+                "id": item.id, "headline": item.headline,
+                "source": item.source_name, "source_type": item.source_type,
                 "published_at": item.published_at.isoformat(), "age": f"قبل {age_hours} ساعة",
-                "summary_ar": item.headline, "impact": item.classification,
+                "age_seconds": item.age_seconds, "summary_ar": item.summary or item.headline,
+                "impact": item.sentiment, "event_type": item.event_type,
+                "impact_score": item.impact_score,
+                "reliability_score": item.reliability_score,
+                "urgency_score": item.urgency_score,
                 "official": item.is_official, "risk_flags": item.risk_flags,
+                "source_url": item.source_url,
+                "confirming_sources": item.confirming_sources,
+                "supports_scenario": item.supports_technical_scenario,
+                "contradicts_scenario": item.contradicts_technical_scenario,
+                "prevent_entry": item.prevent_entry,
+                "raise_risk": item.raise_risk,
+                "invalidates_analysis": item.invalidates_previous_analysis,
+                "status_message_ar": item.status_message_ar,
+                "relation_reason_ar": item.relation_reason_ar,
             })
-            db.add(NewsItem(
-                symbol=symbol, headline=item.headline, source=item.source,
-                published_at=item.published_at, url=item.url,
-                classification=item.classification, is_official=item.is_official,
-                risk_flags=item.risk_flags,
-            ))
     except Exception:
         warnings.append("تعذر مزود الأخبار، واكتمل التحليل الفني دون أخبار")
 
@@ -335,6 +355,13 @@ def analyze_single_stock(
             if strategy and strategy.strategy_id != "no_trade" and quality.valid_for_plan:
                 status = "conditional_entry"
                 status_ar = "دخول مشروط"
+
+    if news_prevent_entry or news_invalidates_analysis:
+        status = "needs_news_reanalysis"
+        status_ar = "يحتاج إعادة تحليل بسبب خبر جديد"
+        warnings.append("خبر رسمي مرتفع التأثير يمنع استخدام القراءة السابقة أو فتح دخول جديد.")
+    elif news_raise_risk:
+        warnings.append("الأخبار الحديثة ترفع درجة المخاطرة وتتطلب تأكيدًا إضافيًا قبل الدخول.")
 
     if status != "conditional_entry":
         entry_from = entry_to = stop = rr = None
@@ -519,6 +546,17 @@ def analyze_single_stock(
         "chart_levels": technical_levels,
         "news": news_items,
         "news_message": None if news_items else "لا توجد أخبار متاحة من مزود رسمي حاليًا.",
+        "news_context": {
+            "important_news": news_items[0] if news_items else None,
+            "prevent_entry": news_prevent_entry,
+            "raise_risk": news_raise_risk,
+            "invalidates_previous_analysis": news_invalidates_analysis,
+            "status_ar": (
+                "يحتاج إعادة تحليل بسبب خبر جديد"
+                if news_prevent_entry or news_invalidates_analysis
+                else "الأخبار لا تمنع التحليل الحالي"
+            ),
+        },
         "directional_bias": ({
             "label": (
                 "ميل صاعد — يتوافق نظريًا مع Call" if trend == "صاعد" else

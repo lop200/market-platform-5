@@ -67,7 +67,18 @@ class Settings(BaseSettings):
         default=2, alias="EARNINGS_NO_NEW_ENTRY_DAYS"
     )
     finnhub_api_key: str | None = Field(default=None, alias="FINNHUB_API_KEY")
-    news_provider: str = Field(default="none", alias="NEWS_PROVIDER")
+    news_provider: str = Field(default="finnhub", alias="NEWS_PROVIDER")
+    sec_news_enabled: bool = Field(default=True, alias="SEC_NEWS_ENABLED")
+    sec_user_agent: str | None = Field(default=None, alias="SEC_USER_AGENT")
+    sec_poll_seconds: int = Field(default=600, alias="SEC_POLL_SECONDS")
+    x_api_bearer_token: str | None = Field(default=None, alias="X_API_BEARER_TOKEN")
+    x_news_enabled: bool = Field(default=False, alias="X_NEWS_ENABLED")
+    x_daily_read_limit: int = Field(default=100, alias="X_DAILY_READ_LIMIT")
+    x_max_posts_per_query: int = Field(default=10, alias="X_MAX_POSTS_PER_QUERY")
+    x_allowed_accounts: str = Field(default="", alias="X_ALLOWED_ACCOUNTS")
+    x_allowed_keywords: str = Field(default="", alias="X_ALLOWED_KEYWORDS")
+    x_cache_seconds: int = Field(default=300, alias="X_CACHE_SECONDS")
+    news_openai_daily_limit: int = Field(default=20, alias="NEWS_OPENAI_DAILY_LIMIT")
     social_sentiment_provider: str = Field(default="none", alias="SOCIAL_SENTIMENT_PROVIDER")
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
@@ -125,6 +136,14 @@ class Settings(BaseSettings):
     @property
     def configured_scan_symbols(self) -> list[str]:
         return [item.strip().upper() for item in self.scan_symbols.split(",") if item.strip()]
+
+    @property
+    def configured_x_accounts(self) -> list[str]:
+        return [item.strip().lstrip("@").lower() for item in self.x_allowed_accounts.split(",") if item.strip()]
+
+    @property
+    def configured_x_keywords(self) -> list[str]:
+        return [item.strip().lower() for item in self.x_allowed_keywords.split(",") if item.strip()]
 
 
 

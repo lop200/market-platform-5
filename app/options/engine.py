@@ -299,6 +299,8 @@ def rank_option_chain(
         (earnings_date - generated.date()).days if earnings_date is not None else None
     )
     capital_usd = settings.default_capital_sar / settings.usd_sar_rate
+    news_context = stock_analysis.get("news_context") or {}
+    news_penalty = 25 if news_context.get("raise_risk") else 0
     rejected: Counter[str] = Counter()
     ranked: list[RankedOptionContract] = []
 
@@ -417,7 +419,7 @@ def rank_option_chain(
             100 - (
                 spread_score * 0.25 + theta_score * 0.20 + iv_score * 0.20
                 + earnings_score * 0.20 + min(100, rr * 35) * 0.15
-            )
+            ) + news_penalty
         )
         affordability_score = _clamp(
             100 - max(0, capital_pct - settings.options_max_capital_pct) * 1.5
@@ -439,8 +441,9 @@ def rank_option_chain(
             "earnings": earnings_score,
             "risk_reward": rr_score,
             "capital_fit": affordability_score,
+            "news": 100 - news_penalty,
         }
-        score = round(
+        score = max(0, round(
             components["direction"] * 0.10
             + strike_score * 0.08
             + delta_score * 0.10
@@ -456,7 +459,7 @@ def rank_option_chain(
             + rr_score * 0.07
             + affordability_score * 0.05,
             2,
-        )
+        ) - news_penalty)
         intrinsic = max(
             0,
             underlying - item.strike
@@ -466,6 +469,8 @@ def rank_option_chain(
         warnings = []
         if iv_crush:
             warnings.append("تحذير IV Crush حول موعد الأرباح القادم.")
+        if news_penalty:
+            warnings.append("خبر حديث مرتفع التأثير خفّض درجة ملاءمة العقد ورفع مخاطره.")
         if not session.options_actionable:
             warnings.append(
                 "التحليل للمراقبة فقط، ولا يمكن تنفيذ العقد حتى افتتاح سوق الخيارات."
