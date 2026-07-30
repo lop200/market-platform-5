@@ -32,7 +32,7 @@ services:
       - key: ALPACA_OPTIONS_FEED
         value: opra
       - key: OPTIONS_ENABLED
-        value: "false"
+        value: "true"
       - key: OPTIONS_MIN_DTE
         value: "7"
       - key: OPTIONS_MAX_DTE
