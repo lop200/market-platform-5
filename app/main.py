@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_spx, routes_web
+from app.api import routes_advisor, routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_spx, routes_web
 from app.config import get_settings
 from app.db.session import init_db
 from app.opportunities.audit_scheduler import start_audit_scheduler, stop_audit_scheduler
@@ -49,6 +49,7 @@ app.include_router(routes_cost.router)
 app.include_router(routes_debug.router)
 app.include_router(routes_dashboard.router)
 app.include_router(routes_spx.router)
+app.include_router(routes_advisor.router)
 app.include_router(routes_web.router)
 
 

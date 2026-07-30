@@ -106,6 +106,9 @@ class RankedOptionContract(BaseModel):
     valid_for_minutes: int
     expires_at: datetime
     warnings_ar: list[str] = Field(default_factory=list)
+    classification_ar: str = "للمراقبة"
+    selection_reason_ar: str = ""
+    risk_notes_ar: list[str] = Field(default_factory=list)
 
 
 class OptionChainResult(BaseModel):

@@ -96,6 +96,44 @@ def test_sip_and_opra_contract_symbol_are_explicit():
     assert enabled().alpaca_options_feed == "opra"
 
 
+def test_alpaca_chain_request_is_bounded_to_configured_dte(monkeypatch):
+    from app.options.provider import AlpacaOptionProvider
+
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"snapshots": {}}
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url, **kwargs):
+            captured.update(kwargs["params"])
+            return Response()
+
+    monkeypatch.setattr("app.options.provider.httpx.Client", Client)
+    provider = AlpacaOptionProvider(
+        "key", "secret", min_dte=7, max_dte=30
+    )
+    assert provider.get_option_chain("QQQ") == []
+    lower = date.fromisoformat(captured["expiration_date_gte"])
+    upper = date.fromisoformat(captured["expiration_date_lte"])
+    assert (upper - lower).days == 23
+    assert captured["feed"] == "opra"
+    assert captured["limit"] == 1000
+
+
 def test_market_sessions_use_new_york_and_options_only_regular():
     pre = market_session(datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc))
     regular = market_session(NOW)
@@ -129,7 +167,7 @@ def test_dte_zero_one_and_outside_7_30_are_rejected():
     assert result.rejection_reasons["dte"] == 2
 
 
-def test_wide_spread_low_liquidity_stale_and_missing_greeks_are_rejected():
+def test_hard_gates_reject_bad_quotes_but_low_liquidity_is_soft_ranked():
     missing = contract("MISSING", OptionType.CALL)
     missing.delta = None
     result = rank_option_chain(
@@ -143,10 +181,15 @@ def test_wide_spread_low_liquidity_stale_and_missing_greeks_are_rejected():
         enabled(),
         now=NOW,
     )
-    assert result.status == "no_contract"
+    assert result.status == "monitoring"
+    assert [item.symbol for item in result.ranked_contracts] == ["DRY"]
+    assert not result.ranked_contracts[0].actionable
+    assert any(
+        "Open Interest" in warning
+        for warning in result.ranked_contracts[0].warnings_ar
+    )
     assert result.rejection_reasons == {
         "wide_spread": 1,
-        "low_liquidity": 1,
         "stale_quote": 1,
         "missing_greeks": 1,
     }
@@ -208,10 +251,10 @@ def test_call_and_put_include_deterministic_targets_risk_and_cost():
         enabled(),
         now=NOW,
     )
-    assert call_result.best_call and call_result.best_put is None
-    assert put_result.best_put and put_result.best_call is None
-    assert call_result.rejection_reasons["direction_mismatch"] == 1
-    assert put_result.rejection_reasons["direction_mismatch"] == 1
+    assert call_result.best_call and call_result.best_put
+    assert put_result.best_put and put_result.best_call
+    assert call_result.best_put.classification_ar in {"للمراقبة", "انتظر"}
+    assert put_result.best_call.classification_ar in {"للمراقبة", "انتظر"}
     for item in (call_result.best_call, put_result.best_put):
         assert item.contract_cost == item.entry_price * 100
         assert item.target_2 > item.target_1 > item.mid > item.stop_loss
@@ -257,7 +300,7 @@ def test_closed_pre_market_and_after_hours_never_show_entry_now():
         assert result.market["next_options_open_at"]
 
 
-def test_delta_direction_invalid_quote_and_deep_otm_are_rejected():
+def test_delta_and_direction_are_soft_but_invalid_quote_and_deep_otm_are_hard():
     wrong_delta = contract("DELTA", OptionType.CALL)
     wrong_delta.delta = .2
     deep = contract("DEEP", OptionType.CALL)
@@ -273,11 +316,15 @@ def test_delta_direction_invalid_quote_and_deep_otm_are_rejected():
         enabled(),
         now=NOW,
     )
-    assert result.status == "no_contract"
-    assert result.rejection_reasons["direction_mismatch"] == 1
+    assert result.status == "monitoring"
     assert result.rejection_reasons["invalid_quote"] == 1
-    assert result.rejection_reasons["delta"] == 1
     assert result.rejection_reasons["deep_otm"] == 1
+    assert {item.symbol for item in result.ranked_contracts} == {"PUT", "DELTA"}
+    assert any(
+        "Delta خارج النطاق" in warning
+        for item in result.ranked_contracts
+        for warning in item.warnings_ar
+    )
 
 
 def test_missing_quote_timestamp_is_stale_and_never_actionable():

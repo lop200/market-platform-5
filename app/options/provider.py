@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -38,6 +39,8 @@ class AlpacaOptionProvider:
         feed: str = "opra",
         base_url: str = "https://data.alpaca.markets",
         timeout_seconds: float = 12,
+        min_dte: int = 7,
+        max_dte: int = 30,
     ):
         if not api_key or not api_secret:
             raise ValueError("Alpaca credentials are required for OPRA options data")
@@ -46,13 +49,25 @@ class AlpacaOptionProvider:
         self.feed = feed.lower()
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.min_dte = min_dte
+        self.max_dte = max_dte
 
     def get_option_chain(self, symbol: str) -> list[RawOptionContract]:
         url = f"{self.base_url}/v1beta1/options/snapshots/{symbol.upper()}"
+        market_date = datetime.now(ZoneInfo("America/New_York")).date()
         with httpx.Client(timeout=self.timeout_seconds) as client:
             response = client.get(
                 url,
-                params={"feed": self.feed, "limit": 1000},
+                params={
+                    "feed": self.feed,
+                    "limit": 1000,
+                    "expiration_date_gte": (
+                        market_date + timedelta(days=self.min_dte)
+                    ).isoformat(),
+                    "expiration_date_lte": (
+                        market_date + timedelta(days=self.max_dte)
+                    ).isoformat(),
+                },
                 headers={
                     "APCA-API-KEY-ID": self.api_key,
                     "APCA-API-SECRET-KEY": self.api_secret,

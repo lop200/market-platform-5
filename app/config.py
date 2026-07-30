@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     )
     alpaca_options_feed: str = Field(default="opra", alias="ALPACA_OPTIONS_FEED")
     options_enabled: bool = Field(default=False, alias="OPTIONS_ENABLED")
+    options_paper_only: bool = Field(default=True, alias="OPTIONS_PAPER_ONLY")
     options_min_dte: int = Field(default=7, alias="OPTIONS_MIN_DTE")
     options_max_dte: int = Field(default=30, alias="OPTIONS_MAX_DTE")
     options_max_quote_age_seconds: int = Field(default=30, alias="OPTIONS_MAX_QUOTE_AGE_SECONDS")
@@ -123,6 +124,28 @@ class Settings(BaseSettings):
     spx_rate_max_age_days: int = Field(default=7, alias="SPX_RATE_MAX_AGE_DAYS")
     spx_allow_spot_estimate: bool = Field(
         default=False, alias="SPX_ALLOW_SPOT_ESTIMATE"
+    )
+    financial_advisor_enabled: bool = Field(
+        default=True, alias="FINANCIAL_ADVISOR_ENABLED"
+    )
+    financial_advisor_markets_only: bool = Field(
+        default=True, alias="FINANCIAL_ADVISOR_MARKETS_ONLY"
+    )
+    financial_advisor_max_input_chars: int = Field(
+        default=500, alias="FINANCIAL_ADVISOR_MAX_INPUT_CHARS"
+    )
+    financial_advisor_max_contracts: int = Field(
+        default=3, alias="FINANCIAL_ADVISOR_MAX_CONTRACTS"
+    )
+    financial_advisor_max_news_items: int = Field(
+        default=5, alias="FINANCIAL_ADVISOR_MAX_NEWS_ITEMS"
+    )
+    financial_advisor_cache_seconds: int = Field(
+        default=60, alias="FINANCIAL_ADVISOR_CACHE_SECONDS"
+    )
+    financial_advisor_session_timezone: str = Field(
+        default="America/New_York",
+        alias="FINANCIAL_ADVISOR_SESSION_TIMEZONE",
     )
     earnings_provider: str = Field(default="finnhub", alias="EARNINGS_PROVIDER")
     earnings_cache_seconds: int = Field(default=14_400, alias="EARNINGS_CACHE_SECONDS")

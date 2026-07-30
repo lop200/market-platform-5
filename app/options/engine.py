@@ -258,6 +258,16 @@ def rank_option_chain(
             **base,
             warnings_ar=["قسم الخيارات غير مفعل لأن OPTIONS_ENABLED=false."],
         )
+    if not settings.options_paper_only:
+        base["market"]["options_status"] = "disabled"
+        base["market"]["options_label_ar"] = "غير مفعل"
+        return OptionChainResult(
+            status="disabled",
+            **base,
+            warnings_ar=[
+                "تحليل العقود يعمل في وضع Paper Trading فقط؛ التنفيذ Live محظور."
+            ],
+        )
     if not base["stock_first_gate_passed"]:
         return OptionChainResult(
             status="no_trade",
@@ -312,12 +322,10 @@ def rank_option_chain(
         if dte < settings.options_min_dte or dte > settings.options_max_dte:
             rejected["dte"] += 1
             continue
-        if event_days is not None and event_days >= 0 and dte <= event_days + 1:
-            rejected["expires_near_earnings"] += 1
-            continue
-        if item.option_type != preferred_side:
-            rejected["direction_mismatch"] += 1
-            continue
+        expires_near_earnings = (
+            event_days is not None and event_days >= 0 and dte <= event_days + 1
+        )
+        direction_matches = item.option_type == preferred_side
         if item.feed.lower() != "opra" or settings.alpaca_options_feed.lower() != "opra":
             rejected["opra_unavailable"] += 1
             continue
@@ -331,17 +339,16 @@ def rank_option_chain(
             rejected["wide_spread"] += 1
             continue
         volume, oi = int(item.volume or 0), int(item.open_interest or 0)
-        if volume < settings.options_min_volume or oi < settings.options_min_open_interest:
-            rejected["low_liquidity"] += 1
-            continue
         greek_values = (item.delta, item.gamma, item.theta, item.vega, item.iv)
         if any(value is None for value in greek_values):
             rejected["missing_greeks"] += 1
             continue
         delta = float(item.delta)
-        if not settings.options_min_abs_delta <= abs(delta) <= settings.options_max_abs_delta:
-            rejected["delta"] += 1
-            continue
+        delta_in_range = (
+            settings.options_min_abs_delta
+            <= abs(delta)
+            <= settings.options_max_abs_delta
+        )
         quote_age = _age_seconds(item.quote_timestamp, generated)
         if quote_age > settings.options_max_quote_age_seconds:
             rejected["stale_quote"] += 1
@@ -384,9 +391,7 @@ def rank_option_chain(
                 expected_days=max(0.5, expected_days - 0.5), spread=spread,
             ),
         ]
-        if scenarios[1].estimated_contract_price <= entry:
-            rejected["unfavorable_payoff"] += 1
-            continue
+        favorable_payoff = scenarios[1].estimated_contract_price > entry
 
         premium_loss_pct = min(
             settings.options_max_premium_loss_pct, max(18.0, 20.0 + iv * 15)
@@ -425,8 +430,43 @@ def rank_option_chain(
             100 - max(0, capital_pct - settings.options_max_capital_pct) * 1.5
         )
         rr_score = _clamp(rr * 35)
+        stock_quality = _clamp(
+            float(
+                stock_analysis.get("overall_score")
+                or stock_analysis.get("confidence_score")
+                or 70
+            )
+        )
+        indicator_values = stock_analysis.get("indicators") or {}
+        relative_volume = float(
+            indicator_values.get("relative_volume")
+            or stock_analysis.get("relative_volume")
+            or 1
+        )
+        momentum_quality = _clamp(
+            45
+            + min(30, max(0, relative_volume - 0.5) * 20)
+            + (15 if direction_matches else 0)
+        )
+        news_score = _clamp(80 - news_penalty)
+        market_sector_score = _clamp(75 if direction_matches else 45)
+        contract_fit = _clamp(
+            delta_score * 0.35
+            + strike_score * 0.30
+            + dte_score * 0.20
+            + theta_score * 0.15
+        )
+        if expires_near_earnings:
+            earnings_score = min(earnings_score, 25)
         components = {
-            "direction": 100,
+            "stock_movement_quality": stock_quality,
+            "momentum_relative_strength": momentum_quality,
+            "news_catalyst": news_score,
+            "market_sector_alignment": market_sector_score,
+            "contract_liquidity": liquidity,
+            "contract_fit": contract_fit,
+            "risk_reward": rr_score,
+            "direction": 100 if direction_matches else 35,
             "strike": strike_score,
             "delta": delta_score,
             "dte": dte_score,
@@ -443,23 +483,16 @@ def rank_option_chain(
             "capital_fit": affordability_score,
             "news": 100 - news_penalty,
         }
-        score = max(0, round(
-            components["direction"] * 0.10
-            + strike_score * 0.08
-            + delta_score * 0.10
-            + dte_score * 0.07
-            + spread_score * 0.10
-            + volume_score * 0.06
-            + oi_score * 0.07
-            + theta_score * 0.06
-            + iv_score * 0.05
-            + break_even_score * 0.06
-            + liquidity * 0.08
-            + earnings_score * 0.05
-            + rr_score * 0.07
-            + affordability_score * 0.05,
+        score = round(
+            stock_quality * 0.25
+            + momentum_quality * 0.15
+            + news_score * 0.10
+            + market_sector_score * 0.10
+            + liquidity * 0.15
+            + contract_fit * 0.15
+            + rr_score * 0.10,
             2,
-        ) - news_penalty)
+        )
         intrinsic = max(
             0,
             underlying - item.strike
@@ -471,6 +504,34 @@ def rank_option_chain(
             warnings.append("تحذير IV Crush حول موعد الأرباح القادم.")
         if news_penalty:
             warnings.append("خبر حديث مرتفع التأثير خفّض درجة ملاءمة العقد ورفع مخاطره.")
+        if volume < settings.options_min_volume:
+            warnings.append(
+                "حجم تداول العقد منخفض؛ خُفّضت درجة السيولة دون رفضه."
+            )
+        if oi < settings.options_min_open_interest:
+            warnings.append(
+                "Open Interest منخفض؛ العقد للمراقبة ويحتاج إعادة تحقق."
+            )
+        if not delta_in_range:
+            warnings.append(
+                "Delta خارج النطاق المفضل؛ خُفّضت درجة الملاءمة."
+            )
+        if not direction_matches:
+            warnings.append(
+                "نوع العقد لا يطابق الاتجاه الرئيسي؛ للمراقبة فقط."
+            )
+        if expires_near_earnings:
+            warnings.append(
+                "الانتهاء قريب من إعلان الأرباح؛ مخاطرة IV Crush مرتفعة."
+            )
+        if not favorable_payoff:
+            warnings.append(
+                "العائد النظري الأساسي غير مواتٍ حاليًا؛ لا دخول."
+            )
+        if capital_pct > settings.options_max_capital_pct:
+            warnings.append(
+                "تكلفة العقد أعلى من حد رأس المال المحدد؛ للمراقبة فقط."
+            )
         if not session.options_actionable:
             warnings.append(
                 "التحليل للمراقبة فقط، ولا يمكن تنفيذ العقد حتى افتتاح سوق الخيارات."
@@ -485,6 +546,37 @@ def rank_option_chain(
         trade_age = (
             _age_seconds(item.trade_timestamp, generated) if item.trade_timestamp else None
         )
+        safe_for_entry = (
+            session.options_actionable
+            and direction_matches
+            and delta_in_range
+            and favorable_payoff
+            and not expires_near_earnings
+            and capital_pct <= settings.options_max_capital_pct
+            and volume >= settings.options_min_volume
+            and oi >= settings.options_min_open_interest
+        )
+        badges = (
+            ["السوق مفتوح", "جاهز عند تحقق الشرط"]
+            if safe_for_entry
+            else ["السوق مفتوح", "للمراقبة فقط"]
+            if session.options_actionable
+            else ["السوق مغلق", "قابل للمراقبة"]
+        )
+        classification = (
+            "فرصة قوية"
+            if safe_for_entry and score >= 80
+            else "قنص مشروط"
+            if safe_for_entry and score >= 68
+            else "للمراقبة"
+            if score >= 50
+            else "انتظر"
+        )
+        selection_reason = (
+            f"{classification}: درجة {score:.0f}/100؛ "
+            f"سيولة {liquidity}/100 وملاءمة {contract_fit}/100."
+        )
+        badges.append(classification)
         ranked.append(
             RankedOptionContract(
                 symbol=item.symbol,
@@ -537,12 +629,14 @@ def rank_option_chain(
                 quote_age_seconds=quote_age,
                 trade_age_seconds=trade_age,
                 feed="opra",
-                actionable=session.options_actionable,
+                actionable=safe_for_entry,
                 status_badges_ar=badges,
                 entry_instruction_ar=(
                     "دخول ورقي مشروط بعد تحقق دخول السهم وإعادة فحص Bid/Ask."
-                    if session.options_actionable
+                    if safe_for_entry
                     else "دخول مشروط بعد افتتاح السوق وإعادة التحقق من Bid/Ask."
+                    if not session.options_actionable
+                    else "للمراقبة فقط؛ أعد التحقق من الشروط وBid/Ask قبل أي دخول ورقي."
                 ),
                 exit_conditions_ar=[
                     "كسر السهم مستوى الإبطال الفني.",
@@ -555,6 +649,9 @@ def rank_option_chain(
                 valid_for_minutes=valid_minutes,
                 expires_at=expires_at,
                 warnings_ar=warnings,
+                classification_ar=classification,
+                selection_reason_ar=selection_reason,
+                risk_notes_ar=list(warnings),
             )
         )
 
@@ -585,7 +682,13 @@ def rank_option_chain(
         base["market"]["options_status"] = "opra_unavailable"
         base["market"]["options_label_ar"] = "بيانات OPRA غير متاحة"
     return OptionChainResult(
-        status="ready" if shortlisted else "no_contract",
+        status=(
+            "ready"
+            if any(item.actionable for item in shortlisted)
+            else "monitoring"
+            if shortlisted
+            else "no_contract"
+        ),
         **base,
         contracts_considered=len(contracts),
         contracts_rejected=sum(rejected.values()),
