@@ -41,7 +41,7 @@ class ShortDTEOptionSniper:
         now: datetime,
     ) -> SniperUniverse:
         if not self.enabled or not contracts:
-            return SniperUniverse(contracts, "standard", "7–30 DTE", (), None)
+            return SniperUniverse(contracts, "standard", "عقود تنتهي خلال 7 إلى 30 يومًا", (), None)
         today = now.astimezone(NEW_YORK).date()
         live = [
             item
@@ -51,7 +51,7 @@ class ShortDTEOptionSniper:
         ]
         if not live:
             return SniperUniverse(
-                [], "unavailable", "لا توجد عقود ضمن النطاق", (), None
+                [], "unavailable", "لا توجد عقود ضمن المدة المطلوبة", (), None
             )
 
         strikes = sorted(
@@ -64,7 +64,7 @@ class ShortDTEOptionSniper:
         return SniperUniverse(
             narrowed,
             "candidate",
-            "0–2 DTE ثم الاحتياط",
+            "عقود تنتهي خلال يومين، ثم البدائل",
             allowed,
             strikes[0] if strikes else None,
         )

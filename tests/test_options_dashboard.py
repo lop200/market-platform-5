@@ -187,7 +187,7 @@ def test_hard_gates_reject_bad_quotes_but_low_liquidity_is_soft_ranked():
     assert [item.symbol for item in result.ranked_contracts] == ["DRY"]
     assert not result.ranked_contracts[0].actionable
     assert any(
-        "Open Interest" in warning
+        "عدد العقود المفتوحة" in warning
         for warning in result.ranked_contracts[0].warnings_ar
     )
     assert result.rejection_reasons == {
@@ -323,7 +323,7 @@ def test_delta_and_direction_are_soft_but_invalid_quote_and_deep_otm_are_hard():
     assert result.rejection_reasons["deep_otm"] == 1
     assert {item.symbol for item in result.ranked_contracts} == {"PUT", "DELTA"}
     assert any(
-        "Delta خارج النطاق" in warning
+        "حساسية العقد لحركة السهم خارج النطاق" in warning
         for item in result.ranked_contracts
         for warning in item.warnings_ar
     )

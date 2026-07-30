@@ -158,10 +158,10 @@ def _scenario(
         iv_change_pct=iv_change_pct,
         assumptions_ar=[
             f"حركة السهم من {underlying:.2f} إلى {target:.2f}",
-            f"Delta {delta:.3f} وGamma {gamma:.3f}",
-            f"Theta لمدة {expected_days:.1f} يوم",
-            f"تغير IV مفترض {iv_change_pct:+.0f}%",
-            "خصم نصف السبريد من السعر النظري عند الربح",
+            f"حساسية العقد {delta:.3f} وتسارعها {gamma:.3f}",
+            f"تآكل الوقت على مدى {expected_days:.1f} يوم",
+            f"تغير مفترض في التذبذب {iv_change_pct:+.0f}%",
+            "خصم نصف الفارق بين سعري الشراء والبيع من السعر المتوقع عند الربح",
         ],
     )
 
@@ -224,11 +224,11 @@ def _result_base(
             "scenario_type": scenario_type,
             "preferred_option_type": preferred_side,
             "direction_reason_ar": (
-                "الاتجاه الصاعد في السهم الأساسي يسمح بدراسة عقود Call فقط."
+                "السهم صاعد، فلا تُدرس إلا عقود الشراء (Call)."
                 if preferred_side == OptionType.CALL
-                else "الاتجاه الهابط في السهم الأساسي يسمح بدراسة عقود Put فقط."
+                else "السهم هابط، فلا تُدرس إلا عقود البيع (Put)."
                 if preferred_side == OptionType.PUT
-                else "الأطر الزمنية لا تعطي اتجاهًا واضحًا لاختيار نوع العقد."
+                else "الأطر الزمنية لا تعطي اتجاهًا واضحًا، فلا يمكن اختيار نوع العقد."
             ),
             "earnings_date": earnings_date,
             "earnings_risk": earnings_risk,
@@ -257,7 +257,7 @@ def rank_option_chain(
         return OptionChainResult(
             status="disabled",
             **base,
-            warnings_ar=["قسم الخيارات غير مفعل لأن OPTIONS_ENABLED=false."],
+            warnings_ar=["قسم الأوبشن غير مفعّل في الإعدادات."],
         )
     if not settings.options_paper_only:
         base["market"]["options_status"] = "disabled"
@@ -266,7 +266,7 @@ def rank_option_chain(
             status="disabled",
             **base,
             warnings_ar=[
-                "تحليل العقود يعمل في وضع Paper Trading فقط؛ التنفيذ Live محظور."
+                "تحليل العقود يعمل في وضع التداول التجريبي فقط، والتنفيذ الحقيقي ممنوع."
             ],
         )
     if not base["stock_first_gate_passed"]:
@@ -274,7 +274,7 @@ def rank_option_chain(
             status="no_trade",
             **base,
             warnings_ar=[
-                "لا توجد فرصة فنية مكتملة على السهم الأساسي، لذلك لم يتم اختيار عقد أوبشن حاليًا."
+                "لا توجد فرصة مكتملة على السهم نفسه، ولذلك لم يُختر أي عقد أوبشن."
             ],
         )
 
@@ -296,7 +296,7 @@ def rank_option_chain(
         return OptionChainResult(
             status="no_trade",
             **base,
-            warnings_ar=["لا توجد أهداف سهم حتمية يمكن اشتقاق أهداف العقد منها."],
+            warnings_ar=["لا توجد أهداف محددة على السهم يمكن اشتقاق أهداف العقد منها."],
         )
     stock_entry = float(plan["entry_from"])
     stock_stop = float(plan["stop"])
@@ -569,36 +569,36 @@ def rank_option_chain(
         )
         warnings = []
         if iv_crush:
-            warnings.append("تحذير IV Crush حول موعد الأرباح القادم.")
+            warnings.append("تحذير: التذبذب قد يهبط فجأة بعد إعلان الأرباح القادم.")
         if news_penalty:
-            warnings.append("خبر حديث مرتفع التأثير خفّض درجة ملاءمة العقد ورفع مخاطره.")
+            warnings.append("خبر حديث قوي التأثير خفّض درجة ملاءمة العقد ورفع مخاطره.")
         if volume < settings.options_min_volume:
             warnings.append(
-                "حجم تداول العقد منخفض؛ خُفّضت درجة السيولة دون رفضه."
+                "حجم تداول العقد منخفض، فخُفّضت درجة السيولة دون رفضه."
             )
         if oi < settings.options_min_open_interest:
             warnings.append(
-                "Open Interest منخفض؛ العقد للمراقبة ويحتاج إعادة تحقق."
+                "عدد العقود المفتوحة منخفض، فالعقد للمراقبة ويحتاج إعادة تحقق."
             )
         if not delta_in_range:
             warnings.append(
-                "Delta خارج النطاق المفضل؛ خُفّضت درجة الملاءمة."
+                "حساسية العقد لحركة السهم خارج النطاق المفضل، فخُفّضت درجة الملاءمة."
             )
         if not direction_matches:
             warnings.append(
-                "نوع العقد لا يطابق الاتجاه الرئيسي؛ للمراقبة فقط."
+                "نوع العقد لا يطابق اتجاه السهم، فهو للمراقبة فقط."
             )
         if expires_near_earnings:
             warnings.append(
-                "الانتهاء قريب من إعلان الأرباح؛ مخاطرة IV Crush مرتفعة."
+                "العقد ينتهي قرب إعلان الأرباح، ومخاطر هبوط التذبذب بعد الإعلان مرتفعة."
             )
         if not favorable_payoff:
             warnings.append(
-                "العائد النظري الأساسي غير مواتٍ حاليًا؛ لا دخول."
+                "العائد المتوقع غير مواتٍ حاليًا، فلا دخول."
             )
         if capital_pct > settings.options_max_capital_pct:
             warnings.append(
-                "تكلفة العقد أعلى من حد رأس المال المحدد؛ للمراقبة فقط."
+                "تكلفة العقد أعلى من الحد المسموح لرأس مالك، فهو للمراقبة فقط."
             )
         time_remaining = sniper.time_remaining_minutes(item, generated)
         eastern_minutes = (
@@ -612,14 +612,14 @@ def rank_option_chain(
             and (stock_quality < 80 or relative_volume < 1.5)
         )
         if sniper.enabled and dte == 0:
-            warnings.append("عقود 0DTE قد تفقد معظم قيمتها خلال دقائق.")
+            warnings.append("العقود التي تنتهي اليوم قد تفقد معظم قيمتها خلال دقائق.")
         if sniper.enabled and first_five_minutes:
             warnings.append(
-                "أول 5 دقائق للمراقبة فقط؛ انتظر تأكيد Opening Range."
+                "أول 5 دقائق للمراقبة فقط، انتظر تأكيد نطاق الافتتاح."
             )
         if near_close_without_momentum:
             warnings.append(
-                "الوقت المتبقي قصير والزخم غير كافٍ؛ 0DTE غير قابل للدخول."
+                "الوقت المتبقي قصير والزخم غير كافٍ، والعقد الذي ينتهي اليوم غير قابل للدخول."
             )
         if not session.options_actionable:
             warnings.append(
@@ -631,7 +631,7 @@ def rank_option_chain(
             else ["السوق مغلق", "قابل للمراقبة"]
         )
         if spread_pct > settings.options_max_spread_pct * 0.7:
-            badges.append("قريب من حد السبريد")
+            badges.append("قريب من حد الفارق بين سعري الشراء والبيع")
         trade_age = (
             _age_seconds(item.trade_timestamp, generated) if item.trade_timestamp else None
         )
@@ -730,18 +730,18 @@ def rank_option_chain(
                 actionable=safe_for_entry,
                 status_badges_ar=badges,
                 entry_instruction_ar=(
-                    "دخول ورقي مشروط بعد تحقق دخول السهم وإعادة فحص Bid/Ask."
+                    "دخول تجريبي مشروط بعد تحقق دخول السهم وإعادة فحص سعري الشراء والبيع."
                     if safe_for_entry
-                    else "دخول مشروط بعد افتتاح السوق وإعادة التحقق من Bid/Ask."
+                    else "دخول مشروط بعد افتتاح السوق وإعادة التحقق من سعري الشراء والبيع."
                     if not session.options_actionable
-                    else "للمراقبة فقط؛ أعد التحقق من الشروط وBid/Ask قبل أي دخول ورقي."
+                    else "للمراقبة فقط، أعد التحقق من الشروط وسعري الشراء والبيع قبل أي دخول تجريبي."
                 ),
                 exit_conditions_ar=[
                     "كسر السهم مستوى الإبطال الفني.",
-                    f"هبوط Premium إلى {stop:.2f} أو خسارة {premium_loss_pct:.1f}%.",
+                    f"هبوط سعر العقد إلى {stop:.2f} أو خسارة {premium_loss_pct:.1f}%.",
                     "انتهاء صلاحية التحليل.",
                     "تقادم بيانات السهم أو العقد.",
-                    "اتساع السبريد بشدة.",
+                    "اتساع الفارق بين سعري الشراء والبيع بشدة.",
                     "ظهور مخاطرة خبرية جديدة.",
                     (
                         f"Time Stop بعد {5 if dte == 0 else 10 if dte <= 2 else 15} دقائق "
@@ -773,18 +773,18 @@ def rank_option_chain(
 
     ranked.sort(key=lambda value: value.ranking_score, reverse=True)
     scalp_stage = "standard"
-    scalp_stage_label = "7–30 DTE"
+    scalp_stage_label = "عقود تنتهي خلال 7 إلى 30 يومًا"
     if sniper.enabled:
         stages = (
             (
                 "primary",
-                "0–2 DTE",
+                "عقود تنتهي خلال يومين أو أقل",
                 settings.options_scalp_min_dte,
                 settings.options_scalp_max_dte,
             ),
             (
                 "short_fallback",
-                "احتياط 3–7 DTE",
+                "بديل: عقود تنتهي خلال 3 إلى 7 أيام",
                 settings.options_scalp_max_dte + 1,
                 settings.options_scalp_fallback_max_dte,
             ),
@@ -794,7 +794,7 @@ def rank_option_chain(
             stages += (
                 (
                     "standard_fallback",
-                    "احتياط 7–30 DTE",
+                    "بديل: عقود تنتهي خلال 7 إلى 30 يومًا",
                     max(
                         settings.options_min_dte,
                         settings.options_scalp_fallback_max_dte,
@@ -816,7 +816,8 @@ def rank_option_chain(
         if not selected_stage and settings.options_scalp_strict:
             scalp_stage = "no_short_dte"
             scalp_stage_label = (
-                f"لا يوجد عقد ضمن 0–{settings.options_scalp_fallback_max_dte} DTE"
+                "لا يوجد عقد ينتهي خلال "
+                f"{settings.options_scalp_fallback_max_dte} أيام"
             )
         shortlisted, scalp_modes = sniper.choose_modes(selected_stage)
     else:
@@ -824,22 +825,24 @@ def rank_option_chain(
         scalp_modes = {}
     best_call = next((item for item in shortlisted if item.option_type == OptionType.CALL), None)
     best_put = next((item for item in shortlisted if item.option_type == OptionType.PUT), None)
-    warnings = ["Paper Trading فقط — لا يوجد تنفيذ تلقائي أو أوامر Live."]
+    warnings = ["تداول تجريبي فقط — لا يوجد تنفيذ تلقائي ولا أوامر حقيقية."]
     if sniper.enabled and scalp_stage != "primary" and shortlisted:
         warnings.append(
-            f"لم توجد عقود 0–2 DTE بجودة كافية؛ تم التوسع إلى {scalp_stage_label}."
+            "لم يوجد عقد ينتهي خلال يومين بجودة كافية، "
+            f"فتم التوسع إلى {scalp_stage_label}."
         )
     if sniper.enabled and scalp_stage == "no_short_dte":
         warnings.append(
-            f"لا صيد: لا يوجد عقد 0–{settings.options_scalp_fallback_max_dte} DTE "
-            "بجودة كافية على هذا الرمز. غالبًا لا تتوفر له انتهاءات قصيرة سائلة."
+            "لا يوجد عقد مناسب: ما فيه عقد أوبشن ينتهي خلال "
+            f"{settings.options_scalp_fallback_max_dte} أيام بجودة كافية على هذا "
+            "السهم، وغالبًا لأن السهم ليس له عقود قصيرة المدى أصلًا."
         )
     if sniper.enabled and not shortlisted and rejected.get("over_budget"):
         warnings.append(
             "لا يوجد عقد قريب من السترايك ومناسب للميزانية بجودة كافية."
         )
     if sniper.enabled and any(item.dte == 0 for item in shortlisted):
-        warnings.append("عقود 0DTE قد تفقد معظم قيمتها خلال دقائق.")
+        warnings.append("العقود التي تنتهي اليوم قد تفقد معظم قيمتها خلال دقائق.")
     if not session.options_actionable:
         warnings.extend([
             "التحليل للمراقبة فقط، ولا يمكن تنفيذ العقد حتى افتتاح سوق الخيارات.",
@@ -860,7 +863,7 @@ def rank_option_chain(
         base["market"]["options_label_ar"] = "بيانات قديمة"
     elif not shortlisted and rejected.get("opra_unavailable"):
         base["market"]["options_status"] = "opra_unavailable"
-        base["market"]["options_label_ar"] = "بيانات OPRA غير متاحة"
+        base["market"]["options_label_ar"] = "بيانات الأوبشن غير متاحة"
     scalp_decision = (
         "قنص مشروط"
         if any(item.actionable for item in shortlisted)

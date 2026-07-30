@@ -66,17 +66,17 @@ class Settings(BaseSettings):
     options_scalp_strict: bool = Field(
         default=True, alias="OPTIONS_SCALP_STRICT"
     )
-    # Underlyings that actually carry liquid 0-2 DTE contracts. Small caps are
-    # deliberately excluded: they only list monthly expirations, so the sniper
-    # can never satisfy its own mandate on them.
-    options_sniper_universe: str = Field(
+    # Stocks that actually carry liquid contracts expiring within days. Small
+    # caps are deliberately excluded: they only list monthly expirations, so
+    # the sniper can never satisfy its own mandate on them.
+    options_sniper_symbols: str = Field(
         default=(
             "SPY,QQQ,IWM,DIA,"
             "TSLA,NVDA,AAPL,AMZN,AMD,META,MSFT,GOOGL,NFLX,"
             "COIN,PLTR,MSTR,SMCI,INTC,F,SOFI,MARA,RIOT,BABA,"
             "TQQQ,SQQQ,SOXL,SOXS,XLF,XLE,GLD,SLV,TLT,ARKK"
         ),
-        alias="OPTIONS_SNIPER_UNIVERSE",
+        alias="OPTIONS_SNIPER_SYMBOLS",
     )
     options_scalp_paper_only: bool = Field(
         default=True, alias="OPTIONS_SCALP_PAPER_ONLY"
@@ -268,10 +268,10 @@ class Settings(BaseSettings):
         return [item.strip().upper() for item in self.scan_symbols.split(",") if item.strip()]
 
     @property
-    def configured_sniper_universe(self) -> list[str]:
+    def configured_sniper_symbols(self) -> list[str]:
         return [
             item.strip().upper()
-            for item in self.options_sniper_universe.split(",")
+            for item in self.options_sniper_symbols.split(",")
             if item.strip()
         ]
 

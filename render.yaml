@@ -73,7 +73,7 @@ services:
         value: "2"
       - key: OPTIONS_SCALP_STRICT
         value: "true"
-      - key: OPTIONS_SNIPER_UNIVERSE
+      - key: OPTIONS_SNIPER_SYMBOLS
         sync: false
       - key: OPTIONS_SCALP_PAPER_ONLY
         value: "true"

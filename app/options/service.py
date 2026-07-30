@@ -21,24 +21,24 @@ def analyze_options_after_stock(
     )
     if not stock_valid:
         return rank_option_chain(stock_analysis, [], settings)
-    universe = settings.configured_sniper_universe
+    allowed_symbols = settings.configured_sniper_symbols
     symbol = str(stock_analysis.get("symbol") or "").upper()
-    if settings.options_scalp_mode and universe and symbol not in universe:
+    if settings.options_scalp_mode and allowed_symbols and symbol not in allowed_symbols:
         # Answer up front instead of spending an OPRA call to return nothing.
         result = rank_option_chain(stock_analysis, [], settings)
-        result.status = "outside_sniper_universe"
+        result.status = "no_short_term_options"
         result.warnings_ar.append(
-            f"{symbol} خارج كون القنّاص: لا تتوفر له انتهاءات 0–2 DTE سائلة، "
-            "فأغلب الأسهم خارج القائمة لها انتهاء شهري فقط. "
-            f"جرّب مثلًا: {'، '.join(universe[:6])}."
+            f"سهم {symbol} ليس له عقود أوبشن تنتهي خلال أيام قليلة، "
+            "بل عقود شهرية فقط، ولذلك لا يصلح للقنص السريع. "
+            f"جرّب سهمًا مثل: {'، '.join(allowed_symbols[:6])}."
         )
         return result
     if provider is None:
         result = rank_option_chain(stock_analysis, [], settings)
         result.status = "provider_unavailable"
         result.market["options_status"] = "opra_unavailable"
-        result.market["options_label_ar"] = "بيانات OPRA غير متاحة"
-        result.warnings_ar.append("تعذر مزود OPRA؛ اكتمل تحليل السهم دون خيارات")
+        result.market["options_label_ar"] = "بيانات الأوبشن غير متاحة"
+        result.warnings_ar.append("تعذّر مزوّد بيانات الأوبشن، واكتمل تحليل السهم بدون عقود")
         return result
     try:
         contracts = provider.get_option_chain(
@@ -48,6 +48,6 @@ def analyze_options_after_stock(
     except Exception:
         result = rank_option_chain(stock_analysis, [], settings)
         result.status = "provider_failed"
-        result.warnings_ar.append("فشل options API؛ اكتمل تحليل السهم دون تعطيل الصفحة")
+        result.warnings_ar.append("فشل جلب بيانات الأوبشن، واكتمل تحليل السهم بدون تعطيل الصفحة")
         return result
     return rank_option_chain(stock_analysis, contracts, settings)

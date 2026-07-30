@@ -126,7 +126,7 @@ def test_sniper_prioritizes_zero_to_two_dte_and_same_direction():
     assert result.ranked_contracts
     assert all(item.dte <= 2 for item in result.ranked_contracts)
     assert all(item.option_type == OptionType.CALL for item in result.ranked_contracts)
-    assert "عقود 0DTE قد تفقد معظم قيمتها خلال دقائق." in result.warnings_ar
+    assert "العقود التي تنتهي اليوم قد تفقد معظم قيمتها خلال دقائق." in result.warnings_ar
     assert result.ranked_contracts[0].time_stop_minutes in {5, 10}
 
 
@@ -147,7 +147,7 @@ def test_sniper_uses_absolute_put_delta_and_falls_back_to_three_to_seven_dte():
     )
     assert result.ranked_contracts[0].symbol == "AAPL-4-P"
     assert result.scalp_summary["dte_stage"] == "short_fallback"
-    assert any("3–7 DTE" in warning for warning in result.warnings_ar)
+    assert any("3 إلى 7 أيام" in warning for warning in result.warnings_ar)
 
 
 def test_strict_mode_refuses_monthly_instead_of_falling_back():
@@ -160,7 +160,7 @@ def test_strict_mode_refuses_monthly_instead_of_falling_back():
     )
     assert result.ranked_contracts == []
     assert result.scalp_summary["dte_stage"] == "no_short_dte"
-    assert any("لا صيد" in warning for warning in result.warnings_ar)
+    assert any("لا يوجد عقد مناسب" in warning for warning in result.warnings_ar)
 
 
 def test_non_strict_mode_still_reaches_the_monthly_rung():
@@ -272,21 +272,21 @@ def _valid_stock(symbol: str) -> dict:
     return payload
 
 
-def test_symbol_outside_sniper_universe_is_refused_without_touching_opra():
+def test_symbol_without_short_term_options_is_refused_before_calling_opra():
     """Small caps have no short-dated chain; say so instead of calling OPRA."""
 
     class ExplodingProvider:
         def get_option_chain(self, *args, **kwargs):  # pragma: no cover
-            raise AssertionError("OPRA must not be called outside the universe")
+            raise AssertionError("OPRA must not be called for excluded symbols")
 
     result = analyze_options_after_stock(
         _valid_stock("FFAI"), settings(), ExplodingProvider()
     )
-    assert result.status == "outside_sniper_universe"
-    assert any("خارج كون القنّاص" in warning for warning in result.warnings_ar)
+    assert result.status == "no_short_term_options"
+    assert any("ليس له عقود أوبشن تنتهي خلال أيام" in warning for warning in result.warnings_ar)
 
 
-def test_symbol_inside_sniper_universe_reaches_the_provider():
+def test_symbol_with_short_term_options_reaches_the_provider():
     captured: list[str] = []
 
     class RecordingProvider:
@@ -298,4 +298,4 @@ def test_symbol_inside_sniper_universe_reaches_the_provider():
         _valid_stock("SPY"), settings(), RecordingProvider()
     )
     assert captured == ["SPY"]
-    assert result.status != "outside_sniper_universe"
+    assert result.status != "no_short_term_options"
