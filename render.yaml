@@ -71,6 +71,10 @@ services:
         value: "7"
       - key: OPTIONS_SCALP_MAX_STRIKES_FROM_ATM
         value: "2"
+      - key: OPTIONS_SCALP_STRICT
+        value: "true"
+      - key: OPTIONS_SNIPER_UNIVERSE
+        sync: false
       - key: OPTIONS_SCALP_PAPER_ONLY
         value: "true"
       - key: OPTIONS_ACCOUNT_SIZE_USD

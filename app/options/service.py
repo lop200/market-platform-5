@@ -21,6 +21,18 @@ def analyze_options_after_stock(
     )
     if not stock_valid:
         return rank_option_chain(stock_analysis, [], settings)
+    universe = settings.configured_sniper_universe
+    symbol = str(stock_analysis.get("symbol") or "").upper()
+    if settings.options_scalp_mode and universe and symbol not in universe:
+        # Answer up front instead of spending an OPRA call to return nothing.
+        result = rank_option_chain(stock_analysis, [], settings)
+        result.status = "outside_sniper_universe"
+        result.warnings_ar.append(
+            f"{symbol} خارج كون القنّاص: لا تتوفر له انتهاءات 0–2 DTE سائلة، "
+            "فأغلب الأسهم خارج القائمة لها انتهاء شهري فقط. "
+            f"جرّب مثلًا: {'، '.join(universe[:6])}."
+        )
+        return result
     if provider is None:
         result = rank_option_chain(stock_analysis, [], settings)
         result.status = "provider_unavailable"

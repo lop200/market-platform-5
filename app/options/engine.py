@@ -788,13 +788,20 @@ def rank_option_chain(
                 settings.options_scalp_max_dte + 1,
                 settings.options_scalp_fallback_max_dte,
             ),
-            (
-                "standard_fallback",
-                "احتياط 7–30 DTE",
-                max(settings.options_min_dte, settings.options_scalp_fallback_max_dte),
-                settings.options_max_dte,
-            ),
         )
+        if not settings.options_scalp_strict:
+            # Non-strict mode keeps the legacy monthly rung as a last resort.
+            stages += (
+                (
+                    "standard_fallback",
+                    "احتياط 7–30 DTE",
+                    max(
+                        settings.options_min_dte,
+                        settings.options_scalp_fallback_max_dte,
+                    ),
+                    settings.options_max_dte,
+                ),
+            )
         selected_stage: list[RankedOptionContract] = []
         for name, label, minimum, maximum in stages:
             selected_stage = [
@@ -806,6 +813,11 @@ def rank_option_chain(
             if selected_stage:
                 scalp_stage, scalp_stage_label = name, label
                 break
+        if not selected_stage and settings.options_scalp_strict:
+            scalp_stage = "no_short_dte"
+            scalp_stage_label = (
+                f"لا يوجد عقد ضمن 0–{settings.options_scalp_fallback_max_dte} DTE"
+            )
         shortlisted, scalp_modes = sniper.choose_modes(selected_stage)
     else:
         shortlisted = ranked[: max(1, min(3, settings.options_contract_limit))]
@@ -816,6 +828,11 @@ def rank_option_chain(
     if sniper.enabled and scalp_stage != "primary" and shortlisted:
         warnings.append(
             f"لم توجد عقود 0–2 DTE بجودة كافية؛ تم التوسع إلى {scalp_stage_label}."
+        )
+    if sniper.enabled and scalp_stage == "no_short_dte":
+        warnings.append(
+            f"لا صيد: لا يوجد عقد 0–{settings.options_scalp_fallback_max_dte} DTE "
+            "بجودة كافية على هذا الرمز. غالبًا لا تتوفر له انتهاءات قصيرة سائلة."
         )
     if sniper.enabled and not shortlisted and rejected.get("over_budget"):
         warnings.append(

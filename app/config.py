@@ -63,6 +63,21 @@ class Settings(BaseSettings):
     options_scalp_max_strikes_from_atm: int = Field(
         default=2, alias="OPTIONS_SCALP_MAX_STRIKES_FROM_ATM"
     )
+    options_scalp_strict: bool = Field(
+        default=True, alias="OPTIONS_SCALP_STRICT"
+    )
+    # Underlyings that actually carry liquid 0-2 DTE contracts. Small caps are
+    # deliberately excluded: they only list monthly expirations, so the sniper
+    # can never satisfy its own mandate on them.
+    options_sniper_universe: str = Field(
+        default=(
+            "SPY,QQQ,IWM,DIA,"
+            "TSLA,NVDA,AAPL,AMZN,AMD,META,MSFT,GOOGL,NFLX,"
+            "COIN,PLTR,MSTR,SMCI,INTC,F,SOFI,MARA,RIOT,BABA,"
+            "TQQQ,SQQQ,SOXL,SOXS,XLF,XLE,GLD,SLV,TLT,ARKK"
+        ),
+        alias="OPTIONS_SNIPER_UNIVERSE",
+    )
     options_scalp_paper_only: bool = Field(
         default=True, alias="OPTIONS_SCALP_PAPER_ONLY"
     )
@@ -251,6 +266,14 @@ class Settings(BaseSettings):
     @property
     def configured_scan_symbols(self) -> list[str]:
         return [item.strip().upper() for item in self.scan_symbols.split(",") if item.strip()]
+
+    @property
+    def configured_sniper_universe(self) -> list[str]:
+        return [
+            item.strip().upper()
+            for item in self.options_sniper_universe.split(",")
+            if item.strip()
+        ]
 
     @property
     def configured_x_accounts(self) -> list[str]:

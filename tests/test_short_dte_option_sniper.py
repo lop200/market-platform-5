@@ -8,6 +8,7 @@ from app.config import Settings
 from app.main import app
 from app.options.engine import rank_option_chain
 from app.options.schemas import OptionType, RawOptionContract
+from app.options.service import analyze_options_after_stock
 from app.options.sniper import ShortDTEOptionSniper
 
 
@@ -149,6 +150,41 @@ def test_sniper_uses_absolute_put_delta_and_falls_back_to_three_to_seven_dte():
     assert any("3–7 DTE" in warning for warning in result.warnings_ar)
 
 
+def test_strict_mode_refuses_monthly_instead_of_falling_back():
+    """Strict mode must say "no hunt" rather than serving a weeks-out contract."""
+    result = rank_option_chain(
+        stock(),
+        [contract("AAPL-21-C", dte=21), contract("AAPL-28-C", dte=28, strike=201)],
+        settings(),
+        now=NOW,
+    )
+    assert result.ranked_contracts == []
+    assert result.scalp_summary["dte_stage"] == "no_short_dte"
+    assert any("لا صيد" in warning for warning in result.warnings_ar)
+
+
+def test_non_strict_mode_still_reaches_the_monthly_rung():
+    result = rank_option_chain(
+        stock(),
+        [contract("AAPL-21-C", dte=21), contract("AAPL-28-C", dte=28, strike=201)],
+        settings(options_scalp_strict=False),
+        now=NOW,
+    )
+    assert [item.symbol for item in result.ranked_contracts][:1] == ["AAPL-21-C"]
+    assert result.scalp_summary["dte_stage"] == "standard_fallback"
+
+
+def test_strict_mode_still_prefers_primary_when_short_dte_exists():
+    result = rank_option_chain(
+        stock(),
+        [contract("AAPL-1-C", dte=1), contract("AAPL-28-C", dte=28, strike=201)],
+        settings(),
+        now=NOW,
+    )
+    assert result.scalp_summary["dte_stage"] == "primary"
+    assert [item.symbol for item in result.ranked_contracts] == ["AAPL-1-C"]
+
+
 def test_sniper_never_accepts_cheap_bad_or_stale_quotes():
     stale = datetime(2026, 7, 30, 14, 59, tzinfo=timezone.utc)
     missing_greeks = contract("MISSING", dte=1)
@@ -228,3 +264,38 @@ def test_scalp_feature_flag_keeps_zero_dte_disabled_by_default():
     )
     assert [item.symbol for item in result.ranked_contracts] == ["STANDARD"]
     assert result.scalp_summary == {}
+
+
+def _valid_stock(symbol: str) -> dict:
+    payload = stock()
+    payload["symbol"] = symbol
+    return payload
+
+
+def test_symbol_outside_sniper_universe_is_refused_without_touching_opra():
+    """Small caps have no short-dated chain; say so instead of calling OPRA."""
+
+    class ExplodingProvider:
+        def get_option_chain(self, *args, **kwargs):  # pragma: no cover
+            raise AssertionError("OPRA must not be called outside the universe")
+
+    result = analyze_options_after_stock(
+        _valid_stock("FFAI"), settings(), ExplodingProvider()
+    )
+    assert result.status == "outside_sniper_universe"
+    assert any("خارج كون القنّاص" in warning for warning in result.warnings_ar)
+
+
+def test_symbol_inside_sniper_universe_reaches_the_provider():
+    captured: list[str] = []
+
+    class RecordingProvider:
+        def get_option_chain(self, symbol, price):
+            captured.append(symbol)
+            return [contract("SPY-1-C", dte=1)]
+
+    result = analyze_options_after_stock(
+        _valid_stock("SPY"), settings(), RecordingProvider()
+    )
+    assert captured == ["SPY"]
+    assert result.status != "outside_sniper_universe"
