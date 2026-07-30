@@ -77,6 +77,10 @@ services:
         sync: false
       - key: OPTIONS_SCALP_PAPER_ONLY
         value: "true"
+      - key: LIVE_PRICES_ENABLED
+        value: "true"
+      - key: LIVE_PRICES_POLL_MS
+        value: "1000"
       - key: OPTIONS_ACCOUNT_SIZE_USD
         value: "5000"
       - key: OPTIONS_MAX_CONTRACT_COST_USD

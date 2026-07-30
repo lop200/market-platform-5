@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "market-platform",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8099"],
+      "port": 8099,
+      "env": {
+        "OPTIONS_SCALP_MODE": "true",
+        "OPTIONS_SCALP_STRICT": "true"
+      }
+    }
+  ]
+}

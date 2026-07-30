@@ -7,9 +7,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import routes_advisor, routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_spx, routes_web
+from app.api import routes_advisor, routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_prices, routes_spx, routes_web
 from app.config import get_settings
 from app.db.session import init_db
+from app.live.prices import start_price_stream, stop_price_stream
 from app.opportunities.audit_scheduler import start_audit_scheduler, stop_audit_scheduler
 from app.providers.factory import get_market_data_provider
 from app.security.site_lock import SiteLockMiddleware
@@ -31,7 +32,10 @@ async def lifespan(app: FastAPI):
         routes_dashboard._news_executor.submit(routes_dashboard._refresh_news)
     if settings.spx_enabled and settings.alpaca_api_key and not os.environ.get("PYTEST_CURRENT_TEST"):
         routes_spx._executor.submit(routes_spx._refresh, routes_spx.StrikeMode.NEAR)
+    streaming = not os.environ.get("PYTEST_CURRENT_TEST") and start_price_stream(settings)
     yield
+    if streaming:
+        stop_price_stream()
     if started:
         stop_audit_scheduler()
 
@@ -48,6 +52,7 @@ app.include_router(routes_opportunities.router)
 app.include_router(routes_cost.router)
 app.include_router(routes_debug.router)
 app.include_router(routes_dashboard.router)
+app.include_router(routes_prices.router)
 app.include_router(routes_spx.router)
 app.include_router(routes_advisor.router)
 app.include_router(routes_web.router)

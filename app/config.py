@@ -78,6 +78,8 @@ class Settings(BaseSettings):
         ),
         alias="OPTIONS_SNIPER_SYMBOLS",
     )
+    live_prices_enabled: bool = Field(default=True, alias="LIVE_PRICES_ENABLED")
+    live_prices_poll_ms: int = Field(default=1000, alias="LIVE_PRICES_POLL_MS")
     options_scalp_paper_only: bool = Field(
         default=True, alias="OPTIONS_SCALP_PAPER_ONLY"
     )

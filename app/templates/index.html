@@ -8,7 +8,23 @@
   <style>
     :root{--bg:#080d16;--surface:#101722;--surface2:#151f2d;--line:#253246;--text:#f2f6fb;--muted:#8f9db0;--green:#40d49a;--yellow:#f6c85f;--red:#ff727f;--blue:#6bb8ff}
     *{box-sizing:border-box}html{overflow-x:hidden}body{margin:0;min-width:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif;overflow-x:hidden}button,input,select{font:inherit}.shell{width:min(1420px,100%);margin:auto;padding:10px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:54px;padding:8px 12px;border:1px solid var(--line);background:#0d141fdd;backdrop-filter:blur(18px);border-radius:14px;position:sticky;top:6px;z-index:30}.brand{display:flex;align-items:center;gap:9px}.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--green),var(--blue));box-shadow:0 0 24px #40d49a33}.brand h1{font-size:1rem;margin:0}.brand small,.muted{color:var(--muted)}.statusbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.chip{font-size:.72rem;color:#c8d2df;background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:6px 9px}.refresh{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:9px;padding:7px 10px;cursor:pointer}.earnings-nav{display:flex;align-items:center;gap:6px;color:var(--blue);text-decoration:none;border:1px solid #294967;background:#102238;border-radius:10px;padding:7px 9px;font-size:.74rem;white-space:nowrap}.earnings-nav svg{flex:none}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:54px;padding:8px 12px;border:1px solid var(--line);background:#0d141fdd;backdrop-filter:blur(18px);border-radius:14px;position:sticky;top:6px;z-index:30}.brand{display:flex;align-items:center;gap:9px}.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--green),var(--blue));box-shadow:0 0 24px #40d49a33}.brand h1{font-size:1rem;margin:0}.brand small,.muted{color:var(--muted)}.statusbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.chip.open{border-color:var(--green);color:var(--green)}
+.chip.closed{border-color:var(--line);color:var(--muted)}
+/* Flex item defaults to min-width:auto, which would let the row grow to the
+   full width of the ticker and get clipped by body's overflow-x:hidden. */
+.live-strip{width:100%;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:10px 0}
+.live-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.live-head h2{font-size:.9rem;margin:0}
+.ticker{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.tick{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;font-size:.78rem;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;transition:border-color .3s,color .3s}
+.tick b{color:var(--muted);font-weight:600}
+.tick-price{font-variant-numeric:tabular-nums;font-weight:700}
+.tick.up{border-color:var(--green)}.tick.up .tick-price{color:var(--green)}
+.tick.down{border-color:var(--red)}.tick.down .tick-price{color:var(--red)}
+.tick.stale{opacity:.55}
+.tick-flag{font-size:.62rem;color:var(--yellow)}
+@media(prefers-reduced-motion:reduce){.tick{transition:none}}.chip{font-size:.72rem;color:#c8d2df;background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:6px 9px}.refresh{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:9px;padding:7px 10px;cursor:pointer}.earnings-nav{display:flex;align-items:center;gap:6px;color:var(--blue);text-decoration:none;border:1px solid #294967;background:#102238;border-radius:10px;padding:7px 9px;font-size:.74rem;white-space:nowrap}.earnings-nav svg{flex:none}
     .hero{display:grid;gap:10px;margin:12px 0}.search-panel,.scan-panel,.card,.stat,.progress-panel{background:var(--surface);border:1px solid var(--line);border-radius:16px}.search-panel,.scan-panel{padding:14px}.eyebrow{font-size:.7rem;color:var(--blue);font-weight:700}.search-panel h2{font-size:1.35rem;margin:5px 0 12px}.search-row{display:grid;grid-template-columns:1fr auto;gap:7px;position:relative}.search-row input{width:100%;min-width:0;background:#0a111b;border:1px solid #304158;color:var(--text);border-radius:11px;padding:13px;text-transform:uppercase;outline:none}.search-row input:focus{border-color:var(--blue);box-shadow:0 0 0 3px #6bb8ff18}.btn{border:0;border-radius:11px;padding:10px 14px;font-weight:750;cursor:pointer}.btn-green{background:var(--green);color:#06251b}.btn-blue{background:var(--blue);color:#061827}.suggestions{display:none;position:absolute;top:calc(100% + 5px);right:0;left:72px;background:#101a28;border:1px solid var(--line);border-radius:12px;z-index:40;overflow:auto;max-height:290px}.suggestions.open{display:block}.suggestion{display:flex;width:100%;gap:10px;padding:10px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--text);text-align:right;cursor:pointer}.suggestion b{direction:ltr;color:var(--blue);min-width:60px}.suggestion span{color:var(--muted)}
     .scan-panel{display:grid;gap:10px}.scan-head{display:flex;justify-content:space-between;align-items:center}.scan-head h2{font-size:1rem;margin:0}.filters{display:grid;grid-template-columns:1fr;gap:7px}.filters select,.filters input{min-width:0;width:100%;background:#0a111b;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:9px}.custom-range{display:none;grid-template-columns:1fr 1fr;gap:7px}.custom-range.show{display:grid}
     .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}.stat{padding:12px}.stat small{display:block;color:var(--muted);font-size:.72rem}.stat b{display:block;font-size:1.35rem;margin-top:5px}.green{color:var(--green)}.yellow{color:var(--yellow)}.red{color:var(--red)}.blue{color:var(--blue)}
@@ -30,6 +46,10 @@
     <a class="earnings-nav" href="/spx" title="سياق الأخبار المؤثرة على SPX"><span>🎯 قنّاص SPX</span></a>
     <div class="brand"><span class="logo"></span><div><h1>مرصاد</h1><small>تحليل الأسهم الأمريكية</small></div><span class="chip" title="يحلل السهم أولًا ثم عقود الشركة">🎯 صائد العقود</span></div>
     <div class="statusbar"><span class="chip" id="marketState">حالة السوق: —</span><span class="chip" id="riyadh">الرياض —</span><span class="chip" id="newyork">نيويورك —</span><span class="chip" id="provider">المزود —</span><button class="refresh" id="refresh">تحديث ↻</button></div>
+    <section class="live-strip" aria-live="polite">
+      <div class="live-head"><h2>الأسعار الآن</h2><span class="muted" id="liveTickerNote">جارٍ الاتصال…</span></div>
+      <div class="ticker" id="liveTicker"></div>
+    </section>
   </header>
   <section class="session-guide" aria-labelledby="sessionGuideTitle">
     <div class="session-guide-head"><h2 id="sessionGuideTitle">مواعيد السوق بتوقيت السعودية</h2><span id="usClockMode">يتحدث تلقائيًا حسب توقيت نيويورك</span></div>
@@ -132,7 +152,47 @@ advisorQuestion.oninput=()=>$("#advisorChars").textContent=advisorQuestion.value
 document.querySelectorAll(".advisor-examples button").forEach(btn=>btn.onclick=()=>{advisorQuestion.value=btn.textContent;advisorQuestion.oninput();advisor.classList.add("open");document.body.classList.add("advisor-open")});
 function renderAdvisorAnswer(data){advisorAnswer.textContent="";const title=document.createElement("b");title.textContent=data.answer_ar||"البيانات الحالية لا تكفي لإجابة موثوقة.";advisorAnswer.append(title);if(data.conclusion_ar){const conclusion=document.createElement("p");conclusion.textContent=data.conclusion_ar;advisorAnswer.append(conclusion)}if((data.risk_warnings_ar||[]).length){const list=document.createElement("ul");data.risk_warnings_ar.forEach(text=>{const item=document.createElement("li");item.textContent=text;list.append(item)});advisorAnswer.append(list)}const paper=document.createElement("small");paper.textContent="تداول تجريبي فقط";advisorAnswer.append(paper)}
 $("#advisorForm").onsubmit=async e=>{e.preventDefault();const question=advisorQuestion.value.trim();if(!question)return;advisorAnswer.textContent="جاري مراجعة بيانات المنصة…";try{const res=await fetch("/api/v1/advisor/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question,symbol:input.value.trim().toUpperCase()||null})}),data=await res.json();renderAdvisorAnswer(data)}catch{advisorAnswer.textContent="البيانات الحالية لا تكفي لإجابة موثوقة."}};
+// ---- حالة السوق + شريط الأسعار الحية ----
+const marketStateEl=$("#marketState"),tickerEl=$("#liveTicker"),tickerNote=$("#liveTickerNote");
+const priceRow=(p)=>{
+  const prev=priceRow.last?.[p.symbol];
+  const dir=prev==null||p.price===prev?"":(p.price>prev?"up":"down");
+  return `<span class="tick ${dir} ${p.stale?"stale":""}" title="${p.stale?"سعر متأخر":"سعر لحظي"}">
+    <b>${p.symbol}</b><span class="tick-price">${p.price.toFixed(2)}</span>
+    ${p.stale?'<span class="tick-flag">متأخر</span>':""}</span>`;
+};
+const renderPrices=(body)=>{
+  const rows=body.prices||[];
+  if(!rows.length){
+    tickerEl.innerHTML="";
+    tickerNote.textContent=body.stream?.running?"بانتظار أول سعر من السوق…":"البث المباشر متوقف — الأسعار تُحدَّث عند كل تحديث للصفحة.";
+    return;
+  }
+  tickerEl.innerHTML=rows.map(priceRow).join("");
+  priceRow.last=Object.fromEntries(rows.map(p=>[p.symbol,p.price]));
+  const stale=rows.filter(p=>p.stale).length;
+  tickerNote.textContent=stale?`${rows.length} سهم — ${stale} منها بسعر متأخر`:`${rows.length} سهم بأسعار لحظية`;
+};
+const startPriceStream=()=>{
+  fetch("/api/v1/prices").then(r=>r.json()).then(renderPrices).catch(()=>{});
+  if(!window.EventSource)return;
+  const es=new EventSource("/api/v1/prices/stream");
+  es.onmessage=(e)=>{try{renderPrices(JSON.parse(e.data))}catch{}};
+  // Browser reconnects on its own; only surface a hard failure.
+  es.onerror=()=>{if(es.readyState===EventSource.CLOSED)tickerNote.textContent="انقطع البث المباشر.";};
+};
+const renderMarketState=(m)=>{
+  if(!m)return;
+  const stock=m.stock_label_ar||"—",opt=m.options_label_ar;
+  marketStateEl.textContent=`الأسهم: ${stock}${opt?` • الأوبشن: ${opt}`:""}`;
+  marketStateEl.classList.toggle("open",!!m.stock_actionable);
+  marketStateEl.classList.toggle("closed",!m.stock_actionable);
+};
+const loadMarketState=()=>fetch("/api/v1/dashboard").then(r=>r.json())
+  .then(b=>renderMarketState(b.market)).catch(()=>{});
+
 latest();loadAdvisorContext();setInterval(loadAdvisorContext,60000);
+loadMarketState();setInterval(loadMarketState,30000);startPriceStream();
 </script>
 </body>
 </html>
