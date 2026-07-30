@@ -16,7 +16,9 @@ class OptionDataProvider(Protocol):
     provider_name: str
     feed: str
 
-    def get_option_chain(self, symbol: str) -> list[RawOptionContract]: ...
+    def get_option_chain(
+        self, symbol: str, underlying_price: float | None = None
+    ) -> list[RawOptionContract]: ...
 
 
 def parse_occ_symbol(contract_symbol: str) -> tuple[str, date, OptionType, float]:
@@ -41,6 +43,7 @@ class AlpacaOptionProvider:
         timeout_seconds: float = 12,
         min_dte: int = 7,
         max_dte: int = 30,
+        strike_window_pct: float = 8.0,
     ):
         if not api_key or not api_secret:
             raise ValueError("Alpaca credentials are required for OPRA options data")
@@ -51,23 +54,31 @@ class AlpacaOptionProvider:
         self.timeout_seconds = timeout_seconds
         self.min_dte = min_dte
         self.max_dte = max_dte
+        self.strike_window_pct = strike_window_pct
 
-    def get_option_chain(self, symbol: str) -> list[RawOptionContract]:
+    def get_option_chain(
+        self, symbol: str, underlying_price: float | None = None
+    ) -> list[RawOptionContract]:
         url = f"{self.base_url}/v1beta1/options/snapshots/{symbol.upper()}"
         market_date = datetime.now(ZoneInfo("America/New_York")).date()
+        params: dict[str, str | int | float] = {
+            "feed": self.feed,
+            "limit": 1000,
+            "expiration_date_gte": (
+                market_date + timedelta(days=self.min_dte)
+            ).isoformat(),
+            "expiration_date_lte": (
+                market_date + timedelta(days=self.max_dte)
+            ).isoformat(),
+        }
+        if underlying_price and underlying_price > 0:
+            band = underlying_price * self.strike_window_pct / 100
+            params["strike_price_gte"] = round(max(0.01, underlying_price - band), 2)
+            params["strike_price_lte"] = round(underlying_price + band, 2)
         with httpx.Client(timeout=self.timeout_seconds) as client:
             response = client.get(
                 url,
-                params={
-                    "feed": self.feed,
-                    "limit": 1000,
-                    "expiration_date_gte": (
-                        market_date + timedelta(days=self.min_dte)
-                    ).isoformat(),
-                    "expiration_date_lte": (
-                        market_date + timedelta(days=self.max_dte)
-                    ).isoformat(),
-                },
+                params=params,
                 headers={
                     "APCA-API-KEY-ID": self.api_key,
                     "APCA-API-SECRET-KEY": self.api_secret,

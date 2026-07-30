@@ -54,6 +54,27 @@ class Settings(BaseSettings):
         default=35.0, alias="OPTIONS_MAX_PREMIUM_LOSS_PCT"
     )
     options_earnings_risk_days: int = Field(default=7, alias="OPTIONS_EARNINGS_RISK_DAYS")
+    options_scalp_mode: bool = Field(default=False, alias="OPTIONS_SCALP_MODE")
+    options_scalp_min_dte: int = Field(default=0, alias="OPTIONS_SCALP_MIN_DTE")
+    options_scalp_max_dte: int = Field(default=2, alias="OPTIONS_SCALP_MAX_DTE")
+    options_scalp_fallback_max_dte: int = Field(
+        default=7, alias="OPTIONS_SCALP_FALLBACK_MAX_DTE"
+    )
+    options_scalp_max_strikes_from_atm: int = Field(
+        default=2, alias="OPTIONS_SCALP_MAX_STRIKES_FROM_ATM"
+    )
+    options_scalp_paper_only: bool = Field(
+        default=True, alias="OPTIONS_SCALP_PAPER_ONLY"
+    )
+    options_account_size_usd: float = Field(
+        default=5000.0, alias="OPTIONS_ACCOUNT_SIZE_USD"
+    )
+    options_max_contract_cost_usd: float = Field(
+        default=500.0, alias="OPTIONS_MAX_CONTRACT_COST_USD"
+    )
+    options_preferred_contract_cost_usd: float = Field(
+        default=250.0, alias="OPTIONS_PREFERRED_CONTRACT_COST_USD"
+    )
     spx_enabled: bool = Field(default=True, alias="SPX_ENABLED")
     spx_paper_only: bool = Field(default=True, alias="SPX_PAPER_ONLY")
     spx_allow_0dte: bool = Field(default=False, alias="SPX_ALLOW_0DTE")

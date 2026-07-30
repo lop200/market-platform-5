@@ -61,6 +61,24 @@ services:
         value: "35"
       - key: OPTIONS_EARNINGS_RISK_DAYS
         value: "7"
+      - key: OPTIONS_SCALP_MODE
+        value: "true"
+      - key: OPTIONS_SCALP_MIN_DTE
+        value: "0"
+      - key: OPTIONS_SCALP_MAX_DTE
+        value: "2"
+      - key: OPTIONS_SCALP_FALLBACK_MAX_DTE
+        value: "7"
+      - key: OPTIONS_SCALP_MAX_STRIKES_FROM_ATM
+        value: "2"
+      - key: OPTIONS_SCALP_PAPER_ONLY
+        value: "true"
+      - key: OPTIONS_ACCOUNT_SIZE_USD
+        value: "5000"
+      - key: OPTIONS_MAX_CONTRACT_COST_USD
+        value: "500"
+      - key: OPTIONS_PREFERRED_CONTRACT_COST_USD
+        value: "250"
       - key: SPX_ENABLED
         value: "true"
       - key: SPX_PAPER_ONLY

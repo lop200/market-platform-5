@@ -29,7 +29,10 @@ def analyze_options_after_stock(
         result.warnings_ar.append("تعذر مزود OPRA؛ اكتمل تحليل السهم دون خيارات")
         return result
     try:
-        contracts = provider.get_option_chain(stock_analysis["symbol"])
+        contracts = provider.get_option_chain(
+            stock_analysis["symbol"],
+            float((stock_analysis.get("quote") or {}).get("price") or 0),
+        )
     except Exception:
         result = rank_option_chain(stock_analysis, [], settings)
         result.status = "provider_failed"

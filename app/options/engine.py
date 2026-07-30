@@ -12,6 +12,7 @@ from app.options.schemas import (
     RankedOptionContract,
     RawOptionContract,
 )
+from app.options.sniper import ShortDTEOptionSniper
 
 
 def _clamp(value: float) -> int:
@@ -279,6 +280,13 @@ def rank_option_chain(
 
     quote = stock_analysis["quote"]
     underlying = float(quote["price"])
+    sniper = ShortDTEOptionSniper(settings)
+    sniper_universe = sniper.select_universe(
+        contracts, underlying_price=underlying, now=generated
+    )
+    candidate_contracts = (
+        sniper_universe.contracts if sniper.enabled else contracts
+    )
     plan = stock_analysis["trade_plan"]
     targets = [
         float(item["price"]) for item in (plan.get("targets") or [])
@@ -308,18 +316,31 @@ def rank_option_chain(
     event_days = (
         (earnings_date - generated.date()).days if earnings_date is not None else None
     )
-    capital_usd = settings.default_capital_sar / settings.usd_sar_rate
+    capital_usd = (
+        settings.options_account_size_usd
+        if sniper.enabled
+        else settings.default_capital_sar / settings.usd_sar_rate
+    )
     news_context = stock_analysis.get("news_context") or {}
     news_penalty = 25 if news_context.get("raise_risk") else 0
     rejected: Counter[str] = Counter()
     ranked: list[RankedOptionContract] = []
 
-    for item in contracts:
-        dte = (item.expiration - generated.date()).days
-        if item.expiration <= generated.date() or dte in {0, 1}:
+    market_date = session.new_york_time.date()
+    for item in candidate_contracts:
+        dte = (item.expiration - market_date).days
+        if item.expiration < market_date:
             rejected["expired_or_0_1dte"] += 1
             continue
-        if dte < settings.options_min_dte or dte > settings.options_max_dte:
+        if not sniper.enabled and dte in {0, 1}:
+            rejected["expired_or_0_1dte"] += 1
+            continue
+        minimum_dte = (
+            settings.options_scalp_min_dte
+            if sniper.enabled
+            else settings.options_min_dte
+        )
+        if dte < minimum_dte or dte > settings.options_max_dte:
             rejected["dte"] += 1
             continue
         expires_near_earnings = (
@@ -335,7 +356,12 @@ def rank_option_chain(
         mid = (item.bid + item.ask) / 2
         spread = item.ask - item.bid
         spread_pct = spread / mid * 100
-        if spread_pct > settings.options_max_spread_pct:
+        maximum_spread = (
+            min(settings.options_max_spread_pct, 6.0)
+            if sniper.enabled and dte == 0
+            else settings.options_max_spread_pct
+        )
+        if spread_pct > maximum_spread:
             rejected["wide_spread"] += 1
             continue
         volume, oi = int(item.volume or 0), int(item.open_interest or 0)
@@ -344,13 +370,23 @@ def rank_option_chain(
             rejected["missing_greeks"] += 1
             continue
         delta = float(item.delta)
-        delta_in_range = (
-            settings.options_min_abs_delta
-            <= abs(delta)
-            <= settings.options_max_abs_delta
+        preferred_delta_min = (
+            0.45 if sniper.enabled and dte == 0
+            else 0.40 if sniper.enabled and dte <= 2
+            else settings.options_min_abs_delta
         )
+        preferred_delta_max = (
+            0.65 if sniper.enabled and dte <= 2
+            else settings.options_max_abs_delta
+        )
+        delta_in_range = preferred_delta_min <= abs(delta) <= preferred_delta_max
         quote_age = _age_seconds(item.quote_timestamp, generated)
-        if quote_age > settings.options_max_quote_age_seconds:
+        maximum_quote_age = (
+            min(settings.options_max_quote_age_seconds, 10)
+            if sniper.enabled and dte == 0
+            else settings.options_max_quote_age_seconds
+        )
+        if quote_age > maximum_quote_age:
             rejected["stale_quote"] += 1
             continue
         moneyness, distance_pct, otm_distance = _moneyness(
@@ -365,9 +401,17 @@ def rank_option_chain(
         )
         entry = round(min(item.ask, mid + spread * 0.1), 2)
         contract_cost = round(entry * 100, 2)
+        budget_fit = contract_cost <= settings.options_max_contract_cost_usd
+        if sniper.enabled and not budget_fit:
+            rejected["over_budget"] += 1
+            continue
         capital_pct = contract_cost / capital_usd * 100 if capital_usd else 100
 
-        expected_days = max(0.5, min(3.0, dte / 6))
+        expected_days = (
+            max(0.05, min(0.5, max(dte, 0.25) / 6))
+            if sniper.enabled and dte <= 2
+            else max(0.5, min(3.0, dte / 6))
+        )
         target_conservative = targets[0]
         target_base = targets[min(1, len(targets) - 1)]
         target_optimistic = targets[-1]
@@ -404,7 +448,11 @@ def rank_option_chain(
 
         delta_score = _clamp(100 - abs(abs(delta) - 0.5) * 300)
         strike_score = _clamp(100 - abs(distance_pct) * 10 + (8 if moneyness == "ITM" else 0))
-        dte_score = _clamp(100 - abs(dte - 18) * 4)
+        dte_score = (
+            _clamp(100 - dte * 12)
+            if sniper.enabled
+            else _clamp(100 - abs(dte - 18) * 4)
+        )
         spread_score = _clamp(100 - spread_pct * 5)
         volume_score = _clamp(30 + min(volume, 1000) / 14)
         oi_score = _clamp(30 + min(oi, 5000) / 70)
@@ -412,6 +460,16 @@ def rank_option_chain(
         iv_score = _clamp(100 - max(0, iv - 0.45) * 100)
         break_even = (
             item.strike + entry if item.option_type == OptionType.CALL else item.strike - entry
+        )
+        required_move_pct = round(abs(break_even - underlying) / underlying * 100, 2)
+        cost_score = _clamp(
+            100
+            - max(
+                0,
+                contract_cost - settings.options_preferred_contract_cost_usd,
+            )
+            / max(settings.options_preferred_contract_cost_usd, 1)
+            * 55
         )
         target_for_break_even = target_base
         break_even_score = _clamp(
@@ -481,6 +539,7 @@ def rank_option_chain(
             "earnings": earnings_score,
             "risk_reward": rr_score,
             "capital_fit": affordability_score,
+            "budget_fit": cost_score,
             "news": 100 - news_penalty,
         }
         score = round(
@@ -493,6 +552,15 @@ def rank_option_chain(
             + rr_score * 0.10,
             2,
         )
+        if sniper.enabled:
+            score = round(
+                score * 0.45
+                + strike_score * 0.20
+                + cost_score * 0.15
+                + delta_score * 0.10
+                + _clamp(100 - quote_age * 5) * 0.10,
+                2,
+            )
         intrinsic = max(
             0,
             underlying - item.strike
@@ -532,6 +600,27 @@ def rank_option_chain(
             warnings.append(
                 "تكلفة العقد أعلى من حد رأس المال المحدد؛ للمراقبة فقط."
             )
+        time_remaining = sniper.time_remaining_minutes(item, generated)
+        eastern_minutes = (
+            session.new_york_time.hour * 60 + session.new_york_time.minute
+        )
+        first_five_minutes = 9 * 60 + 30 <= eastern_minutes < 9 * 60 + 35
+        near_close_without_momentum = (
+            sniper.enabled
+            and dte == 0
+            and time_remaining < 30
+            and (stock_quality < 80 or relative_volume < 1.5)
+        )
+        if sniper.enabled and dte == 0:
+            warnings.append("عقود 0DTE قد تفقد معظم قيمتها خلال دقائق.")
+        if sniper.enabled and first_five_minutes:
+            warnings.append(
+                "أول 5 دقائق للمراقبة فقط؛ انتظر تأكيد Opening Range."
+            )
+        if near_close_without_momentum:
+            warnings.append(
+                "الوقت المتبقي قصير والزخم غير كافٍ؛ 0DTE غير قابل للدخول."
+            )
         if not session.options_actionable:
             warnings.append(
                 "التحليل للمراقبة فقط، ولا يمكن تنفيذ العقد حتى افتتاح سوق الخيارات."
@@ -555,6 +644,9 @@ def rank_option_chain(
             and capital_pct <= settings.options_max_capital_pct
             and volume >= settings.options_min_volume
             and oi >= settings.options_min_open_interest
+            and budget_fit
+            and not (sniper.enabled and first_five_minutes)
+            and not near_close_without_momentum
         )
         badges = (
             ["السوق مفتوح", "جاهز عند تحقق الشرط"]
@@ -568,6 +660,12 @@ def rank_option_chain(
             if safe_for_entry and score >= 80
             else "قنص مشروط"
             if safe_for_entry and score >= 68
+            else "العقد رخيص لكنه ضعيف"
+            if (
+                sniper.enabled
+                and contract_cost <= settings.options_preferred_contract_cost_usd
+                and score < 50
+            )
             else "للمراقبة"
             if score >= 50
             else "انتظر"
@@ -645,21 +743,86 @@ def rank_option_chain(
                     "تقادم بيانات السهم أو العقد.",
                     "اتساع السبريد بشدة.",
                     "ظهور مخاطرة خبرية جديدة.",
+                    (
+                        f"Time Stop بعد {5 if dte == 0 else 10 if dte <= 2 else 15} دقائق "
+                        "إذا لم تتحقق الحركة المتوقعة."
+                        if sniper.enabled
+                        else "إعادة التقييم إذا لم تتحقق الحركة خلال الوقت المتوقع."
+                    ),
                 ],
-                valid_for_minutes=valid_minutes,
+                valid_for_minutes=(
+                    min(valid_minutes, 5 if dte == 0 else 10 if dte <= 2 else 15)
+                    if sniper.enabled
+                    else valid_minutes
+                ),
                 expires_at=expires_at,
                 warnings_ar=warnings,
                 classification_ar=classification,
                 selection_reason_ar=selection_reason,
                 risk_notes_ar=list(warnings),
+                budget_fit=budget_fit,
+                required_move_pct=required_move_pct,
+                time_remaining_minutes=time_remaining,
+                time_stop_minutes=(
+                    5 if dte == 0 else 10 if dte <= 2 else 15
+                    if sniper.enabled
+                    else None
+                ),
             )
         )
 
     ranked.sort(key=lambda value: value.ranking_score, reverse=True)
-    shortlisted = ranked[: max(1, min(3, settings.options_contract_limit))]
+    scalp_stage = "standard"
+    scalp_stage_label = "7–30 DTE"
+    if sniper.enabled:
+        stages = (
+            (
+                "primary",
+                "0–2 DTE",
+                settings.options_scalp_min_dte,
+                settings.options_scalp_max_dte,
+            ),
+            (
+                "short_fallback",
+                "احتياط 3–7 DTE",
+                settings.options_scalp_max_dte + 1,
+                settings.options_scalp_fallback_max_dte,
+            ),
+            (
+                "standard_fallback",
+                "احتياط 7–30 DTE",
+                max(settings.options_min_dte, settings.options_scalp_fallback_max_dte),
+                settings.options_max_dte,
+            ),
+        )
+        selected_stage: list[RankedOptionContract] = []
+        for name, label, minimum, maximum in stages:
+            selected_stage = [
+                item
+                for item in ranked
+                if minimum <= item.dte <= maximum
+                and item.option_type == preferred_side
+            ]
+            if selected_stage:
+                scalp_stage, scalp_stage_label = name, label
+                break
+        shortlisted, scalp_modes = sniper.choose_modes(selected_stage)
+    else:
+        shortlisted = ranked[: max(1, min(3, settings.options_contract_limit))]
+        scalp_modes = {}
     best_call = next((item for item in shortlisted if item.option_type == OptionType.CALL), None)
     best_put = next((item for item in shortlisted if item.option_type == OptionType.PUT), None)
     warnings = ["Paper Trading فقط — لا يوجد تنفيذ تلقائي أو أوامر Live."]
+    if sniper.enabled and scalp_stage != "primary" and shortlisted:
+        warnings.append(
+            f"لم توجد عقود 0–2 DTE بجودة كافية؛ تم التوسع إلى {scalp_stage_label}."
+        )
+    if sniper.enabled and not shortlisted and rejected.get("over_budget"):
+        warnings.append(
+            "لا يوجد عقد قريب من السترايك ومناسب للميزانية بجودة كافية."
+        )
+    if sniper.enabled and any(item.dte == 0 for item in shortlisted):
+        warnings.append("عقود 0DTE قد تفقد معظم قيمتها خلال دقائق.")
     if not session.options_actionable:
         warnings.extend([
             "التحليل للمراقبة فقط، ولا يمكن تنفيذ العقد حتى افتتاح سوق الخيارات.",
@@ -681,6 +844,54 @@ def rank_option_chain(
     elif not shortlisted and rejected.get("opra_unavailable"):
         base["market"]["options_status"] = "opra_unavailable"
         base["market"]["options_label_ar"] = "بيانات OPRA غير متاحة"
+    scalp_decision = (
+        "قنص مشروط"
+        if any(item.actionable for item in shortlisted)
+        else "للمراقبة"
+        if shortlisted
+        else "لا يوجد عقد مناسب للميزانية"
+        if rejected.get("over_budget")
+        else "لا صفقة"
+    )
+    scalp_summary = (
+        {
+            "enabled": True,
+            "engine": "ShortDTEOptionSniper",
+            "decision_ar": scalp_decision,
+            "strategy": sniper.strategy_name(stock_analysis, generated),
+            "dte_stage": scalp_stage,
+            "dte_stage_label_ar": scalp_stage_label,
+            "allowed_strikes": list(sniper_universe.allowed_strikes),
+            "atm_strike": sniper_universe.atm_strike,
+            "confirmation_level": stock_entry,
+            "confirmation_ar": (
+                (stock_analysis.get("strategy") or {}).get("trigger")
+                or f"الدخول بعد تأكيد حركة الأصل حول {stock_entry:.2f}."
+            ),
+            "invalidation_level": stock_stop,
+            "modes": scalp_modes,
+            "account_size_usd": settings.options_account_size_usd,
+            "maximum_contract_cost_usd": settings.options_max_contract_cost_usd,
+            "preferred_contract_cost_usd": (
+                settings.options_preferred_contract_cost_usd
+            ),
+            "rejected_cheaper_reasons": {
+                key: value
+                for key, value in rejected.items()
+                if key
+                in {
+                    "invalid_quote",
+                    "wide_spread",
+                    "missing_greeks",
+                    "stale_quote",
+                    "deep_otm",
+                    "over_budget",
+                }
+            },
+        }
+        if sniper.enabled
+        else {}
+    )
     return OptionChainResult(
         status=(
             "ready"
@@ -701,4 +912,5 @@ def rank_option_chain(
         earnings_option_fit_ar=earnings_option_fit,
         reject_before_earnings=reject_before_earnings,
         warnings_ar=warnings,
+        scalp_summary=scalp_summary,
     )

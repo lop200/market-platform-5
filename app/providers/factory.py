@@ -58,6 +58,11 @@ def get_option_data_provider():
         feed=settings.alpaca_options_feed,
         base_url=settings.alpaca_data_base_url,
         timeout_seconds=settings.external_timeout_seconds,
-        min_dte=settings.options_min_dte,
+        min_dte=(
+            settings.options_scalp_min_dte
+            if settings.options_scalp_mode
+            else settings.options_min_dte
+        ),
         max_dte=settings.options_max_dte,
+        strike_window_pct=max(3.0, settings.options_max_otm_pct),
     )

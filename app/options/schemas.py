@@ -109,6 +109,11 @@ class RankedOptionContract(BaseModel):
     classification_ar: str = "للمراقبة"
     selection_reason_ar: str = ""
     risk_notes_ar: list[str] = Field(default_factory=list)
+    sniper_mode_ar: str | None = None
+    budget_fit: bool = True
+    required_move_pct: float = 0
+    time_remaining_minutes: int | None = None
+    time_stop_minutes: int | None = None
 
 
 class OptionChainResult(BaseModel):
@@ -140,3 +145,4 @@ class OptionChainResult(BaseModel):
     ranked_contracts: list[RankedOptionContract] = Field(default_factory=list, max_length=3)
     rejection_reasons: dict[str, int] = Field(default_factory=dict)
     warnings_ar: list[str] = Field(default_factory=list)
+    scalp_summary: dict = Field(default_factory=dict)
