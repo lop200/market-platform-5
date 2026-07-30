@@ -1,14 +1,94 @@
 <!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>قنّاص SPX — مرصاد</title>
-<style>
-:root{--bg:#07111d;--card:#0e1927;--line:#263a52;--text:#f3f7fc;--muted:#91a2b8;--blue:#69b9ff;--red:#ff7380;--green:#3ed29a;--yellow:#f5c45c}*{box-sizing:border-box}html,body{overflow-x:hidden}body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,Arial}.shell{width:min(1200px,100%);margin:auto;padding:10px}.top,.hero,.event,.stats{background:var(--card);border:1px solid var(--line);border-radius:15px}.top{display:flex;justify-content:space-between;align-items:center;padding:12px}.top h1{margin:0;font-size:1.1rem}.top a{color:var(--blue);text-decoration:none}.hero{padding:17px;margin:10px 0;background:linear-gradient(135deg,#142d48,#0e1927)}.hero h2{margin:0 0 8px}.muted{color:var(--muted)}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;padding:10px}.stat{padding:10px;background:#081522;border-radius:9px}.stat small{display:block;color:var(--muted)}.stat b{display:block;margin-top:4px}.events{display:grid;gap:9px;margin-top:10px}.event{padding:13px;border-right:4px solid var(--yellow)}.event.up{border-right-color:var(--green)}.event.down{border-right-color:var(--red)}.event h3{font-size:.95rem;margin:0 0 8px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.metric{background:#081522;border-radius:8px;padding:8px;min-width:0}.metric small{display:block;color:var(--muted);font-size:.65rem}.metric b{display:block;margin-top:4px;overflow-wrap:anywhere}.warning{padding:10px;background:#352c16;color:#ffe3a3;border-radius:9px}.empty{text-align:center;padding:30px;color:var(--muted)}@media(min-width:760px){.stats{grid-template-columns:repeat(4,1fr)}.events{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:repeat(4,1fr)}}@media(min-width:1100px){.events{grid-template-columns:repeat(3,1fr)}}
-</style></head><body><main class="shell">
-<header class="top"><div><h1>🎯 قنّاص SPX</h1><small class="muted">سياق الأخبار الكلية والثقيلة</small></div><div><a href="/news">نبض السوق</a> · <a href="/">الرئيسية</a></div></header>
-<section class="hero"><h2>Market News Context لـSPX</h2><p class="muted">يربط Fed والفائدة والتضخم والوظائف والجيوسياسة وأخبار الشركات الثقيلة. لا يعرض اتجاهًا مؤكدًا أو صفقة آلية.</p></section>
-<section class="stats"><div class="stat"><small>الأحداث المؤثرة</small><b id="count">0</b></div><div class="stat"><small>عالية التأثير</small><b id="high">0</b></div><div class="stat"><small>رسمية</small><b id="official">0</b></div><div class="stat"><small>آخر تحديث</small><b id="updated">—</b></div></section>
-<section class="events" id="events"><div class="empty">جارٍ قراءة سياق SPX المحفوظ…</div></section><p class="warning" id="disclaimer"></p>
-</main><script>
-const $=s=>document.querySelector(s),dash=v=>v==null||v===""?"—":v,metric=(l,v)=>`<div class="metric"><small>${l}</small><b>${dash(v)}</b></div>`,age=s=>s<3600?`${Math.floor(s/60)} دقيقة`:`${Math.floor(s/3600)} ساعة`;
-function card(x){const cls=x.potential_direction_ar==="داعم للصعود"?"up":x.potential_direction_ar==="داعم للهبوط"?"down":"";return `<article class="event ${cls}"><h3>${x.headline}</h3><div class="grid">${metric("الحدث",x.event_type)}${metric("وقت النشر",new Date(x.published_at).toLocaleString("ar-SA"))}${metric("العمر",age(x.age_seconds))}${metric("تأثير SPX",x.spx_impact_score+"/100")}${metric("الاتجاه المحتمل",x.potential_direction_ar)}${metric("صلاحية التأثير",x.impact_valid_minutes+" دقيقة")}${metric("المصدر",x.source_name)}${metric("الموثوقية",x.reliability_score+"/100")}</div>${x.summary?`<p>${x.summary}</p>`:""}</article>`}
-async function load(){const d=await(await fetch("/api/v1/dashboard/spx")).json(),rows=d.items||[];$("#count").textContent=rows.length;$("#high").textContent=rows.filter(x=>x.spx_impact_score>=80).length;$("#official").textContent=rows.filter(x=>x.is_official).length;$("#updated").textContent=d.updated_at?new Date(d.updated_at).toLocaleTimeString("ar-SA"):"—";$("#events").innerHTML=rows.length?rows.map(card).join(""):'<div class="empty">لا توجد أحداث SPX مؤثرة محفوظة حاليًا.</div>';$("#disclaimer").textContent=d.disclaimer_ar}load();
-</script></body></html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>قنّاص SPX — مرصاد</title>
+  <style>
+    :root{--bg:#07101b;--surface:#0d1927;--surface2:#111f30;--line:#23384e;--text:#f3f7fb;--muted:#91a3b8;--blue:#55b4ff;--green:#3cd59a;--red:#ff6878;--yellow:#f3c65d;--gray:#8290a3}
+    *{box-sizing:border-box;min-width:0}html,body{overflow-x:hidden}body{margin:0;background:radial-gradient(circle at 50% -20%,#123151 0,var(--bg) 40%);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif}.shell{width:min(1240px,100%);margin:auto;padding:10px}.card{background:linear-gradient(145deg,#0f1d2d,#0b1623);border:1px solid var(--line);border-radius:16px;padding:13px}.top{display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:6px;z-index:20;backdrop-filter:blur(16px);background:#0a1522e8}.brand{display:flex;align-items:center;gap:9px}.logo{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#254f72,#15293e);font-size:1.25rem}.brand h1{margin:0;font-size:1.08rem}.muted,small{color:var(--muted)}a{color:var(--blue);text-decoration:none}.actions{display:flex;gap:7px;align-items:center}.btn{border:1px solid #31516e;background:#12283d;color:var(--text);border-radius:10px;padding:9px 12px;cursor:pointer;font-weight:700}.btn.primary{background:linear-gradient(135deg,#1677b9,#155a91)}.market{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}.metric{background:#091522;border:1px solid #1b3045;border-radius:11px;padding:9px;overflow-wrap:anywhere}.metric small{display:block;font-size:.7rem}.metric b{display:block;margin-top:4px;font-size:.9rem}.decision{margin-top:10px;text-align:center;padding:20px;border-width:2px}.decision h2{font-size:clamp(1.55rem,6vw,2.5rem);margin:0}.decision p{margin:8px 0 0}.decision.escape{border-color:#6c2934;background:linear-gradient(145deg,#35131b,#111923)}.decision.hunt{border-color:#1f7658;background:linear-gradient(145deg,#10392d,#101d28)}.decision.wait{border-color:#675124;background:linear-gradient(145deg,#2c2717,#101a27)}.statusline{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:12px}.badge{border-radius:999px;padding:6px 9px;font-size:.72rem;border:1px solid var(--line);background:#152337}.badge.red{background:#3b1720;border-color:#6c2934;color:#ffabb3}.badge.green{background:#103429;border-color:#1f7658;color:#8af0c6}.badge.yellow{background:#352d16;border-color:#675124;color:#ffe099}.badge.blue{background:#102c43;border-color:#24537a;color:#9bd3ff}.grid{display:grid;gap:10px;margin-top:10px}.section-title{margin:0 0 10px;font-size:1rem}.levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.big b{font-size:1.2rem}.green b{color:var(--green)}.red b{color:var(--red)}.blue b{color:var(--blue)}.yellow b{color:var(--yellow)}.mode{display:grid;grid-template-columns:1fr 1fr;gap:7px}.mode button{width:100%;border:1px solid var(--line);background:#0a1724;color:var(--text);padding:11px 7px;border-radius:11px;cursor:pointer}.mode button.active{border-color:var(--blue);background:#102c43}.contract-hero{border-color:#2d638b}.contract-head{display:flex;justify-content:space-between;align-items:start;gap:8px}.contract-head h3{margin:0;font-size:1.25rem}.contracts{display:grid;gap:8px}.contract-mini{border-right:4px solid var(--blue)}details{border-top:1px solid var(--line);margin-top:10px;padding-top:9px}summary{cursor:pointer;color:#c7d7e8}.warnings{display:grid;gap:7px}.warning{border:1px solid #5d4a23;background:#302814;color:#ffe3a6;border-radius:10px;padding:9px}.error{border-color:#672b34;background:#35161d;color:#ffc0c6}.empty{text-align:center;padding:25px;color:var(--muted)}.foot{margin:12px 0;text-align:center;color:var(--muted);font-size:.72rem}.hide{display:none!important}
+    @media(min-width:760px){.market{grid-template-columns:repeat(4,1fr)}.grid.two{grid-template-columns:1fr 1fr}.levels{grid-template-columns:repeat(4,1fr)}.contracts{grid-template-columns:repeat(3,1fr)}}
+    @media(min-width:1100px){.market{grid-template-columns:repeat(6,1fr)}.main-layout{display:grid;grid-template-columns:1.25fr .75fr;gap:10px;margin-top:10px}.main-layout>.grid{margin-top:0}}
+    @media(max-width:500px){.shell{padding:7px}.top{flex-wrap:wrap}.actions{width:100%}.actions .btn{flex:1}.top a.home{display:none}.market{grid-template-columns:1fr 1fr}.metric{padding:8px}.metric b{font-size:.82rem}.levels .metric:nth-child(n+7){display:none}.secondary{display:none}.decision{padding:17px 10px}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <span class="hide" aria-hidden="true">قنص مشروط — ادخل بعد تحقق الشرط — اهرب الآن — لا صفقة — السوق متضارب</span>
+  <header class="top card">
+    <div class="brand"><div class="logo">🎯</div><div><h1>قنّاص SPX</h1><small>قسم مستقل — Paper Trading ومراقبة فقط</small></div></div>
+    <div class="actions"><a class="home" href="/">الرئيسية</a><button class="btn primary" id="refresh">تحديث البيانات</button></div>
+  </header>
+
+  <section class="warning" style="margin-top:10px">
+    هذه قيمة ضمنية محسوبة من عقود Call وPut عبر OPRA، وليست قيمة SPX الرسمية المنشورة.
+  </section>
+  <section class="market card" id="market"><div class="empty">جاري قراءة آخر نتيجة محفوظة…</div></section>
+  <section class="decision card wait" id="decision"><h2>انتظر</h2><p>جاري التحقق من الحالة…</p></section>
+
+  <div class="main-layout">
+    <div class="grid">
+      <section class="card"><h2 class="section-title">الاتجاه والأخبار</h2><div class="levels" id="direction"></div><details><summary>الأخبار المؤثرة الموثوقة</summary><div id="news" class="warnings"></div></details></section>
+      <section class="card"><h2 class="section-title">مستويات SPX والدخول المشروط</h2><div class="levels" id="levels"></div><p class="muted" id="trigger">—</p></section>
+      <section class="card">
+        <h2 class="section-title">اختيار القرب من السترايك</h2>
+        <div class="mode"><button id="near" data-mode="near">قريب من السترايك<br><small>جودة وسيولة أفضل</small></button><button id="far" data-mode="far">أبعد قليلًا — مخاطرة أعلى<br><small>أرخص ويحتاج حركة أسرع</small></button></div>
+        <p class="warning hide" id="farWarning">العقد الأبعد أرخص، لكنه يحتاج حركة أسرع وأقوى.</p>
+      </section>
+      <section class="card contract-hero" id="best"><div class="empty">لا يوجد عقد مختار.</div></section>
+      <section class="card"><h2 class="section-title">مقارنة أفضل 3 عقود</h2><div class="contracts" id="contracts"><div class="empty">لا توجد عقود مستوفية.</div></div></section>
+    </div>
+    <aside class="grid">
+      <section class="card"><h2 class="section-title">أسباب القنص أو الهروب</h2><div class="warnings" id="warnings"></div></section>
+      <section class="card"><h2 class="section-title">حالة المزود</h2><div class="levels" id="provider"></div></section>
+      <section class="card"><h2 class="section-title">سجل التحديث</h2><div class="levels" id="updated"></div><details><summary>أسباب رفض العقود</summary><div id="rejections"></div></details></section>
+    </aside>
+  </div>
+  <p class="foot">لا تنفذ المنصة أوامر حقيقية، ولا تعرض درجاتها كاحتمال ربح مؤكد.</p>
+</main>
+<script>
+const $=s=>document.querySelector(s), dash=v=>v===null||v===undefined||v===""?"—":v;
+let mode=localStorage.getItem("spxStrikeMode")||"near",timer;
+const metric=(label,value,cls="")=>`<div class="metric ${cls}"><small>${label}</small><b>${dash(value)}</b></div>`;
+const fmtTime=v=>v?new Date(v).toLocaleString("ar-SA",{timeZone:"Asia/Riyadh"}):"—";
+function setMode(){for(const x of ["near","far"])$("#"+x).classList.toggle("active",x===mode);$("#farWarning").classList.toggle("hide",mode!=="far")}
+function renderContract(c,full=false){if(!c)return '<div class="empty">لم يُختَر عقد لأن شروط SPX أو البيانات غير مكتملة.</div>';const rows=[
+ ["النوع",c.option_type==="call"?"Call":"Put","blue"],["Strike",c.strike],["الانتهاء",c.expiration],["DTE",c.dte],
+ ["Bid",c.bid],["Ask",c.ask],["Mid / الدخول",c.mid,"blue"],["تكلفة عقد",`$${c.contract_cost}`],
+ ["Spread",`${c.spread} (${c.spread_pct}%)`],["Delta",c.delta],["Gamma",c.gamma],["Theta",c.theta],
+ ["Vega",c.vega],["IV",`${(c.iv*100).toFixed(2)}%`],["Volume",c.volume],["Open Interest",c.open_interest],
+ ["Break-even",c.break_even],["الملاءمة",`${c.suitability_score}/100`,"green"],["السيولة",`${c.liquidity_score}/100`,"blue"],["المخاطرة",`${c.risk_score}/100`,"red"]
+ ];return `<div class="contract-head"><div><small>${c.symbol}</small><h3>${c.option_type.toUpperCase()} ${c.strike}</h3></div><span class="badge ${c.actionable?"green":"yellow"}">${c.actionable?"جاهز عند تحقق الشرط":"مراقبة فقط"}</span></div><div class="levels">${rows.map(x=>metric(...x)).join("")}</div>${full?`<details open><summary>الوقف والأهداف التقديرية</summary><div class="levels">${metric("وقف محافظ",c.premium_stop_conservative,"red")}${metric("وقف حذر",c.premium_stop_cautious,"red")}${c.target_scenarios.map(t=>metric(t.label,`${t.estimated_premium} (${t.profit_pct}%)`,"green")).join("")}</div><p class="muted">دخول مشروط، وليس سعرًا مضمونًا. يعاد فحص Bid/Ask عند تحقق شرط SPX.</p></details>`:""}`}
+function render(d){
+ const m=d.market||{},cap=d.capabilities||{},t=d.technical||{},s=d.scenario||{},syn=d.synthetic||{};
+ $("#market").innerHTML=[
+  ["Synthetic SPX",syn.synthetic_forward_value,"blue"],["Synthetic Forward",syn.synthetic_forward_value,"blue"],
+  ["تقدير Spot",syn.synthetic_spot_estimate],["الحد الأدنى",syn.lower_bound],
+  ["الحد الأعلى",syn.upper_bound],["عرض النطاق",syn.implied_range_width_points],
+  ["الأزواج المستخدمة",syn.pairs_used],["عمر Quote",syn.median_quote_age_seconds==null?"—":syn.median_quote_age_seconds+" ثانية"],
+  ["Expiration",syn.expiration_used],["Settlement",syn.settlement_type],
+  ["درجة الثقة",syn.confidence_score==null?"—":syn.confidence_score+"/100"],["جودة البيانات",syn.data_quality_score==null?"—":syn.data_quality_score+"/100"],
+  ["حالة سوق SPX",m.stock_label_ar||m.stock_status],["خيارات SPX",m.options_label_ar||m.options_status],["وقت نيويورك",m.new_york_time?new Date(m.new_york_time).toLocaleString("ar-SA",{timeZone:"America/New_York"}):"—"],
+  ["وقت الرياض",fmtTime(m.riyadh_time)],["الجلسة",m.stock_status],["الافتتاح القادم",fmtTime(m.next_options_open_at)],
+  ["الإغلاق",fmtTime(m.session_closes_at)],["مباشر",m.realtime?"نعم":"لا"],["المصدر",m.source||cap.provider],
+  ["OPRA",m.opra_status],["آخر Quote",fmtTime(m.last_quote)],["عمر البيانات",m.data_age_seconds==null?"—":m.data_age_seconds+" ثانية"]
+ ].map(x=>metric(...x)).join("");
+ const dc=$("#decision");dc.className="decision card "+(d.decision==="escape"?"escape":d.decision==="conditional_hunt"?"hunt":"wait");dc.innerHTML=`<h2>${dash(d.decision_ar)}</h2><p>${dash(d.reason_ar)}</p><div class="statusline"><span class="badge blue">Paper only</span><span class="badge ${m.contracts_actionable?"green":"yellow"}">${m.contracts_actionable?"العقود قابلة للمراقبة المشروطة":"لا دخول الآن"}</span><span class="badge blue">${mode==="near"?"قريب من السترايك":"أبعد قليلًا"}</span></div>`;
+ $("#direction").innerHTML=metric("الاتجاه",d.direction==="call"?"صاعد / Call":d.direction==="put"?"هابط / Put":"لا اتجاه واضح","blue")+metric("وضوح الاتجاه",t.direction_clarity_score==null?"—":t.direction_clarity_score+"/100")+metric("قوة الزخم",t.momentum_score==null?"—":t.momentum_score+"/100")+metric("تأثير الخبر",d.news_impact_score+"/100","yellow");
+ $("#levels").innerHTML=metric("SPX",t.price,"blue")+metric("الدخول",s.entry,"blue")+metric("الوقف / الإبطال",s.stop,"red")+(s.targets||[]).map((x,i)=>metric(`الهدف ${i+1}`,x,"green")).join("")+metric("Risk/Reward",s.risk_reward);
+ $("#trigger").textContent=s.trigger||"لا يوجد دخول مشروط قبل اكتمال بيانات SPX والسيناريو.";
+ $("#news").innerHTML=(d.news||[]).length?d.news.map(n=>`<div class="warning">${n.headline}<br><small>${n.source_name} — تأثير ${n.spx_impact_score}/100</small></div>`).join(""):'<div class="empty">لا توجد أخبار مؤثرة محفوظة.</div>';
+ $("#best").innerHTML=`<h2 class="section-title">أفضل عقد</h2>${renderContract(d.best_contract,true)}`;
+ $("#contracts").innerHTML=(d.ranked_contracts||[]).length?d.ranked_contracts.map(c=>`<article class="card contract-mini">${renderContract(c,false)}</article>`).join(""):'<div class="empty">لا توجد عقود حقيقية مستوفية للشروط.</div>';
+ $("#warnings").innerHTML=[`<div class="warning ${d.decision==="escape"?"error":""}">${d.reason_ar}</div>`,...(d.warnings_ar||[]).map(x=>`<div class="warning">${x}</div>`)].join("");
+ $("#provider").innerHTML=metric("المصدر",syn.source||m.source||cap.provider,"blue")+metric("حالة Synthetic",syn.provider_status||"—",syn.provider_status==="ready"?"green":"yellow")+metric("SPX الرسمي",cap.underlying_available?"متاح":"غير متاح")+metric("Option Chain",cap.option_chain_available?"متاح":"غير متاح")+metric("OPRA",cap.opra_available?"متاح":"غير متاح")+metric("Greeks",cap.greeks_available?"متاحة":"غير متاحة")+metric("معدل الفائدة",syn.risk_free_rate_used)+metric("مصدر الفائدة",syn.risk_free_rate_source)+metric("Dividend yield",syn.dividend_yield_used)+metric("Spot estimate",syn.spot_estimate_label_ar||"معطل");
+ $("#updated").innerHTML=metric("آخر تحليل",fmtTime(d.generated_at))+metric("وضع السترايك",mode)+metric("حالة النتيجة",d.status)+metric("صلاحية القراءة",s.valid_minutes?`${s.valid_minutes} دقائق`:"—");
+ const rej=d.rejected_contracts||{};$("#rejections").innerHTML=Object.keys(rej).length?Object.entries(rej).map(([k,v])=>`<p>${k}: <b>${v}</b></p>`).join(""):"—";
+ setMode();
+}
+async function load(){try{const r=await fetch(`/api/v1/spx?strike_mode=${mode}`);render(await r.json())}catch(e){$("#decision").innerHTML="<h2>اهرب الآن</h2><p>تعذر تحميل آخر نتيجة محفوظة.</p>"}}
+async function refresh(){const b=$("#refresh");b.disabled=true;b.textContent="يتم التحديث…";await fetch(`/api/v1/spx/refresh?strike_mode=${mode}`,{method:"POST"});let n=0;clearInterval(timer);timer=setInterval(async()=>{await load();if(++n>=8){clearInterval(timer);b.disabled=false;b.textContent="تحديث البيانات"}},1500)}
+for(const x of ["near","far"])$("#"+x).onclick=()=>{mode=x;localStorage.setItem("spxStrikeMode",mode);setMode();refresh()};$("#refresh").onclick=refresh;setMode();load();
+</script>
+</body>
+</html>

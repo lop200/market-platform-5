@@ -237,3 +237,51 @@ class AIAnalysisLog(Base):
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     estimated_cost_usd: Mapped[float] = mapped_column(Numeric(8, 5), default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SPXHuntResult(Base):
+    """Paper-only SPX analysis audit record; never represents an order."""
+
+    __tablename__ = "spx_hunt_results"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    market_state: Mapped[str] = mapped_column(String(30))
+    direction: Mapped[str] = mapped_column(String(20))
+    decision: Mapped[str] = mapped_column(String(30))
+    strike_mode: Mapped[str] = mapped_column(String(10), default="near")
+    contract_symbol: Mapped[str | None] = mapped_column(String(40))
+    strike: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    dte: Mapped[int | None] = mapped_column(Integer)
+    entry: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    stop: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    targets_json: Mapped[list] = mapped_column(JSONVariant, default=list)
+    confidence_score: Mapped[int] = mapped_column(SmallInteger, default=0)
+    result_5m: Mapped[dict | None] = mapped_column(JSONVariant)
+    result_15m: Mapped[dict | None] = mapped_column(JSONVariant)
+    result_30m: Mapped[dict | None] = mapped_column(JSONVariant)
+    session_result: Mapped[dict | None] = mapped_column(JSONVariant)
+    max_profit: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    max_loss: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    trigger_hit: Mapped[bool] = mapped_column(Boolean, default=False)
+    stop_hit: Mapped[bool] = mapped_column(Boolean, default=False)
+    escape_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
+    payload_json: Mapped[dict] = mapped_column(JSONVariant, default=dict)
+
+
+class SPXSyntheticObservation(Base):
+    """A derived OPRA observation, explicitly separate from official index candles."""
+
+    __tablename__ = "spx_synthetic_observations"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    forward_value: Mapped[float] = mapped_column(Numeric(14, 4))
+    spot_estimate: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    lower_bound: Mapped[float] = mapped_column(Numeric(14, 4))
+    upper_bound: Mapped[float] = mapped_column(Numeric(14, 4))
+    pairs_used: Mapped[int] = mapped_column(SmallInteger)
+    confidence_score: Mapped[int] = mapped_column(SmallInteger)
+    data_quality_score: Mapped[int] = mapped_column(SmallInteger)
+    expiration: Mapped[str] = mapped_column(String(10))
+    settlement_type: Mapped[str] = mapped_column(String(30))
+    source: Mapped[str] = mapped_column(String(50), default="Alpaca OPRA Synthetic")
+    payload_json: Mapped[dict] = mapped_column(JSONVariant, default=dict)

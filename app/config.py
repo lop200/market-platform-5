@@ -53,6 +53,77 @@ class Settings(BaseSettings):
         default=35.0, alias="OPTIONS_MAX_PREMIUM_LOSS_PCT"
     )
     options_earnings_risk_days: int = Field(default=7, alias="OPTIONS_EARNINGS_RISK_DAYS")
+    spx_enabled: bool = Field(default=True, alias="SPX_ENABLED")
+    spx_paper_only: bool = Field(default=True, alias="SPX_PAPER_ONLY")
+    spx_allow_0dte: bool = Field(default=False, alias="SPX_ALLOW_0DTE")
+    spx_allow_1dte: bool = Field(default=False, alias="SPX_ALLOW_1DTE")
+    spx_default_strike_mode: str = Field(default="near", alias="SPX_DEFAULT_STRIKE_MODE")
+    spx_near_strike_delta_min: float = Field(default=0.45, alias="SPX_NEAR_STRIKE_DELTA_MIN")
+    spx_near_strike_delta_max: float = Field(default=0.65, alias="SPX_NEAR_STRIKE_DELTA_MAX")
+    spx_far_strike_delta_min: float = Field(default=0.25, alias="SPX_FAR_STRIKE_DELTA_MIN")
+    spx_far_strike_delta_max: float = Field(default=0.44, alias="SPX_FAR_STRIKE_DELTA_MAX")
+    spx_max_spread_pct: float = Field(default=8.0, alias="SPX_MAX_SPREAD_PCT")
+    spx_min_open_interest: int = Field(default=100, alias="SPX_MIN_OPEN_INTEREST")
+    spx_min_volume: int = Field(default=10, alias="SPX_MIN_VOLUME")
+    spx_max_risk_score: int = Field(default=70, alias="SPX_MAX_RISK_SCORE")
+    spx_max_data_age_seconds: int = Field(default=15, alias="SPX_MAX_DATA_AGE_SECONDS")
+    spx_news_enabled: bool = Field(default=True, alias="SPX_NEWS_ENABLED")
+    spx_ai_review_enabled: bool = Field(default=True, alias="SPX_AI_REVIEW_ENABLED")
+    spx_underlying_provider: str = Field(
+        default="synthetic_opra", alias="SPX_UNDERLYING_PROVIDER"
+    )
+    spx_options_provider: str = Field(default="alpaca", alias="SPX_OPTIONS_PROVIDER")
+    spx_synthetic_enabled: bool = Field(default=True, alias="SPX_SYNTHETIC_ENABLED")
+    spx_synthetic_paper_only: bool = Field(
+        default=True, alias="SPX_SYNTHETIC_PAPER_ONLY"
+    )
+    spx_synthetic_min_pairs: int = Field(default=5, alias="SPX_SYNTHETIC_MIN_PAIRS")
+    spx_synthetic_max_pairs: int = Field(default=15, alias="SPX_SYNTHETIC_MAX_PAIRS")
+    spx_synthetic_max_quote_age_seconds: int = Field(
+        default=15, alias="SPX_SYNTHETIC_MAX_QUOTE_AGE_SECONDS"
+    )
+    spx_synthetic_max_pair_time_diff_seconds: float = Field(
+        default=2.0, alias="SPX_SYNTHETIC_MAX_PAIR_TIME_DIFF_SECONDS"
+    )
+    spx_synthetic_max_spread_pct: float = Field(
+        default=12.0, alias="SPX_SYNTHETIC_MAX_SPREAD_PCT"
+    )
+    spx_synthetic_max_dispersion_points: float = Field(
+        default=5.0, alias="SPX_SYNTHETIC_MAX_DISPERSION_POINTS"
+    )
+    spx_synthetic_max_range_width_points: float = Field(
+        default=15.0, alias="SPX_SYNTHETIC_MAX_RANGE_WIDTH_POINTS"
+    )
+    spx_synthetic_max_convergence_points: float = Field(
+        default=2.0, alias="SPX_SYNTHETIC_MAX_CONVERGENCE_POINTS"
+    )
+    spx_synthetic_min_open_interest: int = Field(
+        default=0, alias="SPX_SYNTHETIC_MIN_OPEN_INTEREST"
+    )
+    spx_synthetic_min_confidence_score: int = Field(
+        default=70, alias="SPX_SYNTHETIC_MIN_CONFIDENCE_SCORE"
+    )
+    spx_synthetic_min_data_quality_score: int = Field(
+        default=70, alias="SPX_SYNTHETIC_MIN_DATA_QUALITY_SCORE"
+    )
+    spx_risk_free_rate: float | None = Field(default=None, alias="SPX_RISK_FREE_RATE")
+    spx_dividend_yield: float | None = Field(default=None, alias="SPX_DIVIDEND_YIELD")
+    spx_risk_free_rate_source: str = Field(
+        default="manual", alias="SPX_RISK_FREE_RATE_SOURCE"
+    )
+    spx_dividend_yield_source: str = Field(
+        default="manual", alias="SPX_DIVIDEND_YIELD_SOURCE"
+    )
+    spx_risk_free_rate_updated_at: str | None = Field(
+        default=None, alias="SPX_RISK_FREE_RATE_UPDATED_AT"
+    )
+    spx_dividend_yield_updated_at: str | None = Field(
+        default=None, alias="SPX_DIVIDEND_YIELD_UPDATED_AT"
+    )
+    spx_rate_max_age_days: int = Field(default=7, alias="SPX_RATE_MAX_AGE_DAYS")
+    spx_allow_spot_estimate: bool = Field(
+        default=False, alias="SPX_ALLOW_SPOT_ESTIMATE"
+    )
     earnings_provider: str = Field(default="finnhub", alias="EARNINGS_PROVIDER")
     earnings_cache_seconds: int = Field(default=14_400, alias="EARNINGS_CACHE_SECONDS")
     earnings_today_cache_seconds: int = Field(

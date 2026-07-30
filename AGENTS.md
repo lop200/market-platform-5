@@ -22,3 +22,32 @@
 - A valid result may be `no trade`. Never manufacture a daily opportunity, force an option selection, claim guaranteed returns, or present analysis as certain financial advice.
 - Market-session logic must use `America/New_York` as the source of truth, convert for Arabic display as needed, and account for holidays, daylight saving time, and early closes. Options must not be presented as executable during stock pre-market or after-hours sessions.
 - Run `pytest -q` and `alembic upgrade head` before publishing.
+
+## SPX Index Options
+
+The project may include SPX index-options analysis using Alpaca OPRA data.
+
+Allowed features include:
+
+- SPX option chains
+- Calls and puts
+- Expirations and DTE
+- Contract pricing, Greeks, liquidity filtering, and ranking
+- Put-Call Parity
+- Synthetic SPX forward calculation
+- Optional synthetic spot estimation
+- Matching calls and puts by strike, expiration, settlement type, and quote timestamp
+- Paper-trading analysis and simulated opportunities
+
+Requirements:
+
+- SPX synthetic values must be labeled as estimated or synthetic.
+- Synthetic SPX must never be described as the official or direct SPX index price.
+- SPY must not be used as a direct replacement for SPX.
+- Analysis must stop when OPRA quotes are stale, incomplete, illiquid, or inconsistent.
+- Live order execution is prohibited.
+- `OPTIONS_ENABLED` remains false by default.
+- SPX synthetic analysis must be protected by its own feature flag.
+- 0DTE and 1DTE remain disabled by default.
+- All pricing, ranking, risk, entry, stop, and target calculations must be deterministic Python calculations.
+- OpenAI may review or explain results but must not invent prices, Greeks, strikes, probabilities, or targets.

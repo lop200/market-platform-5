@@ -59,6 +59,84 @@ services:
         value: "35"
       - key: OPTIONS_EARNINGS_RISK_DAYS
         value: "7"
+      - key: SPX_ENABLED
+        value: "true"
+      - key: SPX_PAPER_ONLY
+        value: "true"
+      - key: SPX_ALLOW_0DTE
+        value: "false"
+      - key: SPX_ALLOW_1DTE
+        value: "false"
+      - key: SPX_DEFAULT_STRIKE_MODE
+        value: near
+      - key: SPX_NEAR_STRIKE_DELTA_MIN
+        value: "0.45"
+      - key: SPX_NEAR_STRIKE_DELTA_MAX
+        value: "0.65"
+      - key: SPX_FAR_STRIKE_DELTA_MIN
+        value: "0.25"
+      - key: SPX_FAR_STRIKE_DELTA_MAX
+        value: "0.44"
+      - key: SPX_MAX_SPREAD_PCT
+        value: "8"
+      - key: SPX_MIN_OPEN_INTEREST
+        value: "100"
+      - key: SPX_MIN_VOLUME
+        value: "10"
+      - key: SPX_MAX_RISK_SCORE
+        value: "70"
+      - key: SPX_MAX_DATA_AGE_SECONDS
+        value: "15"
+      - key: SPX_NEWS_ENABLED
+        value: "true"
+      - key: SPX_AI_REVIEW_ENABLED
+        value: "true"
+      - key: SPX_UNDERLYING_PROVIDER
+        value: synthetic_opra
+      - key: SPX_OPTIONS_PROVIDER
+        value: alpaca
+      - key: SPX_SYNTHETIC_ENABLED
+        value: "true"
+      - key: SPX_SYNTHETIC_PAPER_ONLY
+        value: "true"
+      - key: SPX_SYNTHETIC_MIN_PAIRS
+        value: "5"
+      - key: SPX_SYNTHETIC_MAX_PAIRS
+        value: "15"
+      - key: SPX_SYNTHETIC_MAX_QUOTE_AGE_SECONDS
+        value: "15"
+      - key: SPX_SYNTHETIC_MAX_PAIR_TIME_DIFF_SECONDS
+        value: "2"
+      - key: SPX_SYNTHETIC_MAX_SPREAD_PCT
+        value: "12"
+      - key: SPX_SYNTHETIC_MAX_DISPERSION_POINTS
+        value: "5"
+      - key: SPX_SYNTHETIC_MAX_RANGE_WIDTH_POINTS
+        value: "15"
+      - key: SPX_SYNTHETIC_MAX_CONVERGENCE_POINTS
+        value: "2"
+      - key: SPX_SYNTHETIC_MIN_OPEN_INTEREST
+        value: "0"
+      - key: SPX_SYNTHETIC_MIN_CONFIDENCE_SCORE
+        value: "70"
+      - key: SPX_SYNTHETIC_MIN_DATA_QUALITY_SCORE
+        value: "70"
+      - key: SPX_RISK_FREE_RATE
+        sync: false
+      - key: SPX_DIVIDEND_YIELD
+        sync: false
+      - key: SPX_RISK_FREE_RATE_SOURCE
+        value: manual
+      - key: SPX_DIVIDEND_YIELD_SOURCE
+        value: manual
+      - key: SPX_RISK_FREE_RATE_UPDATED_AT
+        sync: false
+      - key: SPX_DIVIDEND_YIELD_UPDATED_AT
+        sync: false
+      - key: SPX_RATE_MAX_AGE_DAYS
+        value: "7"
+      - key: SPX_ALLOW_SPOT_ESTIMATE
+        value: "false"
       - key: EARNINGS_PROVIDER
         value: finnhub
       - key: EARNINGS_CACHE_SECONDS
