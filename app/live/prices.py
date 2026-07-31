@@ -18,9 +18,17 @@ logger = logging.getLogger(__name__)
 STALE_AFTER_SECONDS = 15
 
 # Alpaca serves each session on its own socket. The SDK only knows IEX and SIP,
-# so the overnight feeds are reached by overriding the endpoint instead.
-STREAM_BASE_URL = "wss://stream.data.alpaca.markets/v2"
+# so the overnight feeds are reached by overriding the endpoint instead — and
+# they sit under v1beta1, not v2. Probing the host directly: /v2/sip and
+# /v2/iex accept the socket, while /v2/boats and /v2/overnight answer the
+# handshake with HTTP 404 and only /v1beta1/* connect.
+STREAM_HOST = "wss://stream.data.alpaca.markets"
+STREAM_VERSIONS = {"sip": "v2", "iex": "v2", "boats": "v1beta1", "overnight": "v1beta1"}
 OVERNIGHT_FEEDS = {"boats", "overnight"}
+
+
+def stream_endpoint(feed: str) -> str:
+    return f"{STREAM_HOST}/{STREAM_VERSIONS.get(feed, 'v2')}/{feed}"
 
 # How often the supervisor re-checks which feed the current session needs.
 FEED_CHECK_SECONDS = 30
@@ -224,7 +232,7 @@ class AlpacaPriceStream:
             return StockDataStream(
                 self._api_key,
                 self._secret_key,
-                url_override=f"{STREAM_BASE_URL}/{feed}",
+                url_override=stream_endpoint(feed),
             )
         return StockDataStream(
             self._api_key,

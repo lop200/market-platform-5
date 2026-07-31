@@ -121,9 +121,19 @@ def test_overnight_session_streams_the_overnight_feed():
 
 def test_overnight_feed_connects_to_its_own_endpoint():
     # The SDK rejects any feed but IEX/SIP, so BOATS goes through the override.
+    # /v2/boats answers the handshake with 404; the overnight socket is v1beta1.
     overnight = _stream()._build_stream("boats")
-    assert overnight._endpoint == "wss://stream.data.alpaca.markets/v2/boats"
+    assert overnight._endpoint == "wss://stream.data.alpaca.markets/v1beta1/boats"
     assert _stream()._build_stream("sip")._endpoint.endswith("/v2/sip")
+
+
+def test_every_feed_maps_to_the_version_that_serves_it():
+    from app.live.prices import stream_endpoint
+
+    assert stream_endpoint("sip") == "wss://stream.data.alpaca.markets/v2/sip"
+    assert stream_endpoint("iex") == "wss://stream.data.alpaca.markets/v2/iex"
+    assert stream_endpoint("boats") == "wss://stream.data.alpaca.markets/v1beta1/boats"
+    assert stream_endpoint("overnight") == "wss://stream.data.alpaca.markets/v1beta1/overnight"
 
 
 def test_status_reports_disconnected_until_a_socket_is_connected():
