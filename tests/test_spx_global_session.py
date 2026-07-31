@@ -40,3 +40,27 @@ def test_the_weekend_stays_shut():
 def test_the_global_session_can_be_switched_off():
     assert Settings().spx_global_trading_hours is True
     assert Settings(spx_global_trading_hours=False).spx_global_trading_hours is False
+
+
+def test_the_calculator_agrees_with_the_service_about_the_session():
+    """Both gates must read the same rule, or one silently vetoes the other."""
+    from app.options.market_clock import market_session
+    from app.spx.synthetic import calculate_synthetic_value
+
+    moment = ny(7, 30, 4, 55)  # inside the global session
+    session = market_session(moment)
+    assert session.options_actionable is False
+
+    result = calculate_synthetic_value(
+        [], Settings(spx_risk_free_rate=0.04), session, now=moment
+    )
+    # It may fail for want of contracts, but not for "the market is closed".
+    assert result.provider_status != "options_closed"
+
+    shut = calculate_synthetic_value(
+        [],
+        Settings(spx_risk_free_rate=0.04, spx_global_trading_hours=False),
+        session,
+        now=moment,
+    )
+    assert shut.provider_status == "options_closed"

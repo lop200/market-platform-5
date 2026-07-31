@@ -7,7 +7,13 @@ from statistics import median
 from time import perf_counter
 
 from app.config import Settings
-from app.options.market_clock import MarketSession, NEW_YORK, is_early_close, nyse_holidays
+from app.options.market_clock import (
+    MarketSession,
+    NEW_YORK,
+    is_early_close,
+    nyse_holidays,
+    spx_global_session,
+)
 from app.spx.schemas import SPXContract, SPXSyntheticValue, SyntheticPairResult
 
 SECONDS_PER_YEAR = 365.0 * 24 * 60 * 60
@@ -106,7 +112,13 @@ def calculate_synthetic_value(
         return _empty(now, "unavailable", "مزود SPX الضمني غير مفعل.")
     if not settings.spx_synthetic_paper_only or not settings.spx_paper_only:
         return _empty(now, "unavailable", "المزود الضمني يعمل في Paper Trading فقط.")
-    if not session.options_actionable:
+    # The service already decided the session is worth pricing; this second
+    # check has to agree with it or the calculator refuses work the caller
+    # asked for. SPX trades Cboe's global session as well as the regular one.
+    if not (
+        session.options_actionable
+        or (settings.spx_global_trading_hours and spx_global_session(now))
+    ):
         return _empty(
             now,
             "options_closed",
