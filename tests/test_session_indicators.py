@@ -3,10 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pandas as pd
+import pytest
 
 from app.opportunities.indicators import (
     calculate_indicators,
     current_session_bars,
+    expected_volume_share,
     session_start,
 )
 
@@ -69,7 +71,34 @@ def test_relative_volume_measures_this_session_not_the_whole_frame():
     # Summing the whole frame would report several days of volume as one session.
     assert indicators["session_volume"] == float(session["volume"].sum())
     assert indicators["session_volume"] < float(frame["volume"].sum())
-    assert indicators["relative_volume"] == indicators["session_volume"] / 10_000
+    assert indicators["relative_volume"] == round(
+        indicators["session_volume"] / indicators["expected_session_volume"], 4
+    )
+
+
+def test_expected_share_grows_through_the_day_and_completes_at_the_close():
+    def share(hour, minute=0):
+        return expected_volume_share(datetime(2026, 7, 30, hour, minute, tzinfo=timezone.utc))
+
+    # UTC is four hours ahead of New York in July.
+    premarket, open_bell, midday, close = share(12), share(13, 35), share(18), share(20)
+    assert premarket < open_bell < midday < close
+    # By the closing bell the regular session and pre-market are fully counted.
+    assert close == pytest.approx(0.95)
+    # A stock trading its normal pace reads 1.0 at any hour, not only at the close.
+    assert share(13, 35) < 0.1
+
+
+def test_expected_share_never_returns_zero():
+    # 04:00 New York opens a window; dividing by its first instant must be safe.
+    assert expected_volume_share(datetime(2026, 7, 30, 8, 0, tzinfo=timezone.utc)) > 0
+    assert expected_volume_share(datetime(2026, 7, 31, 0, 0, tzinfo=timezone.utc)) > 0
+
+
+def test_overnight_pace_is_measured_against_the_overnight_book():
+    # 02:00 New York is six of the overnight session's eight hours.
+    share = expected_volume_share(OVERNIGHT)
+    assert 0 < share < 0.01
 
 
 def test_opening_range_is_absent_before_the_regular_session_opens():

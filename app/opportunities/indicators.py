@@ -6,6 +6,20 @@ import pandas as pd
 
 NEW_YORK = "America/New_York"
 
+# Share of a normal day's volume each window carries. The regular session
+# dominates; pre- and post-market are thin and the overnight book thinner
+# still. These are what make relative volume comparable at any hour: without
+# them a partial session is measured against a whole day and can never reach 1.
+DAY_SESSION_SHARES = (
+    (time(4), time(9, 30), 0.02),
+    (time(9, 30), time(16), 0.93),
+    (time(16), time(20), 0.04),
+)
+OVERNIGHT_SHARE = 0.01
+# Floor for the expected share so the first candle of a session cannot divide
+# by something near zero and report an absurd multiple.
+MIN_EXPECTED_SHARE = 0.002
+
 
 def _eastern(intraday: pd.DataFrame) -> pd.DataFrame | None:
     """Return the frame indexed in New York time, or None if it is not dated."""
@@ -36,6 +50,36 @@ def session_start(now: datetime | None = None) -> pd.Timestamp:
     if eastern.time() >= time(20):
         return eastern.normalize() + timedelta(hours=20)
     return eastern.normalize() + timedelta(hours=4)
+
+
+def _minutes(value: time) -> int:
+    return value.hour * 60 + value.minute
+
+
+def expected_volume_share(now: datetime | None = None) -> float:
+    """Fraction of an average day's volume expected since this session opened.
+
+    Volume is compared against what a normal stock would have traded by this
+    point, so 1.0 means "trading at its usual pace" at 09:35 as much as at
+    15:55. Progress within a window is treated as linear, which is coarse but
+    far closer than measuring a part-session against a full day.
+    """
+    eastern = _as_eastern_timestamp(now)
+    clock = _minutes(eastern.time())
+
+    if clock < _minutes(time(4)) or clock >= _minutes(time(20)):
+        # The overnight book runs 20:00 to 04:00: eight hours either side of midnight.
+        elapsed = (clock - _minutes(time(20))) % (24 * 60)
+        return max(OVERNIGHT_SHARE * elapsed / (8 * 60), MIN_EXPECTED_SHARE)
+
+    expected = 0.0
+    for start, end, share in DAY_SESSION_SHARES:
+        if clock >= _minutes(end):
+            expected += share
+        elif clock > _minutes(start):
+            span = _minutes(end) - _minutes(start)
+            expected += share * (clock - _minutes(start)) / span
+    return max(expected, MIN_EXPECTED_SHARE)
 
 
 def current_session_bars(intraday: pd.DataFrame, now: datetime | None = None) -> pd.DataFrame:
@@ -83,7 +127,9 @@ def calculate_indicators(
     session = current_session_bars(intraday, now)
     session_volume = float(session["volume"].astype(float).sum())
     avg_daily_volume = float(daily["volume"].tail(20).mean()) if len(daily) else 0
-    relative_volume = session_volume / avg_daily_volume if avg_daily_volume else 0
+    expected_share = expected_volume_share(now)
+    expected_volume = avg_daily_volume * expected_share
+    relative_volume = session_volume / expected_volume if expected_volume else 0
     regular = session.between_time("09:30", "15:59") if isinstance(session.index, pd.DatetimeIndex) else session.iloc[0:0]
     result = {
         "vwap": float(vwap.iloc[-1]),
@@ -101,6 +147,7 @@ def calculate_indicators(
         "support": float(intraday["low"].tail(30).min()),
         "resistance": float(intraday["high"].tail(30).max()),
         "session_volume": session_volume,
+        "expected_session_volume": expected_volume,
         "session_high": float(session["high"].max()),
         "session_low": float(session["low"].min()),
         # The opening range is the first three candles of the regular session;
