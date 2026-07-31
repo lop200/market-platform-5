@@ -506,10 +506,24 @@ def analyze_single_stock(
             ),
         },
         "trade_plan": ({
+            # Without this the numbers read as a mistake: on a short the stop
+            # sits above the entry and the targets below it, which looks
+            # backwards to anyone who assumes every plan is a buy.
+            "direction": "short" if bearish_plan else "long",
+            "direction_ar": "بيع — صفقة هابطة" if bearish_plan else "شراء — صفقة صاعدة",
+            "direction_note_ar": (
+                "الوقف أعلى سعر الدخول والأهداف أسفله لأن الربح يأتي من هبوط السعر."
+                if bearish_plan
+                else "الوقف أسفل سعر الدخول والأهداف أعلاه لأن الربح يأتي من صعود السعر."
+            ),
             "entry_from": entry_from,
             "entry_to": entry_to,
             "stop": stop,
-            "stop_reason": f"أسفل الدعم الفني؛ {strategy.invalidation}" if strategy else "لا يوجد مستوى إبطال مكتمل",
+            "stop_reason": (
+                (f"أعلى المقاومة الفنية؛ {strategy.invalidation}" if bearish_plan
+                 else f"أسفل الدعم الفني؛ {strategy.invalidation}")
+                if strategy else "لا يوجد مستوى إبطال مكتمل"
+            ),
             "targets": targets,
             "risk_reward": rr,
             "stop_distance_pct": stop_distance_pct,
