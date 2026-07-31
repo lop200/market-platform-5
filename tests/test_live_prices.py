@@ -86,6 +86,8 @@ def test_stream_emits_the_book_as_an_sse_frame():
     payload = json.loads(frames[0][len("data: "):])
     assert payload["prices"][0]["symbol"] == "SPY"
     assert payload["prices"][0]["price"] == 550.0
+    # The client reads stream state off every frame, not just the snapshot call.
+    assert payload["stream"]["running"] is False
 
 
 def test_stream_sends_a_heartbeat_when_nothing_changes():

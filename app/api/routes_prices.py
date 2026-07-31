@@ -54,7 +54,9 @@ async def price_events(
         if version != last_version:
             last_version = version
             idle = 0.0
-            payload = price_book.snapshot(selected)
+            # Carry the stream status on every frame: the client renders the
+            # same payload shape from the snapshot call and from the stream.
+            payload = {**price_book.snapshot(selected), "stream": stream_status()}
             yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
         else:
             idle += interval
