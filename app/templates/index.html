@@ -31,6 +31,7 @@
     .progress-panel{display:none;padding:13px;margin-bottom:12px}.progress-top{display:flex;justify-content:space-between;gap:8px}.track{height:7px;background:#202b3b;border-radius:10px;overflow:hidden;margin:10px 0}.bar{height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--green));transition:width .3s}.counter-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.counter{background:#0b131e;border-radius:9px;padding:8px}.counter small{display:block;color:var(--muted);font-size:.68rem}.counter strong{font-size:.95rem}.usage{font-size:.72rem;color:var(--muted);margin-top:9px;line-height:1.7}.reason-list{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
     .session-guide{margin:10px 0 0;padding:12px;background:linear-gradient(135deg,#0e1c2b,#101722);border:1px solid var(--line);border-radius:16px}.session-guide-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:9px}.session-guide-head h2{font-size:.9rem;margin:0}.session-guide-head span{font-size:.68rem;color:var(--muted)}.session-times{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.session-time{padding:9px;background:#09131e;border:1px solid #20334a;border-radius:10px;min-width:0}.session-time small{display:block;color:var(--muted);font-size:.66rem}.session-time b{display:block;margin:4px 0;font-size:.9rem;direction:ltr;text-align:right}.session-time em{font-style:normal;color:var(--blue);font-size:.68rem}.session-time.official{border-color:#287a5b;background:#0d241d}.session-time.official em{color:var(--green)}.session-note{margin:9px 0 0;color:#cbd5e1;font-size:.7rem;line-height:1.6}
     .section-head{display:flex;justify-content:space-between;align-items:end;margin:18px 2px 9px}.section-head h2{font-size:1.03rem;margin:0}.section-head span{font-size:.72rem;color:var(--muted)}.cards{display:grid;grid-template-columns:1fr;gap:9px}.card{padding:13px;min-width:0}.card-top{display:flex;justify-content:space-between;gap:8px}.symbol-name{display:flex;align-items:center;gap:8px}.symbol-name b{direction:ltr;font-size:1.05rem}.state{font-size:.68rem;padding:5px 8px;border-radius:999px;background:#254634;color:#8ff0c4}.watch .state{background:#4a3d1e;color:#ffe09a}.price{direction:ltr;font-weight:750}.mini-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:11px}.mini{background:#0a121c;border-radius:8px;padding:8px;min-width:0}.mini small{display:block;color:var(--muted);font-size:.65rem}.mini b{display:block;margin-top:3px;font-size:.83rem;overflow-wrap:anywhere}.reason{color:#c9d3df;font-size:.8rem;line-height:1.55;margin:10px 0}.card-link{display:block;text-align:center;border:1px solid var(--line);border-radius:9px;padding:8px;color:var(--blue);text-decoration:none;font-size:.8rem}.empty{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}.hidden{display:none!important}
+    .inline-analysis{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}.inline-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.inline-head b{direction:ltr;font-size:1.1rem}.inline-price{text-align:left;direction:ltr;font-weight:750}.inline-price small{display:block;color:var(--muted);font-size:.63rem;direction:rtl}.btn-x{background:none;border:0;color:var(--muted);font-size:1rem;cursor:pointer;padding:4px 6px}.contract-table{width:100%;border-collapse:collapse;margin-top:11px;display:block;overflow-x:auto}.contract-table td{background:#0a121c;padding:8px;font-size:.78rem;border-bottom:1px solid var(--line);white-space:nowrap}.contract-table td b{direction:ltr;display:block;font-size:.72rem}.contract-table small{display:block;color:var(--muted);font-size:.62rem;margin-top:2px}.basis{color:var(--muted);font-size:.7rem;margin:9px 0;line-height:1.5}
     @media(max-width:719px){.topbar{flex-wrap:wrap}.statusbar{width:100%;order:3}.earnings-nav span{display:none}}
     @media(min-width:720px){.shell{padding:14px}.session-times{grid-template-columns:repeat(4,minmax(0,1fr))}.hero{grid-template-columns:1.35fr .9fr}.filters{grid-template-columns:1.2fr .7fr}.stats{grid-template-columns:repeat(4,1fr)}.counter-grid{grid-template-columns:repeat(4,1fr)}.cards{grid-template-columns:repeat(2,1fr)}}
     @media(min-width:1100px){.cards{grid-template-columns:repeat(3,1fr)}.counter-grid{grid-template-columns:repeat(7,1fr)}}
@@ -70,6 +71,7 @@
         <button class="btn btn-blue">تحليل</button>
         <div class="suggestions" id="suggestions"></div>
       </form>
+      <div class="inline-analysis" id="inlineAnalysis" hidden></div>
     </div>
     <div class="scan-panel">
       <div class="scan-head"><div><span class="eyebrow">فلترة رقمية مجانية أولًا</span><h2>مسح السوق</h2></div><button class="btn btn-green" id="scan">مسح السوق واستخراج الفرص</button></div>
@@ -121,7 +123,80 @@ async function latest(){try{render(await(await fetch("/api/v1/opportunities/late
 async function start(){const preset=$("#pricePreset").value,p=new URLSearchParams({universe_limit:$("#universeLimit").value});if(preset==="all")p.set("all_prices","true");else{const ranges={under5:[0,5],"5to20":[5,20],"20to100":[20,100],over100:[100,null],custom:[$("#minPrice").value,$("#maxPrice").value]},r=ranges[preset];p.set("all_prices","false");if(r[0]!==null&&r[0]!=="")p.set("min_price",r[0]);if(r[1]!==null&&r[1]!=="")p.set("max_price",r[1])}$("#progress").style.display="block";const res=await fetch("/api/v1/opportunities/scans?"+p,{method:"POST"}),job=await res.json();if(!res.ok){$("#failure").textContent=job.detail;return}poll(job.run_id)}
 function poll(id){const timer=setInterval(async()=>{const job=await(await fetch("/api/v1/opportunities/scans/"+id)).json(),pct=job.progress_pct||0;$("#bar").style.width=pct+"%";$("#progressPct").textContent=pct+"%";$("#progressTitle").textContent=job.status==="completed"?"اكتمل المسح":"جاري المسح في الخلفية";counters(job.breakdown);$("#usage").textContent=`عدد الأسهم: ${job.symbols_total||0} • طلبات API الفعلية: ${job.api_requests||0} • Cache hits: ${job.cache_hits||0} • OpenAI calls: ${job.openai_calls||0} • التكلفة: $${Number(job.openai_cost_usd||0).toFixed(4)} • الزمن: ${job.response_ms||0}ms`;if(job.failure_reason)$("#failure").textContent=job.failure_reason;if(["completed","failed"].includes(job.status)){clearInterval(timer);render(job)}},1000)}
 $("#scan").onclick=start;$("#refresh").onclick=latest;$("#pricePreset").onchange=()=>$("#customRange").classList.toggle("show",$("#pricePreset").value==="custom");
-const input=$("#symbol"),box=$("#suggestions");function matches(q){q=q.trim().toLowerCase();return q?catalog.map(x=>({...x,rank:x.symbol.toLowerCase().startsWith(q)?0:x.name.toLowerCase().startsWith(q)?1:x.symbol.toLowerCase().includes(q)?2:x.name.toLowerCase().includes(q)?3:9})).filter(x=>x.rank<9).sort((a,b)=>a.rank-b.rank).slice(0,8):[]}function suggest(){const list=matches(input.value);box.innerHTML=list.map(x=>`<button type="button" class="suggestion" data-symbol="${x.symbol}"><b>${x.symbol}</b><span>${x.name}</span></button>`).join("");box.classList.toggle("open",!!list.length);box.querySelectorAll("button").forEach(b=>b.onclick=()=>{input.value=b.dataset.symbol;box.classList.remove("open")})}input.oninput=suggest;$("#symbolForm").onsubmit=e=>{e.preventDefault();const typed=input.value.trim(),best=catalog.find(x=>x.symbol.toLowerCase()===typed.toLowerCase())||matches(typed)[0];if(best||typed)location.href="/stocks/"+encodeURIComponent((best?.symbol||typed).toUpperCase())};document.addEventListener("click",e=>{if(!$("#symbolForm").contains(e.target))box.classList.remove("open")});
+const input=$("#symbol"),box=$("#suggestions");function matches(q){q=q.trim().toLowerCase();return q?catalog.map(x=>({...x,rank:x.symbol.toLowerCase().startsWith(q)?0:x.name.toLowerCase().startsWith(q)?1:x.symbol.toLowerCase().includes(q)?2:x.name.toLowerCase().includes(q)?3:9})).filter(x=>x.rank<9).sort((a,b)=>a.rank-b.rank).slice(0,8):[]}function suggest(){const list=matches(input.value);box.innerHTML=list.map(x=>`<button type="button" class="suggestion" data-symbol="${x.symbol}"><b>${x.symbol}</b><span>${x.name}</span></button>`).join("");box.classList.toggle("open",!!list.length);box.querySelectorAll("button").forEach(b=>b.onclick=()=>{input.value=b.dataset.symbol;box.classList.remove("open")})}input.oninput=suggest;document.addEventListener("click",e=>{if(!$("#symbolForm").contains(e.target))box.classList.remove("open")});
+
+// ---- تحليل السهم داخل الصفحة نفسها ----
+const panel=$("#inlineAnalysis");
+let inlineSymbol=null,inlineTimer=null;
+const pct=v=>v==null?"—":Number(v).toFixed(0)+"%";
+function contractRow(c){
+  return `<tr>
+    <td><b>${c.symbol||"—"}</b><small>${c.option_type==="call"?"شراء":"بيع"} • ${c.dte} يوم</small></td>
+    <td>${money(c.entry_price)}<small>${money(c.contract_cost)} للعقد</small></td>
+    <td>${pct(c.probability_itm_pct)}<small>داخل المال</small></td>
+    <td>${pct(c.probability_touch_strike_pct)}<small>لمس السترايك</small></td>
+    <td class="${c.theta_burn_pct>15?"red":""}">${pct(c.theta_burn_pct)}<small>تآكل يومي</small></td>
+  </tr>`;
+}
+function renderInline(a,symbol){
+  if(!a){panel.innerHTML='<div class="empty">جاري تجهيز التحليل…</div>';return}
+  const q=a.quote||{},plan=a.trade_plan||{},targets=plan.targets||[];
+  const contracts=((a.options||{}).ranked_contracts||[]).slice(0,3);
+  const live=priceRow.last?.[symbol];
+  panel.innerHTML=`
+    <div class="inline-head">
+      <div><b>${symbol}</b><span class="state">${a.status_ar||a.status||"—"}</span></div>
+      <div class="inline-price"><span id="inlinePrice">${money(live??q.price)}</span>
+        <small>${live!=null?"سعر لحظي":"عمر البيانات "+(q.age_seconds??"—")+"ث"}</small></div>
+      <button class="btn-x" id="inlineClose" aria-label="إغلاق">✕</button>
+    </div>
+    <div class="mini-grid">
+      <div class="mini"><small>الاتجاه</small><b>${a.trend||"—"}</b></div>
+      <div class="mini"><small>الاستراتيجية</small><b>${(a.strategy||{}).name||"—"}</b></div>
+      <div class="mini"><small>الدخول</small><b>${money(plan.entry_from)}</b></div>
+      <div class="mini"><small>الوقف</small><b class="red">${money(plan.stop)}</b></div>
+      <div class="mini"><small>الهدف الأول</small><b class="green">${money(targets[0]?.price)}</b></div>
+      <div class="mini"><small>العائد/المخاطرة</small><b>${num(plan.risk_reward)}</b></div>
+    </div>
+    ${contracts.length?`<table class="contract-table"><tbody>${contracts.map(contractRow).join("")}</tbody></table>
+      <p class="basis">${contracts[0].probability_basis_ar||""}</p>`
+      :`<p class="basis">${(a.options||{}).message_ar||"لا توجد عقود مرشحة الآن."}</p>`}
+    <a class="card-link" href="/stocks/${encodeURIComponent(symbol)}">افتح التحليل الكامل</a>`;
+  $("#inlineClose").onclick=closeInline;
+}
+function closeInline(){
+  panel.hidden=true;inlineSymbol=null;
+  if(inlineTimer){clearInterval(inlineTimer);inlineTimer=null}
+}
+async function analyseInline(symbol){
+  inlineSymbol=symbol;panel.hidden=false;
+  panel.innerHTML='<div class="empty">جاري بدء التحليل…</div>';
+  if(inlineTimer){clearInterval(inlineTimer);inlineTimer=null}
+  let job;
+  try{
+    const res=await fetch("/api/v1/opportunities/symbols/"+encodeURIComponent(symbol),{method:"POST"});
+    job=await res.json();
+    if(!res.ok)throw new Error(job.detail||"تعذر بدء التحليل");
+  }catch(err){panel.innerHTML=`<div class="empty">${err.message}</div>`;return}
+  // Same two endpoints the full page uses, so the two views never disagree.
+  inlineTimer=setInterval(async()=>{
+    try{
+      const state=await(await fetch("/api/v1/opportunities/stocks/jobs/"+job.run_id)).json();
+      if(state.analysis)renderInline(state.analysis,symbol);
+      if(["completed","failed"].includes(state.status)){
+        clearInterval(inlineTimer);inlineTimer=null;
+        if(!state.analysis)panel.innerHTML=`<div class="empty">${state.failure_reason||"تعذر إكمال التحليل"}</div>`;
+      }
+    }catch{}
+  },800);
+}
+$("#symbolForm").onsubmit=e=>{
+  e.preventDefault();
+  const typed=input.value.trim();
+  const best=catalog.find(x=>x.symbol.toLowerCase()===typed.toLowerCase())||matches(typed)[0];
+  const symbol=(best?.symbol||typed).toUpperCase();
+  if(symbol){box.classList.remove("open");analyseInline(symbol)}
+};
 // ---- حالة السوق + شريط الأسعار الحية ----
 const marketStateEl=$("#marketState"),tickerEl=$("#liveTicker"),tickerNote=$("#liveTickerNote");
 const priceRow=(p)=>{
@@ -149,6 +224,10 @@ const renderPrices=(body)=>{
   }
   tickerEl.innerHTML=rows.map(priceRow).join("");
   priceRow.last=Object.fromEntries(rows.map(p=>[p.symbol,p.price]));
+  // The searched symbol ticks from the same stream as the ribbon above it.
+  const watched=inlineSymbol&&priceRow.last[inlineSymbol];
+  const priceEl=document.getElementById("inlinePrice");
+  if(watched&&priceEl)priceEl.textContent=money(watched);
   const stale=rows.filter(p=>p.stale).length;
   tickerNote.textContent=stale?`${rows.length} سهم — ${stale} منها بسعر متأخر`:`${rows.length} سهم بأسعار لحظية`;
 };

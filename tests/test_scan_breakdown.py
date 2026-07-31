@@ -89,3 +89,30 @@ def test_home_defaults_to_all_prices_and_has_requested_presets():
     assert '<option value="all" selected>جميع الأسعار</option>' in html
     for label in ("أقل من 5$", "من 5$ إلى 20$", "من 20$ إلى 100$", "أكثر من 100$", "نطاق مخصص"):
         assert label in html
+
+
+def test_search_analyses_in_place_instead_of_navigating_away():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    html = TestClient(app).get("/").text
+    # The result panel and its loader must live on the home page itself.
+    assert 'id="inlineAnalysis"' in html
+    assert "analyseInline" in html
+    # A full-page jump would defeat the point: the live ribbon stops ticking.
+    assert 'location.href="/stocks/' not in html
+    # It must reuse the endpoints the full page already polls.
+    assert "/api/v1/opportunities/symbols/" in html
+    assert "/api/v1/opportunities/stocks/jobs/" in html
+
+
+def test_inline_panel_shows_contract_odds_and_their_basis():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    html = TestClient(app).get("/").text
+    assert "probability_itm_pct" in html
+    assert "probability_touch_strike_pct" in html
+    assert "theta_burn_pct" in html
+    # The inputs behind the number travel with it.
+    assert "probability_basis_ar" in html
