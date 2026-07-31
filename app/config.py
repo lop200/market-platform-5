@@ -155,19 +155,27 @@ class Settings(BaseSettings):
     spx_synthetic_min_data_quality_score: int = Field(
         default=70, alias="SPX_SYNTHETIC_MIN_DATA_QUALITY_SCORE"
     )
-    spx_risk_free_rate: float | None = Field(default=None, alias="SPX_RISK_FREE_RATE")
-    spx_dividend_yield: float | None = Field(default=None, alias="SPX_DIVIDEND_YIELD")
+    # Put-call parity needs a discount rate, and this is not a risk appetite:
+    # it is the short US Treasury yield, one correct number at any moment.
+    # Setting it high does not make the sniper bolder, it moves the implied
+    # index by tens of points. Refresh when the yield moves materially; the
+    # stamp below is what the staleness check reads.
+    spx_risk_free_rate: float | None = Field(default=0.04, alias="SPX_RISK_FREE_RATE")
+    spx_dividend_yield: float | None = Field(default=0.013, alias="SPX_DIVIDEND_YIELD")
     spx_risk_free_rate_source: str = Field(
         default="manual", alias="SPX_RISK_FREE_RATE_SOURCE"
     )
     spx_dividend_yield_source: str = Field(
         default="manual", alias="SPX_DIVIDEND_YIELD_SOURCE"
     )
+    # When the two figures above were last checked against the market. Going
+    # stale disables only the spot estimate, never the forward, so an
+    # out-of-date rate degrades the reading instead of silently skewing it.
     spx_risk_free_rate_updated_at: str | None = Field(
-        default=None, alias="SPX_RISK_FREE_RATE_UPDATED_AT"
+        default="2026-07-31", alias="SPX_RISK_FREE_RATE_UPDATED_AT"
     )
     spx_dividend_yield_updated_at: str | None = Field(
-        default=None, alias="SPX_DIVIDEND_YIELD_UPDATED_AT"
+        default="2026-07-31", alias="SPX_DIVIDEND_YIELD_UPDATED_AT"
     )
     spx_rate_max_age_days: int = Field(default=7, alias="SPX_RATE_MAX_AGE_DAYS")
     spx_allow_spot_estimate: bool = Field(

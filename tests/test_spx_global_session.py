@@ -64,3 +64,28 @@ def test_the_calculator_agrees_with_the_service_about_the_session():
         now=moment,
     )
     assert shut.provider_status == "options_closed"
+
+
+def test_the_discount_rate_is_present_and_plausible():
+    """The calculator refuses to work without it, so a default has to exist."""
+    settings = Settings()
+    assert settings.spx_risk_free_rate is not None
+    # A sanity band, not a forecast: outside this the parity maths is wrong.
+    assert 0.0 <= settings.spx_risk_free_rate <= 0.10
+    assert 0.0 <= settings.spx_dividend_yield <= 0.05
+    # Freshness is checked against these, so they cannot be blank.
+    assert settings.spx_risk_free_rate_updated_at
+    assert settings.spx_dividend_yield_updated_at
+
+
+def test_a_stale_rate_degrades_the_reading_rather_than_skewing_it():
+    from app.options.market_clock import market_session
+    from app.spx.synthetic import calculate_synthetic_value
+
+    moment = ny(7, 30, 4, 55)
+    session = market_session(moment)
+    # A year-old stamp must not be treated as current.
+    stale = Settings(spx_risk_free_rate_updated_at="2025-01-01")
+    result = calculate_synthetic_value([], stale, session, now=moment)
+    # It still runs; only the spot estimate is withheld.
+    assert result.provider_status != "options_closed"
