@@ -273,6 +273,25 @@ def persist_opportunity(db: Session, result: OpportunityResult, scan_run_id=None
     return row
 
 
+def _demote_rejected_candidate(row: StockCandidate | None, review) -> None:
+    """Move an AI-rejected candidate onto the watchlist with its reason."""
+    if row is None:
+        return
+    row.accepted = False
+    snapshot = dict(row.snapshot_json or {})
+    snapshot["stage"] = "analyzed"
+    snapshot["watch_reason"] = (
+        (review.reasons_ar or [None])[0]
+        or review.analysis_summary_ar
+        or "لم تعتمد المراجعة الذكية الدخول"
+    )
+    snapshot["activation_condition"] = (
+        (review.warnings_ar or [None])[0] or "انتظار تحسّن المعطيات ثم إعادة المراجعة"
+    )
+    row.snapshot_json = snapshot
+    row.exclusion_reasons = ["لم تعتمد المراجعة الذكية الدخول"]
+
+
 def scan_market(
     db: Session,
     provider: MarketDataAdapter,
@@ -372,6 +391,7 @@ def scan_market(
         ))
 
     accepted: list[OpportunityResult] = []
+    candidate_rows: dict[str, StockCandidate] = {}
     for index, symbol in enumerate(deep_symbols, 1):
         try:
             result, reasons, snapshot = build_opportunity(
@@ -398,10 +418,12 @@ def scan_market(
         )
         snapshot["stage"] = "candidate" if result else "analyzed"
         snapshot["watch_reason"] = reasons[0] if reasons else snapshot.get("watch_reason")
-        db.add(StockCandidate(
+        candidate_row = StockCandidate(
             scan_run_id=run.id, symbol=symbol, accepted=result is not None,
             numeric_score=score, exclusion_reasons=reasons, snapshot_json=snapshot,
-        ))
+        )
+        db.add(candidate_row)
+        candidate_rows[symbol] = candidate_row
         if result:
             accepted.append(result)
         run.symbols_scanned = len(quote_map)
@@ -472,6 +494,10 @@ def scan_market(
     for item in shortlist:
         review = reviews.get(item.symbol)
         if review and not review.approved:
+            # A candidate that is counted as sent to review and then vanishes
+            # reads as a bug. Demote it to the watchlist carrying the reviewer's
+            # own reason so the rejection is visible instead of silent.
+            _demote_rejected_candidate(candidate_rows.get(item.symbol), review)
             continue
         if review:
             item.reasons_ar = review.reasons_ar or item.reasons_ar
