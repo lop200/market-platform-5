@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -147,3 +148,40 @@ async def _collect(symbols, *, max_frames, interval=0.01, heartbeat_after=HEARTB
             symbols, interval, max_frames=max_frames, heartbeat_after=heartbeat_after
         )
     ]
+
+
+def test_status_surfaces_the_sdk_error_it_would_otherwise_swallow():
+    import logging
+
+    stream = _stream()
+    stream._capture.attach()
+    try:
+        logging.getLogger("alpaca.data.live.websocket").error(
+            "error during websocket communication: insufficient subscription"
+        )
+    finally:
+        stream._capture.detach()
+    assert "insufficient subscription" in stream.last_error
+
+
+def test_running_follows_the_sdk_connection_flag_not_the_thread():
+    stream = _stream()
+    stream._thread = SimpleNamespace(is_alive=lambda: True)
+    stream._stream = SimpleNamespace(_running=False)
+    # A live thread with an unconnected socket is not a running feed.
+    assert stream.running is False
+    assert stream.connected_feed is None
+    stream._stream = SimpleNamespace(_running=True)
+    stream._connected_feed = "boats"
+    assert stream.running is True
+    assert stream.connected_feed == "boats"
+
+
+def test_message_counter_separates_silence_from_rejection():
+    stream = _stream()
+    assert stream.messages_received == 0
+    asyncio.run(stream._on_quote(SimpleNamespace(
+        symbol="SPY", bid_price=0, ask_price=0, timestamp=NOW,
+    )))
+    # The book rejects a zero quote, but the socket did deliver it.
+    assert stream.messages_received == 1

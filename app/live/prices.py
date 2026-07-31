@@ -123,6 +123,36 @@ class PriceBook:
 price_book = PriceBook()
 
 
+class _SdkLogCapture(logging.Handler):
+    """Keep the SDK's connection errors, which never reach our except block.
+
+    alpaca-py's run loop catches every exception, logs it, and retries. A bad
+    endpoint, a rejected key, or an unentitled feed therefore looks identical
+    to a quiet market: no error, no data. This is the only place that
+    difference is visible.
+    """
+
+    SDK_LOGGERS = ("alpaca.data.live.websocket", "alpaca.data.live.stock")
+
+    def __init__(self, stream: "AlpacaPriceStream"):
+        super().__init__(level=logging.WARNING)
+        self._stream = stream
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self._stream.note_error(record.getMessage())
+        except Exception:  # pragma: no cover - a broken handler must stay silent
+            pass
+
+    def attach(self) -> None:
+        for name in self.SDK_LOGGERS:
+            logging.getLogger(name).addHandler(self)
+
+    def detach(self) -> None:
+        for name in self.SDK_LOGGERS:
+            logging.getLogger(name).removeHandler(self)
+
+
 class AlpacaPriceStream:
     """Owns the Alpaca websocket lifecycle and writes into a PriceBook."""
 
@@ -148,24 +178,36 @@ class AlpacaPriceStream:
         self._stopping = threading.Event()
         self._connected_feed: str | None = None
         self._last_error: str | None = None
+        self._messages = 0
+        self._capture = _SdkLogCapture(self)
+
+    def note_error(self, message: str) -> None:
+        self._last_error = message[:500]
 
     @property
     def running(self) -> bool:
-        """True only while a socket is actually connected, not merely alive.
+        """True only once the socket is up and the subscription was sent.
 
-        A thread that is retrying a rejected credential is not a live feed, and
-        the page must not tell the user it is waiting for prices that will
-        never arrive.
+        The SDK flips its own ``_running`` at that point. Reporting anything
+        earlier — a live thread, a constructed client — tells the page to wait
+        for prices that may never arrive.
         """
-        return bool(self._thread and self._thread.is_alive() and self._connected_feed)
+        if not (self._thread and self._thread.is_alive()):
+            return False
+        return bool(getattr(self._stream, "_running", False))
 
     @property
     def connected_feed(self) -> str | None:
-        return self._connected_feed
+        return self._connected_feed if self.running else None
 
     @property
     def last_error(self) -> str | None:
         return self._last_error
+
+    @property
+    def messages_received(self) -> int:
+        """Messages the socket delivered, before the book accepted or rejected them."""
+        return self._messages
 
     def feed_for(self, now: datetime | None = None) -> str:
         """Match the provider: BOATS/Overnight only in the overnight session."""
@@ -191,6 +233,7 @@ class AlpacaPriceStream:
         )
 
     async def _on_trade(self, trade) -> None:
+        self._messages += 1
         self._book.record(
             trade.symbol,
             price=float(trade.price),
@@ -199,6 +242,7 @@ class AlpacaPriceStream:
         )
 
     async def _on_quote(self, quote) -> None:
+        self._messages += 1
         bid, ask = float(quote.bid_price or 0), float(quote.ask_price or 0)
         if bid <= 0 or ask <= 0:
             return
@@ -231,6 +275,7 @@ class AlpacaPriceStream:
         # The SDK's run() owns its own event loop, so it needs a dedicated
         # thread; uvicorn's loop must stay free to serve requests.
         asyncio.set_event_loop(asyncio.new_event_loop())
+        self._capture.attach()
         while not self._stopping.is_set():
             feed = self.feed_for()
             try:
@@ -239,7 +284,6 @@ class AlpacaPriceStream:
                 stream.subscribe_quotes(self._on_quote, *self._symbols)
                 self._stream = stream
                 self._connected_feed = feed
-                self._last_error = None
                 logger.info(
                     "live price stream connecting to %s for %d symbols", feed, len(self._symbols)
                 )
@@ -318,6 +362,10 @@ def stream_status() -> dict:
     return {
         "running": bool(stream and stream.running),
         "feed": stream.connected_feed if stream else None,
+        "requested_feed": stream.feed_for() if stream else None,
         "last_error": stream.last_error if stream else None,
+        # Separates "the socket delivered nothing" from "the book rejected
+        # everything it delivered" — they look identical from the price list.
+        "messages_received": stream.messages_received if stream else 0,
         "tracked_symbols": len(price_book.snapshot()["prices"]),
     }

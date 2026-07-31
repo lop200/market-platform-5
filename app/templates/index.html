@@ -133,9 +133,12 @@ const priceRow=(p)=>{
 };
 const feedName=f=>({sip:"SIP",iex:"IEX",boats:"BOATS الليلي",overnight:"Overnight الليلي"}[f]||f);
 const emptyNote=(s={})=>{
+  // Distinguish the three silences: not connected, connected but the feed is
+  // quiet, and connected while the book rejects everything it receives.
+  if(s.last_error)return `تعذّر البث المباشر (${feedName(s.requested_feed)}): ${s.last_error}`;
+  if(s.running&&s.messages_received)return `متصل بمصدر ${feedName(s.feed)} — وصلت ${s.messages_received} رسالة بلا سعر صالح.`;
   if(s.running)return `متصل بمصدر ${feedName(s.feed)} — بانتظار أول صفقة.`;
-  if(s.last_error)return "انقطع البث المباشر ويعيد المحاولة — الأسعار تُحدَّث عند كل تحديث للصفحة.";
-  return "البث المباشر متوقف — الأسعار تُحدَّث عند كل تحديث للصفحة.";
+  return `لم يتصل البث بعد بمصدر ${feedName(s.requested_feed)} — الأسعار تُحدَّث عند كل تحديث للصفحة.`;
 };
 const renderPrices=(body)=>{
   const rows=body.prices||[];
