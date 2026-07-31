@@ -8,10 +8,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes_prices import HEARTBEAT_SECONDS, price_events
-from app.live.prices import STALE_AFTER_SECONDS, PriceBook, price_book
+from app.live.prices import (
+    STALE_AFTER_SECONDS,
+    AlpacaPriceStream,
+    PriceBook,
+    price_book,
+)
 from app.main import app
 
 NOW = datetime.now(timezone.utc)
+# 2026-07-31 is a Thursday, so these land inside real trading sessions.
+OVERNIGHT = datetime(2026, 7, 31, 6, 30, tzinfo=timezone.utc)  # 02:30 New York
+REGULAR = datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc)  # 11:00 New York
 
 
 @pytest.fixture(autouse=True)
@@ -96,6 +104,40 @@ def test_stream_sends_a_heartbeat_when_nothing_changes():
     frames = asyncio.run(_collect(["SPY"], max_frames=3, interval=0.01, heartbeat_after=0.01))
     assert frames[0].startswith("data: ")
     assert frames[1:] == [": heartbeat\n\n", ": heartbeat\n\n"]
+
+
+def _stream(feed="sip", overnight_feed="boats"):
+    return AlpacaPriceStream(
+        "key", "secret", feed, ["SPY"], PriceBook(), overnight_feed=overnight_feed
+    )
+
+
+def test_overnight_session_streams_the_overnight_feed():
+    # SIP carries nothing before 04:00 New York, so the book would stay empty.
+    assert _stream().feed_for(OVERNIGHT) == "boats"
+    assert _stream().feed_for(REGULAR) == "sip"
+
+
+def test_overnight_feed_connects_to_its_own_endpoint():
+    # The SDK rejects any feed but IEX/SIP, so BOATS goes through the override.
+    overnight = _stream()._build_stream("boats")
+    assert overnight._endpoint == "wss://stream.data.alpaca.markets/v2/boats"
+    assert _stream()._build_stream("sip")._endpoint.endswith("/v2/sip")
+
+
+def test_status_reports_disconnected_until_a_socket_is_connected():
+    stream = _stream()
+    # A thread that is retrying a rejected key is not a live feed.
+    assert stream.running is False
+    assert stream.connected_feed is None
+
+
+def test_snapshot_endpoint_reports_the_connected_feed():
+    client = TestClient(app)
+    body = client.get("/api/v1/prices").json()
+    assert body["stream"]["running"] is False
+    assert body["stream"]["feed"] is None
+    assert body["stream"]["last_error"] is None
 
 
 async def _collect(symbols, *, max_frames, interval=0.01, heartbeat_after=HEARTBEAT_SECONDS):

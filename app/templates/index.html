@@ -131,11 +131,17 @@ const priceRow=(p)=>{
     <b>${p.symbol}</b><span class="tick-price">${p.price.toFixed(2)}</span>
     ${p.stale?'<span class="tick-flag">متأخر</span>':""}</span>`;
 };
+const feedName=f=>({sip:"SIP",iex:"IEX",boats:"BOATS الليلي",overnight:"Overnight الليلي"}[f]||f);
+const emptyNote=(s={})=>{
+  if(s.running)return `متصل بمصدر ${feedName(s.feed)} — بانتظار أول صفقة.`;
+  if(s.last_error)return "انقطع البث المباشر ويعيد المحاولة — الأسعار تُحدَّث عند كل تحديث للصفحة.";
+  return "البث المباشر متوقف — الأسعار تُحدَّث عند كل تحديث للصفحة.";
+};
 const renderPrices=(body)=>{
   const rows=body.prices||[];
   if(!rows.length){
     tickerEl.innerHTML="";
-    tickerNote.textContent=body.stream?.running?"بانتظار أول سعر من السوق…":"البث المباشر متوقف — الأسعار تُحدَّث عند كل تحديث للصفحة.";
+    tickerNote.textContent=emptyNote(body.stream);
     return;
   }
   tickerEl.innerHTML=rows.map(priceRow).join("");
