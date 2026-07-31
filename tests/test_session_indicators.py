@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
@@ -71,9 +71,11 @@ def test_relative_volume_measures_this_session_not_the_whole_frame():
     # Summing the whole frame would report several days of volume as one session.
     assert indicators["session_volume"] == float(session["volume"].sum())
     assert indicators["session_volume"] < float(frame["volume"].sum())
+    # Relative volume reads the trailing hour, so both sides cover one window.
     assert indicators["relative_volume"] == round(
-        indicators["session_volume"] / indicators["expected_session_volume"], 4
+        indicators["window_volume"] / indicators["expected_window_volume"], 4
     )
+    assert indicators["window_volume"] == 100 * 12  # twelve 5m candles in an hour
 
 
 def test_expected_share_grows_through_the_day_and_completes_at_the_close():
@@ -111,3 +113,37 @@ def test_opening_range_is_absent_before_the_regular_session_opens():
     indicators = calculate_indicators(daily, overnight, now=OVERNIGHT)
     assert indicators["opening_range_high"] is None
     assert indicators["opening_range_low"] is None
+
+
+def test_relative_volume_is_measurable_at_the_very_open():
+    """The 04:00 and 09:30 bells are when a session holds no volume yet."""
+    daily = pd.DataFrame({
+        "open": [10.0] * 25, "high": [11.0] * 25, "low": [9.0] * 25,
+        "close": [10.0] * 25, "volume": [100_000] * 25,
+    })
+    # 08:00 UTC is 04:00 New York exactly: pre-market's first second.
+    bell = datetime(2026, 7, 31, 8, 0, tzinfo=timezone.utc)
+    frame = _intraday_until(bell, periods=300, volume=500)
+    indicators = calculate_indicators(daily, frame, now=bell)
+    # A session-anchored reading would be zero here and reject every symbol.
+    assert indicators["relative_volume"] > 0
+    assert indicators["window_volume"] > 0
+
+
+def test_expected_share_over_a_window_follows_the_clock():
+    from app.opportunities.indicators import expected_share_between
+
+    def window(hour, minutes=60):
+        end = datetime(2026, 7, 30, hour, 0, tzinfo=timezone.utc)
+        return expected_share_between(end - timedelta(minutes=minutes), end)
+
+    # 14:00-15:00 UTC is 10:00-11:00 New York, inside the regular session.
+    busy = window(15)
+    # 08:00-09:00 UTC is 04:00-05:00 New York, thin pre-market.
+    thin = window(9)
+    assert busy > thin > 0
+    # A whole day of windows must not exceed a whole day of volume.
+    assert expected_share_between(
+        datetime(2026, 7, 30, 8, 0, tzinfo=timezone.utc),
+        datetime(2026, 7, 31, 8, 0, tzinfo=timezone.utc),
+    ) <= 1.001

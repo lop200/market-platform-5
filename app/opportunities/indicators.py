@@ -20,6 +20,43 @@ OVERNIGHT_SHARE = 0.01
 # by something near zero and report an absurd multiple.
 MIN_EXPECTED_SHARE = 0.002
 
+# Relative volume is read over a trailing window rather than from the session
+# open. At 04:00 or 09:30 sharp the session holds no volume at all, so a
+# session-anchored reading is zero for every symbol and rejects the whole
+# market on its busiest minute. An hour that simply spans the boundary is
+# always measurable.
+VOLUME_WINDOW_MINUTES = 60
+
+
+def _clock_rates() -> tuple[tuple[int, int, float], ...]:
+    """(start_minute, end_minute, volume per minute) across the whole clock."""
+    windows = []
+    for start, end, share in DAY_SESSION_SHARES:
+        span = _minutes(end) - _minutes(start)
+        windows.append((_minutes(start), _minutes(end), share / span))
+    # The overnight book wraps midnight, so it is split into two clock pieces.
+    overnight_rate = OVERNIGHT_SHARE / (8 * 60)
+    windows.append((_minutes(time(20)), 24 * 60, overnight_rate))
+    windows.append((0, _minutes(time(4)), overnight_rate))
+    return tuple(windows)
+
+
+def expected_share_between(start: datetime, end: datetime) -> float:
+    """Share of an average day's volume expected between two moments."""
+    minutes = max(0, int((pd.Timestamp(end) - pd.Timestamp(start)).total_seconds() // 60))
+    if not minutes:
+        return MIN_EXPECTED_SHARE
+    cursor = _minutes(_as_eastern_timestamp(start).time())
+    rates = _clock_rates()
+    total = 0.0
+    for _ in range(minutes):
+        for window_start, window_end, rate in rates:
+            if window_start <= cursor < window_end:
+                total += rate
+                break
+        cursor = (cursor + 1) % (24 * 60)
+    return max(total, MIN_EXPECTED_SHARE)
+
 
 def _eastern(intraday: pd.DataFrame) -> pd.DataFrame | None:
     """Return the frame indexed in New York time, or None if it is not dated."""
@@ -98,6 +135,35 @@ def current_session_bars(intraday: pd.DataFrame, now: datetime | None = None) ->
     return current if not current.empty else eastern.tail(1)
 
 
+def _trailing_volume(
+    intraday: pd.DataFrame, now: datetime | None = None
+) -> tuple[float, float]:
+    """Volume over the trailing window, and the share a normal day would trade.
+
+    Returns the pair so the caller divides like with like: both cover exactly
+    the same stretch of clock, whichever sessions it happens to straddle.
+    """
+    end = _as_eastern_timestamp(now)
+    span = expected_share_between(end - timedelta(minutes=VOLUME_WINDOW_MINUTES), end)
+    eastern = _eastern(intraday)
+    if eastern is None:
+        # An undated frame cannot be sliced by clock, but its tail still covers
+        # the window: the scanner feeds 5m candles, so twelve of them is an hour.
+        tail = intraday.tail(VOLUME_WINDOW_MINUTES // 5)
+        return float(tail["volume"].astype(float).sum()), span
+    if eastern.empty:
+        return 0.0, span
+    # Anchor on the last candle when the frame lags the clock, so a quiet feed
+    # is not read as a symbol that stopped trading.
+    end = min(end, eastern.index.max()) if eastern.index.max() < end else end
+    start = end - timedelta(minutes=VOLUME_WINDOW_MINUTES)
+    window = eastern[(eastern.index > start) & (eastern.index <= end)]
+    return (
+        float(window["volume"].astype(float).sum()),
+        expected_share_between(start, end),
+    )
+
+
 def calculate_indicators(
     daily: pd.DataFrame, intraday: pd.DataFrame, now: datetime | None = None
 ) -> dict[str, float | None]:
@@ -127,9 +193,9 @@ def calculate_indicators(
     session = current_session_bars(intraday, now)
     session_volume = float(session["volume"].astype(float).sum())
     avg_daily_volume = float(daily["volume"].tail(20).mean()) if len(daily) else 0
-    expected_share = expected_volume_share(now)
-    expected_volume = avg_daily_volume * expected_share
-    relative_volume = session_volume / expected_volume if expected_volume else 0
+    window_volume, window_span = _trailing_volume(intraday, now)
+    expected_volume = avg_daily_volume * window_span
+    relative_volume = window_volume / expected_volume if expected_volume else 0
     regular = session.between_time("09:30", "15:59") if isinstance(session.index, pd.DatetimeIndex) else session.iloc[0:0]
     result = {
         "vwap": float(vwap.iloc[-1]),
@@ -147,7 +213,9 @@ def calculate_indicators(
         "support": float(intraday["low"].tail(30).min()),
         "resistance": float(intraday["high"].tail(30).max()),
         "session_volume": session_volume,
-        "expected_session_volume": expected_volume,
+        # Both cover the trailing window, so their ratio is the relative volume.
+        "window_volume": window_volume,
+        "expected_window_volume": expected_volume,
         "session_high": float(session["high"].max()),
         "session_low": float(session["low"].min()),
         # The opening range is the first three candles of the regular session;
