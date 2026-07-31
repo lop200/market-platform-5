@@ -44,9 +44,17 @@ def select_scan_universe(
         source = "curated"
         symbols = curated
 
-    symbols = list(dict.fromkeys(item.upper() for item in symbols))[:limit]
+    symbols = list(dict.fromkeys(item.upper() for item in symbols))
+    # Options first. A busy micro-cap has no short-dated contracts to snipe, so
+    # ranking it above NVDA spends the deep pass on something untradeable for
+    # this strategy. Plain stocks stay in the list, just behind.
+    optionable = set(settings.configured_sniper_symbols)
+    with_contracts = [item for item in symbols if item in optionable]
+    without = [item for item in symbols if item not in optionable]
+    symbols = (with_contracts + without)[:limit]
     return symbols, {
         "universe_source": source,
         "universe_size": len(symbols),
         "ranked_by_provider": len(ranked),
+        "with_option_contracts": len([item for item in symbols if item in optionable]),
     }

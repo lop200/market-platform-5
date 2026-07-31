@@ -406,6 +406,11 @@ def rank_option_chain(
             rejected["over_budget"] += 1
             continue
         capital_pct = contract_cost / capital_usd * 100 if capital_usd else 100
+        # Time decay as a share of the premium paid, per day. On a cheap
+        # contract this is what eats the position while the stock goes nowhere:
+        # 15 cents of theta on a 50-cent premium is 30% of the stake a day.
+        theta_burn_pct = round(abs(theta) / max(entry, 0.01) * 100, 2)
+        theta_affordable = theta_burn_pct <= settings.options_max_theta_burn_pct
 
         expected_days = (
             max(0.05, min(0.5, max(dte, 0.25) / 6))
@@ -600,6 +605,11 @@ def rank_option_chain(
             warnings.append(
                 "تكلفة العقد أعلى من الحد المسموح لرأس مالك، فهو للمراقبة فقط."
             )
+        if not theta_affordable:
+            warnings.append(
+                f"تآكل الوقت يلتهم {theta_burn_pct:.0f}% من قيمة العقد يوميًا، "
+                f"وهو أعلى من حدك ({settings.options_max_theta_burn_pct:.0f}%)."
+            )
         time_remaining = sniper.time_remaining_minutes(item, generated)
         eastern_minutes = (
             session.new_york_time.hour * 60 + session.new_york_time.minute
@@ -645,6 +655,7 @@ def rank_option_chain(
             and volume >= settings.options_min_volume
             and oi >= settings.options_min_open_interest
             and budget_fit
+            and theta_affordable
             and not (sniper.enabled and first_five_minutes)
             and not near_close_without_momentum
         )
@@ -694,6 +705,7 @@ def rank_option_chain(
                 delta=round(delta, 4),
                 gamma=round(gamma, 4),
                 theta=round(theta, 4),
+                theta_burn_pct=theta_burn_pct,
                 vega=round(vega, 4),
                 iv=round(iv, 4),
                 underlying_price=round(underlying, 2),

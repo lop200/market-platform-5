@@ -85,6 +85,7 @@ def contract(
     quote_timestamp: datetime | None = NOW,
     volume: int = 250,
     open_interest: int = 1_000,
+    theta: float = -0.09,
 ) -> RawOptionContract:
     return RawOptionContract(
         symbol=symbol,
@@ -100,7 +101,7 @@ def contract(
             0.55 if side == OptionType.CALL else -0.55
         ),
         gamma=0.04,
-        theta=-0.09,
+        theta=theta,
         vega=0.11,
         iv=0.42,
         quote_timestamp=quote_timestamp,
@@ -299,3 +300,32 @@ def test_symbol_with_short_term_options_reaches_the_provider():
     )
     assert captured == ["SPY"]
     assert result.status != "no_short_term_options"
+
+
+def test_theta_burn_blocks_entry_when_decay_eats_the_premium():
+    # Entry lands near 2.00, so -0.50 of theta is a quarter of the stake a day.
+    burning = contract("AAPL-1-C", dte=1, theta=-0.50)
+    result = rank_option_chain(stock(), [burning], settings(), now=NOW)
+    assert result.ranked_contracts
+    item = result.ranked_contracts[0]
+    assert item.theta_burn_pct > 15
+    assert item.actionable is False
+    assert any("تآكل الوقت" in text for text in item.warnings_ar + result.warnings_ar)
+
+
+def test_modest_theta_leaves_the_contract_enterable():
+    calm = contract("AAPL-1-C", dte=1, theta=-0.09)
+    result = rank_option_chain(stock(), [calm], settings(), now=NOW)
+    item = result.ranked_contracts[0]
+    assert item.theta_burn_pct < 15
+    assert not any("تآكل الوقت" in text for text in item.warnings_ar)
+
+
+def test_theta_ceiling_is_configurable():
+    burning = contract("AAPL-1-C", dte=1, theta=-0.50)
+    relaxed = rank_option_chain(
+        stock(), [burning], settings(options_max_theta_burn_pct=40), now=NOW
+    )
+    assert not any(
+        "تآكل الوقت" in text for text in relaxed.ranked_contracts[0].warnings_ar
+    )

@@ -65,6 +65,9 @@ class RankedOptionContract(BaseModel):
     delta: float
     gamma: float
     theta: float
+    # Daily time decay as a percentage of the premium paid — the figure that
+    # decides whether a small stake survives a flat day.
+    theta_burn_pct: float = 0.0
     vega: float
     iv: float
     underlying_price: float

@@ -44,11 +44,13 @@ class _Provider(MarketDataAdapter):
 
 def test_universe_leads_with_the_symbols_actually_trading():
     provider = _Provider(ranked=["AMC", "GME", "NVDA"])
-    symbols, inputs = select_scan_universe(provider, Settings(), 5)
-    # The provider's ranking comes first; the curated names fill the remainder.
-    assert symbols[:3] == ["AMC", "GME", "NVDA"]
+    symbols, inputs = select_scan_universe(provider, Settings(), 40)
+    # NVDA carries short-dated contracts, so it leads the two that do not even
+    # though the screener ranked them higher.
+    assert symbols[0] == "NVDA"
+    assert set(["AMC", "GME"]) <= set(symbols)
     assert inputs["universe_source"] == "most_active"
-    assert len(symbols) == 5
+    assert len(symbols) == 40
 
 
 def test_universe_falls_back_to_the_curated_list_when_the_screener_fails():
@@ -140,3 +142,31 @@ def test_universe_cache_key_includes_the_limit():
     # A wider request must reach the provider instead of replaying the short list.
     assert len(provider.list_active_us_symbols(5)) == 5
     assert inner.calls == [2, 5]
+
+
+def test_optionable_symbols_lead_the_universe():
+    settings = Settings()
+    optionable = set(settings.configured_sniper_symbols)
+    # The screener ranked two micro-caps above NVDA; neither has short-dated
+    # contracts, so neither should consume the deep pass first.
+    provider = _Provider(ranked=["SXTC", "NUWE", "NVDA", "CYCU", "SPY"])
+    symbols, inputs = select_scan_universe(provider, settings, 60)
+    assert symbols[:2] == ["NVDA", "SPY"]
+    assert symbols.index("NVDA") < symbols.index("SXTC")
+    assert symbols.index("SPY") < symbols.index("NUWE")
+    assert inputs["with_option_contracts"] == len(
+        [item for item in symbols if item in optionable]
+    )
+
+
+def test_a_tight_limit_spends_itself_entirely_on_optionable_names():
+    settings = Settings()
+    provider = _Provider(ranked=["SXTC", "NUWE", "CYCU"])
+    symbols, _ = select_scan_universe(provider, settings, 5)
+    assert set(symbols) <= set(settings.configured_sniper_symbols)
+
+
+def test_plain_stocks_are_kept_behind_not_dropped():
+    provider = _Provider(ranked=["SXTC", "NUWE"])
+    symbols, _ = select_scan_universe(provider, Settings(), 40)
+    assert "SXTC" in symbols and "NUWE" in symbols

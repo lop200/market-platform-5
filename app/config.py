@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     options_max_premium_loss_pct: float = Field(
         default=35.0, alias="OPTIONS_MAX_PREMIUM_LOSS_PCT"
     )
+    # Hard ceiling on daily time decay as a share of the premium. Theta was
+    # only ever a score component, so a contract burning a quarter of a small
+    # stake per day could still be marked safe to enter.
+    options_max_theta_burn_pct: float = Field(
+        default=15.0, alias="OPTIONS_MAX_THETA_BURN_PCT"
+    )
     options_earnings_risk_days: int = Field(default=7, alias="OPTIONS_EARNINGS_RISK_DAYS")
     options_scalp_mode: bool = Field(default=False, alias="OPTIONS_SCALP_MODE")
     options_scalp_min_dte: int = Field(default=0, alias="OPTIONS_SCALP_MIN_DTE")
