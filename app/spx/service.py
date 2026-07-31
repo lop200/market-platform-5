@@ -502,6 +502,19 @@ class SPXHunterService:
             synthetic = calculate_synthetic_value(
                 contracts, self.settings, session, now=now
             )
+            # Carry the fetch counts through, so an empty chain says where it
+            # emptied instead of only that it did.
+            chain_diagnostics = getattr(provider, "last_chain_diagnostics", {}) or {}
+            if chain_diagnostics and synthetic.provider_status != "ready":
+                synthetic = synthetic.model_copy(
+                    update={
+                        "rejection_reasons": {
+                            **(synthetic.rejection_reasons or {}),
+                            **{f"chain_{k}": v for k, v in chain_diagnostics.items()
+                               if isinstance(v, int)},
+                        }
+                    }
+                )
         except Exception as exc:
             synthetic = SPXSyntheticValue(
                 calculation_timestamp=now,

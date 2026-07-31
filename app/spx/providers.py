@@ -66,6 +66,8 @@ class AlpacaSPXProvider:
             "APCA-API-KEY-ID": settings.alpaca_api_key,
             "APCA-API-SECRET-KEY": settings.alpaca_api_secret,
         }
+        # Filled by get_synthetic_chain so an empty chain can be explained.
+        self.last_chain_diagnostics: dict = {}
 
     def _get(self, url: str, params: dict) -> httpx.Response:
         with httpx.Client(timeout=self.settings.external_timeout_seconds) as client:
@@ -73,10 +75,18 @@ class AlpacaSPXProvider:
 
     @staticmethod
     def _settlement_type(row: dict, root_symbol: str) -> str | None:
-        """Infer only the explicitly supported cash-settled SPXW family."""
+        """Infer only the explicitly supported cash-settled SPXW family.
+
+        An index option settles in cash because of what it is, so an empty
+        deliverables list is the normal shape for one — there is nothing to
+        deliver. Requiring a non-empty list rejected the entire SPXW chain and
+        left the sniper reporting "OPRA unavailable" with a working feed.
+        A non-empty list must still be all cash: that is what keeps a
+        physically settled contract out.
+        """
         style = str(row.get("style") or "").lower()
         deliverables = row.get("deliverables") or []
-        cash_settled = bool(deliverables) and all(
+        cash_settled = all(
             str(item.get("type") or "").lower() == "cash"
             for item in deliverables
             if isinstance(item, dict)
@@ -378,6 +388,16 @@ class AlpacaSPXProvider:
             if row.get("symbol")
             and self._settlement_type(row, "SPXW") == "PM_CASH"
         ]
+        # Where a chain disappears matters more than that it did. Without this
+        # the caller only ever sees "OPRA unavailable", which is the same
+        # message whether the feed is down, the dates are wrong, or a filter
+        # rejected every row.
+        self.last_chain_diagnostics = {
+            "rows_returned": len(rows),
+            "passed_settlement_filter": len(eligible),
+            "styles_seen": dict(Counter(str(row.get("style") or "?") for row in rows[:200])),
+            "with_deliverables": sum(1 for row in rows if row.get("deliverables")),
+        }
         pair_counts: Counter[str] = Counter()
         seen: dict[tuple[str, str], set[str]] = {}
         for row in eligible:
