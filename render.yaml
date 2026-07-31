@@ -86,7 +86,7 @@ services:
       - key: OPTIONS_MAX_CONTRACT_COST_USD
         value: "500"
       - key: OPTIONS_PREFERRED_CONTRACT_COST_USD
-        value: "250"
+        value: "100"
       - key: SPX_ENABLED
         value: "true"
       - key: SPX_PAPER_ONLY

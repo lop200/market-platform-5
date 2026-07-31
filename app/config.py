@@ -89,8 +89,12 @@ class Settings(BaseSettings):
     options_max_contract_cost_usd: float = Field(
         default=500.0, alias="OPTIONS_MAX_CONTRACT_COST_USD"
     )
+    # Owner preference (2026-07-31): cheaper contracts are better, with no floor.
+    # The ranker scores anything at or under this as fully affordable and decays
+    # above it, so lowering it tilts the shortlist toward small premiums. The
+    # delta band still keeps far-out-of-the-money lottery tickets out.
     options_preferred_contract_cost_usd: float = Field(
-        default=250.0, alias="OPTIONS_PREFERRED_CONTRACT_COST_USD"
+        default=100.0, alias="OPTIONS_PREFERRED_CONTRACT_COST_USD"
     )
     spx_enabled: bool = Field(default=True, alias="SPX_ENABLED")
     spx_paper_only: bool = Field(default=True, alias="SPX_PAPER_ONLY")

@@ -39,6 +39,17 @@ def _stamp(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
 
 
+def _capability_message(underlying: bool, options: bool, index_status: int) -> str:
+    """Explain a missing index feed instead of blaming "the current provider"."""
+    if underlying and options:
+        return "بيانات SPX وعقوده متاحة من Alpaca."
+    if not underlying:
+        if index_status in (401, 403):
+            return AlpacaSPXProvider.INDEX_SUBSCRIPTION_HINT
+        return f"تعذر جلب قيمة مؤشر SPX من Alpaca (رمز {index_status})."
+    return "سلسلة عقود SPX غير متاحة من المزود الحالي"
+
+
 class AlpacaSPXProvider:
     """Read-only Alpaca adapter. It never submits trading requests."""
 
@@ -138,6 +149,15 @@ class AlpacaSPXProvider:
             )
         return result
 
+    # Index values are a separate Alpaca subscription from the stock/options
+    # plans, so a key that streams SIP and reads OPRA can still be refused here.
+    # Saying which is which saves the reader from debugging a working key.
+    INDEX_SUBSCRIPTION_HINT = (
+        "قيمة مؤشر SPX مرفوضة من Alpaca (403): بيانات المؤشرات اشتراك منفصل عن خطة "
+        "الأسهم والخيارات. عقود SPXW تعمل، وبديل التداول الجاهز هو خيارات SPY وQQQ "
+        "وIWM فهي مشمولة باشتراكك الحالي."
+    )
+
     def capabilities(self) -> SPXProviderCapabilities:
         checked = datetime.now(timezone.utc)
         index = self._get(
@@ -153,7 +173,7 @@ class AlpacaSPXProvider:
                 underlying_status=str(index.status_code),
                 options_status="disabled",
                 message_ar=(
-                    "بيانات SPX غير متاحة من المزود الحالي"
+                    _capability_message(underlying, False, index.status_code)
                     if not underlying
                     else "خيارات SPX غير مفعلة؛ اضبط OPTIONS_ENABLED=true"
                 ),
@@ -238,12 +258,8 @@ class AlpacaSPXProvider:
                 f"spx:{chain.status_code},spxw:{weekly_chain.status_code},"
                 f"contracts:{metadata.status_code}"
             ),
-            message_ar=(
-                "بيانات SPX وعقوده متاحة من Alpaca."
-                if underlying and options_available
-                else "بيانات SPX غير متاحة من المزود الحالي"
-                if not underlying
-                else "سلسلة عقود SPX غير متاحة من المزود الحالي"
+            message_ar=_capability_message(
+                underlying, options_available, index.status_code
             ),
         )
 
