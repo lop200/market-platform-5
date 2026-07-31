@@ -50,6 +50,41 @@ def init_db() -> None:
         db.close()
 
 
+def database_backend() -> str:
+    """Which database is actually in use, with no credentials in the answer.
+
+    Worth reporting: a deployment that silently falls back to SQLite keeps
+    working while losing every saved scan on each restart, and nothing in the
+    UI distinguishes that from a scan that found nothing.
+    """
+    return engine.url.get_backend_name()
+
+
+def database_is_ephemeral() -> bool:
+    """True when saved results will not survive the next deploy."""
+    return database_backend().startswith("sqlite")
+
+
+def release_interrupted_runs() -> int:
+    """Fail runs that a restart left mid-flight.
+
+    A killed worker leaves its run at "running" forever, and the dashboard
+    keeps replaying that half-finished scan as the latest result.
+    """
+    from app.db.models import StockScanRun
+
+    db = SessionLocal()
+    try:
+        stale = db.query(StockScanRun).filter(StockScanRun.status.in_(("queued", "running"))).all()
+        for run in stale:
+            run.status = "failed"
+            run.failure_reason = "توقفت المهمة عند إعادة تشغيل الخدمة قبل أن تكتمل"
+        db.commit()
+        return len(stale)
+    finally:
+        db.close()
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:

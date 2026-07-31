@@ -9,7 +9,12 @@ from fastapi import FastAPI
 
 from app.api import routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_prices, routes_spx, routes_web
 from app.config import get_settings
-from app.db.session import init_db
+from app.db.session import (
+    database_backend,
+    database_is_ephemeral,
+    init_db,
+    release_interrupted_runs,
+)
 from app.live.prices import start_price_stream, stop_price_stream
 from app.opportunities.audit_scheduler import start_audit_scheduler, stop_audit_scheduler
 from app.providers.factory import get_market_data_provider
@@ -22,6 +27,14 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(messa
 async def lifespan(app: FastAPI):
     init_db()
     settings = get_settings()
+    interrupted = release_interrupted_runs()
+    if interrupted:
+        logging.getLogger(__name__).info("released %d interrupted scan run(s)", interrupted)
+    if database_is_ephemeral():
+        logging.getLogger(__name__).warning(
+            "DATABASE_URL is unset: running on SQLite, so every saved scan is lost "
+            "on the next deploy or restart"
+        )
     started = settings.enable_self_audit_scheduler and not os.environ.get("PYTEST_CURRENT_TEST")
     if started:
         start_audit_scheduler()
@@ -79,6 +92,8 @@ def health() -> dict:
         "options_feed": settings.alpaca_options_feed if settings.options_enabled else "disabled",
         "paper_trading_only": True,
         "provider_healthy": provider_healthy,
+        "database": database_backend(),
+        "results_survive_restart": not database_is_ephemeral(),
         "ai_provider": "openai",
         "openai_configured": bool(settings.openai_api_key),
         "deployed_commit_sha": os.environ.get("RENDER_GIT_COMMIT"),
