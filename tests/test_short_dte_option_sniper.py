@@ -329,3 +329,34 @@ def test_theta_ceiling_is_configurable():
     assert not any(
         "تآكل الوقت" in text for text in relaxed.ranked_contracts[0].warnings_ar
     )
+
+
+def test_contract_carries_probabilities_that_agree_with_each_other():
+    result = rank_option_chain(
+        stock(), [contract("AAPL-1-C", dte=1, strike=202)], settings(), now=NOW
+    )
+    item = result.ranked_contracts[0]
+    # Touching the strike must never be rarer than settling past it.
+    assert item.probability_touch_strike_pct >= item.probability_itm_pct
+    # Break-even sits beyond the strike, so it is the hardest of the three.
+    assert item.probability_break_even_pct <= item.probability_touch_strike_pct
+    assert 0 <= item.probability_itm_pct <= 100
+
+
+def test_a_far_strike_is_reported_as_less_likely_than_a_near_one():
+    near = rank_option_chain(
+        stock(), [contract("AAPL-1-C", dte=1, strike=201)], settings(), now=NOW
+    ).ranked_contracts[0]
+    far = rank_option_chain(
+        stock(), [contract("AAPL-1-C", dte=1, strike=215)], settings(), now=NOW
+    ).ranked_contracts[0]
+    assert far.probability_itm_pct < near.probability_itm_pct
+
+
+def test_probability_states_what_it_was_computed_from():
+    item = rank_option_chain(
+        stock(), [contract("AAPL-1-C", dte=1)], settings(), now=NOW
+    ).ranked_contracts[0]
+    # The reader must be able to see the inputs, not just the number.
+    assert "تذبذب ضمني" in item.probability_basis_ar
+    assert "42%" in item.probability_basis_ar

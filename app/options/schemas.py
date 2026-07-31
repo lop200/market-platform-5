@@ -68,6 +68,12 @@ class RankedOptionContract(BaseModel):
     # Daily time decay as a percentage of the premium paid — the figure that
     # decides whether a small stake survives a flat day.
     theta_burn_pct: float = 0.0
+    # Both computed from implied volatility and time left, never from an
+    # opinion. Touch is the softer question and is always the larger number.
+    probability_itm_pct: int = 0
+    probability_touch_strike_pct: int = 0
+    probability_break_even_pct: int = 0
+    probability_basis_ar: str = ""
     vega: float
     iv: float
     underlying_price: float

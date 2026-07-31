@@ -4,6 +4,11 @@ from collections import Counter
 from datetime import date, datetime, timezone
 
 from app.config import Settings
+from app.opportunities.probability import (
+    as_percent,
+    finish_in_the_money,
+    touch_probability,
+)
 from app.options.market_clock import market_session, serialize_market_session
 from app.options.schemas import (
     OptionChainResult,
@@ -506,6 +511,35 @@ def rank_option_chain(
             or stock_analysis.get("relative_volume")
             or 1
         )
+        is_call = item.option_type == OptionType.CALL
+        # Time left as a fraction of a day: a contract with minutes on it must
+        # not be measured as though it had a whole session.
+        horizon_days = float(dte)
+        if dte == 0:
+            horizon_days = max(
+                sniper.time_remaining_minutes(item, generated), 5
+            ) / (6.5 * 60)
+        probability_itm = finish_in_the_money(
+            underlying, item.strike, iv, horizon_days, is_call=is_call
+        )
+        # Settlement is priced by implied volatility; how far the stock actually
+        # travels is better described by its own recent range. The 5m standard
+        # deviation annualises by roughly 16 (sqrt of 252 sessions).
+        hv_pct = float(indicator_values.get("volatility") or 0) * 16 or iv * 100
+        probability_touch = touch_probability(
+            underlying, item.strike, hv_pct, horizon_days
+        )
+        probability_break_even = touch_probability(
+            underlying, break_even, hv_pct, horizon_days
+        )
+        probability_basis = (
+            f"محسوب من تذبذب ضمني {iv * 100:.0f}% ومدة "
+            + (
+                f"{horizon_days * 6.5 * 60:.0f} دقيقة"
+                if horizon_days < 1
+                else f"{horizon_days:.0f} يوم"
+            )
+        )
         momentum_quality = _clamp(
             45
             + min(30, max(0, relative_volume - 0.5) * 20)
@@ -706,6 +740,10 @@ def rank_option_chain(
                 gamma=round(gamma, 4),
                 theta=round(theta, 4),
                 theta_burn_pct=theta_burn_pct,
+                probability_itm_pct=as_percent(probability_itm),
+                probability_touch_strike_pct=as_percent(probability_touch),
+                probability_break_even_pct=as_percent(probability_break_even),
+                probability_basis_ar=probability_basis,
                 vega=round(vega, 4),
                 iv=round(iv, 4),
                 underlying_price=round(underlying, 2),
