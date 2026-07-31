@@ -199,6 +199,9 @@ def serialize_market_session(session: MarketSession) -> dict:
         "options_label_ar": session.options_label_ar,
         "stock_actionable": session.stock_actionable,
         "options_actionable": session.options_actionable,
+        # SPX alone keeps trading outside the regular window. Reporting it makes
+        # the sniper's decision readable instead of something to be inferred.
+        "spx_global_session": spx_global_session(session.new_york_time),
         "new_york_time": session.new_york_time.isoformat(),
         "riyadh_time": session.riyadh_time.isoformat(),
         "session_closes_at": (
