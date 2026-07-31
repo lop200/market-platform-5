@@ -73,5 +73,9 @@ def test_the_spx_chart_cannot_collapse_to_zero_width():
     # the iframe the script injects need their width pinned back.
     assert ".tradingview-widget-container iframe" in html
     assert "min-width:min(100%,280px)" in html
+    # The widget script writes height:100% inline onto the container, which
+    # collapses against an auto-height parent. The rule has to outrank it.
+    assert "height:430px!important" in html
+    assert "height:360px!important" in html
     # And it must still be labelled as a view, not a data source.
     assert "لا يدخل في حسابات القنص" in html
