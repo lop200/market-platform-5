@@ -165,20 +165,6 @@ services:
         value: "7"
       - key: SPX_ALLOW_SPOT_ESTIMATE
         value: "false"
-      - key: FINANCIAL_ADVISOR_ENABLED
-        value: "true"
-      - key: FINANCIAL_ADVISOR_MARKETS_ONLY
-        value: "true"
-      - key: FINANCIAL_ADVISOR_MAX_INPUT_CHARS
-        value: "500"
-      - key: FINANCIAL_ADVISOR_MAX_CONTRACTS
-        value: "3"
-      - key: FINANCIAL_ADVISOR_MAX_NEWS_ITEMS
-        value: "5"
-      - key: FINANCIAL_ADVISOR_CACHE_SECONDS
-        value: "60"
-      - key: FINANCIAL_ADVISOR_SESSION_TIMEZONE
-        value: America/New_York
       - key: EARNINGS_PROVIDER
         value: finnhub
       - key: EARNINGS_CACHE_SECONDS
