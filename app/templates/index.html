@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#080d16">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="مرصاد">
   <title>مرصاد — تحليل الأسهم الأمريكية</title>
   <style>
     :root{--bg:#080d16;--surface:#101722;--surface2:#151f2d;--line:#253246;--text:#f2f6fb;--muted:#8f9db0;--green:#40d49a;--yellow:#f6c85f;--red:#ff727f;--blue:#6bb8ff}
@@ -251,6 +257,10 @@ const loadMarketState=()=>fetch("/api/v1/dashboard").then(r=>r.json())
 
 latest();
 loadMarketState();setInterval(loadMarketState,30000);startPriceStream();
+
+// Android needs a registered worker before it will offer to install the app.
+if("serviceWorker" in navigator)
+  addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
 </script>
 </body>
 </html>

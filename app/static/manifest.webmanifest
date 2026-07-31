@@ -1,0 +1,38 @@
+{
+  "name": "مرصاد — تحليل الأسهم الأمريكية",
+  "short_name": "مرصاد",
+  "description": "تحليل مشروط للأسهم الأمريكية وعقود الخيارات، دون تنفيذ تداول آلي.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#080d16",
+  "theme_color": "#080d16",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "قناص SPX", "url": "/spx" },
+    { "name": "نبض السوق", "url": "/news" },
+    { "name": "تقويم الإعلانات", "url": "/earnings" }
+  ]
+}

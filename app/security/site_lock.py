@@ -37,7 +37,18 @@ MAIN_SUBJECT = "main"
 # Paths reachable WITHOUT a code: the lock screen itself and the deploy health check.
 # /api/v1/* paths are also exempt from the cookie when they carry a valid X-API-Key —
 # they authenticate through app/api/deps.py already.
-OPEN_PATH_PREFIXES = ("/lock", "/api/v1/health", "/favicon.ico")
+#
+# The install files are open too. Android reads the manifest, the icons and the
+# worker before the user can type anything, so gating them means the app cannot
+# be installed while locked. They carry no market data and no account state.
+OPEN_PATH_PREFIXES = (
+    "/lock",
+    "/api/v1/health",
+    "/favicon.ico",
+    "/manifest.webmanifest",
+    "/sw.js",
+    "/static/",
+)
 
 
 def hash_code(code: str) -> str:

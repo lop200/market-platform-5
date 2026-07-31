@@ -6,6 +6,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api import routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_prices, routes_spx, routes_web
 from app.config import get_settings
@@ -68,6 +69,11 @@ app.include_router(routes_dashboard.router)
 app.include_router(routes_prices.router)
 app.include_router(routes_spx.router)
 app.include_router(routes_web.router)
+app.mount(
+    "/static",
+    StaticFiles(directory=str(routes_web.STATIC_DIR)),
+    name="static",
+)
 
 
 @app.get("/api/v1/health")

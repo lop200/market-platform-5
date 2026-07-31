@@ -7,7 +7,7 @@ import re
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi import Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -16,7 +16,26 @@ from app.db.session import get_db
 from app.static_data.us_symbols import autocomplete_payload
 
 router = APIRouter()
+STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
+
+
+@router.get("/manifest.webmanifest", include_in_schema=False)
+def manifest() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json"
+    )
+
+
+@router.get("/sw.js", include_in_schema=False)
+def service_worker() -> FileResponse:
+    # Served from the root, not /static: a worker's scope cannot rise above the
+    # path it was fetched from, and this one has to control the whole app.
+    return FileResponse(
+        STATIC_DIR / "sw.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
 
 
 @router.get("/", response_class=HTMLResponse)
