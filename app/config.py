@@ -173,6 +173,11 @@ class Settings(BaseSettings):
     spx_allow_spot_estimate: bool = Field(
         default=False, alias="SPX_ALLOW_SPOT_ESTIMATE"
     )
+    # Cboe runs a global session for SPX options outside regular hours. Set
+    # false to fall back to regular hours only if that data proves unusable.
+    spx_global_trading_hours: bool = Field(
+        default=True, alias="SPX_GLOBAL_TRADING_HOURS"
+    )
     earnings_provider: str = Field(default="finnhub", alias="EARNINGS_PROVIDER")
     earnings_cache_seconds: int = Field(default=14_400, alias="EARNINGS_CACHE_SECONDS")
     earnings_today_cache_seconds: int = Field(

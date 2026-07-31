@@ -9,7 +9,11 @@ from app.config import Settings
 from app.db import repository
 from app.db.models import SPXHuntResult, SPXSyntheticObservation
 from app.news.service import UnifiedNewsService
-from app.options.market_clock import market_session, serialize_market_session
+from app.options.market_clock import (
+    market_session,
+    serialize_market_session,
+    spx_global_session,
+)
 from app.spx.engine import (
     directional_scenario,
     escape_reason,
@@ -177,7 +181,13 @@ class SPXHunterService:
             technical=technical, session=session, data_age=market["data_age_seconds"],
             news=news, best=best, settings=self.settings,
         )
-        market["contracts_actionable"] = bool(best and session.options_actionable)
+        market["contracts_actionable"] = bool(
+            best
+            and (
+                session.options_actionable
+                or (self.settings.spx_global_trading_hours and spx_global_session())
+            )
+        )
         if escape:
             decision, decision_ar, reason = "escape", "اهرب الآن", escape
         elif not best:
@@ -433,7 +443,13 @@ class SPXHunterService:
                 synthetic=synthetic,
                 now=now,
             )
-        if not session.options_actionable:
+        # SPX also trades Cboe's global session, so "not the regular session"
+        # is not the same as closed. Ask the provider and let the freshness of
+        # what comes back decide, rather than refusing before the question.
+        spx_open = session.options_actionable or (
+            self.settings.spx_global_trading_hours and spx_global_session(now)
+        )
+        if not spx_open:
             synthetic = self._latest_synthetic(now) or SPXSyntheticValue(
                 calculation_timestamp=now,
                 provider_status="options_closed",

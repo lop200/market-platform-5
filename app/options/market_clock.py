@@ -7,6 +7,14 @@ from zoneinfo import ZoneInfo
 NEW_YORK = ZoneInfo("America/New_York")
 RIYADH = ZoneInfo("Asia/Riyadh")
 
+# Cboe lists SPX index options in a Global Trading Hours session as well as the
+# regular one: 20:15 to 09:15 New York, Sunday evening through Friday morning.
+# Equity options have no such session, so this applies to the index only. A
+# clock that knows nothing but 09:30-16:00 reports SPX as closed for most of
+# the hours a Gulf-based owner is actually awake to trade it.
+SPX_GLOBAL_OPEN = time(20, 15)
+SPX_GLOBAL_CLOSE = time(9, 15)
+
 
 @dataclass(frozen=True)
 class MarketSession:
@@ -96,6 +104,25 @@ def _next_trading_day(day: date, *, include_today: bool = False) -> date:
 
 def _at(day: date, clock: time) -> datetime:
     return datetime.combine(day, clock, tzinfo=NEW_YORK)
+
+
+def spx_global_session(now: datetime | None = None) -> bool:
+    """True while Cboe's global session for SPX index options is running.
+
+    The window spans midnight, so it is read as two pieces: the evening after
+    20:15 belongs to the next trading day, and the morning before 09:15 belongs
+    to the current one. Either side still requires a trading day on the far end,
+    which is what keeps Friday night and the whole weekend closed.
+    """
+    eastern = (now or datetime.now(tz=NEW_YORK)).astimezone(NEW_YORK)
+    clock = eastern.time().replace(tzinfo=None)
+    if clock >= SPX_GLOBAL_OPEN:
+        # An evening session runs into the very next day, so it exists only if
+        # tomorrow trades. Friday night has nowhere to go; Sunday night does.
+        return _trading_day(eastern.date() + timedelta(days=1))
+    if clock < SPX_GLOBAL_CLOSE:
+        return _trading_day(eastern.date())
+    return False
 
 
 def market_session(now: datetime | None = None) -> MarketSession:
