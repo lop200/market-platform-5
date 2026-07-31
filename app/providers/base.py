@@ -110,6 +110,15 @@ class MarketDataAdapter(ABC):
     def list_active_us_symbols(self, limit: int = 1000) -> list[str]:
         return []
 
+    def list_most_active_symbols(self, limit: int = 100) -> list[str]:
+        """Symbols with real activity today, most active first.
+
+        Returning [] means the provider cannot rank, and the caller falls back
+        to its configured list rather than scanning an arbitrary slice of the
+        market.
+        """
+        return []
+
     def get_company_profile(self, symbol: str) -> dict:
         return {}
 

@@ -163,7 +163,19 @@ class ResilientMarketDataProvider(MarketDataAdapter):
         )
 
     def list_active_us_symbols(self, limit: int = 1000) -> list[str]:
-        return self._call("universe", 86_400, lambda: self.inner.list_active_us_symbols(limit))
+        # The limit belongs in the key: without it a first small scan pinned a
+        # short list for a whole day, and raising the limit changed nothing.
+        return self._call(
+            f"universe:{limit}", 86_400, lambda: self.inner.list_active_us_symbols(limit)
+        )
+
+    def list_most_active_symbols(self, limit: int = 100) -> list[str]:
+        # Short TTL: this is a ranking of today's activity, not a static list.
+        return self._call(
+            f"most-active:{limit}",
+            self.settings.intraday_cache_seconds * 5,
+            lambda: self.inner.list_most_active_symbols(limit),
+        )
 
     def get_company_profile(self, symbol: str) -> dict:
         return self._call(

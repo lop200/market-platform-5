@@ -25,6 +25,7 @@ from app.opportunities.quality import evaluate_quote
 from app.opportunities.risk import position_size, risk_reward
 from app.opportunities.schemas import EntryZone, MarketRegime, OpportunityResult, OpportunityStatus, Target
 from app.opportunities.strategies import select_strategy
+from app.opportunities.universe import select_scan_universe
 from app.providers.base import MarketDataAdapter, Quote
 from app.providers.factory import get_option_data_provider
 
@@ -53,6 +54,21 @@ def _fresh_for_scan(quote: Quote, settings: Settings) -> bool:
         ):
             return False
     return True
+
+
+def _resample(frame, factor: int):
+    """Group 5m candles into a coarser frame, or None when there are too few.
+
+    Leading rows are dropped rather than trailing ones so the final bucket ends
+    on the newest candle; a half-built bucket at the end would understate the
+    most recent move.
+    """
+    if frame is None or len(frame) < 20 * factor:
+        return None
+    trimmed = frame.iloc[len(frame) % factor:]
+    return trimmed.groupby([index // factor for index in range(len(trimmed))]).agg(
+        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    )
 
 
 def _quote_time(quote: Quote) -> datetime:
@@ -101,20 +117,17 @@ def build_opportunity(
     if intraday is None or len(intraday) < 20 or len(daily) < 20:
         return None, ["لا توجد شموع كافية للتحليل متعدد الأطر"], snapshot
     indicators = calculate_indicators(daily, intraday)
-    for interval in ("1m", "15m"):
-        try:
-            frame = provider.get_intraday(symbol, interval)
-            snapshot[f"bars_{interval}"] = len(frame) if frame is not None else 0
-            if frame is not None and len(frame) >= 20:
-                closes = frame["close"].astype(float)
-                indicators[f"momentum_{interval}"] = round(float(closes.pct_change(3).iloc[-1] * 100), 4)
-                if interval == "15m":
-                    indicators["trend_15m_bullish"] = bool(
-                        closes.ewm(span=9, adjust=False).mean().iloc[-1]
-                        > closes.ewm(span=20, adjust=False).mean().iloc[-1]
-                    )
-        except Exception:
-            quality.warnings.append(f"الإطار {interval} غير متوفر من المزود")
+    # The 15m view is three 5m candles, so it is resampled rather than fetched:
+    # these readings are descriptive and never worth a second request per symbol.
+    frame_15m = _resample(intraday, 3)
+    if frame_15m is not None:
+        closes = frame_15m["close"].astype(float)
+        snapshot["bars_15m"] = len(frame_15m)
+        indicators["momentum_15m"] = round(float(closes.pct_change(3).iloc[-1] * 100), 4)
+        indicators["trend_15m_bullish"] = bool(
+            closes.ewm(span=9, adjust=False).mean().iloc[-1]
+            > closes.ewm(span=20, adjust=False).mean().iloc[-1]
+        )
     snapshot["indicators"] = indicators
     previous_close = float(daily["close"].astype(float).iloc[-2]) if len(daily) >= 2 else quote.price
     snapshot.update({
@@ -270,26 +283,28 @@ def scan_market(
     universe_limit: int | None = None,
 ) -> list[OpportunityResult]:
     regime, regime_inputs = classify_market(provider)
-    db.add(MarketRegimeRecord(regime=regime.value, session=current_session(), inputs_json=regime_inputs))
     limit = max(1, min(int(universe_limit or settings.scan_universe_limit), 5000))
-    symbols = provider.list_active_us_symbols(limit) or settings.configured_scan_symbols
-    symbols = list(dict.fromkeys(symbols))[:limit]
+    symbols, universe_inputs = select_scan_universe(provider, settings, limit)
+    db.add(MarketRegimeRecord(
+        regime=regime.value,
+        session=current_session(),
+        inputs_json={**regime_inputs, **universe_inputs},
+    ))
     run.symbols_total = len(symbols)
     run.provider = provider.provider_name
     db.commit()
     quote_map = provider.get_quotes_many(symbols) if provider.supports_batch_quotes else {}
-    run.progress_pct = 12
-    db.commit()
-    daily_map = provider.get_daily_ohlcv_many(symbols, 30) if provider.supports_batch_daily_ohlcv else {}
     run.progress_pct = 28
     run.symbols_scanned = len(quote_map)
     db.commit()
+    # The universe already arrives ranked by today's activity, so the coarse
+    # pass reads only quotes. Daily bars are pulled for the shortlist alone:
+    # fetching them for the whole universe was the scan's dominant cost.
     eligible_symbols: list[str] = []
     staged: dict[str, tuple[str, list[str], dict]] = {}
     for symbol in symbols:
         quote = quote_map.get(symbol)
-        daily_frame = daily_map.get(symbol)
-        if quote is None or daily_frame is None or daily_frame.empty:
+        if quote is None:
             staged[symbol] = (
                 "failed", ["تعذر جلب البيانات"],
                 {"stage": "failed", "failure_category": "تعذر جلب البيانات"},
@@ -331,33 +346,22 @@ def scan_market(
             continue
         eligible_symbols.append(symbol)
 
-    # The provider can batch-screen the whole universe, but expensive intraday
-    # analysis is limited to the most liquid coarse candidates.
-    def coarse_liquidity(symbol: str) -> float:
-        frame = daily_map.get(symbol)
-        if frame is None or frame.empty:
-            return 0.0
-        return float(frame["close"].iloc[-1]) * float(frame["volume"].tail(20).mean())
-
-    eligible_symbols.sort(key=coarse_liquidity, reverse=True)
+    # eligible_symbols keeps the universe order, which is the provider's own
+    # activity ranking, so the deep pass already starts with the busiest names.
     deep_limit = max(1, min(settings.scan_detailed_limit, 20))
     deep_symbols = eligible_symbols[:deep_limit]
     deep_daily_map = (
         provider.get_daily_ohlcv_many(deep_symbols, 220)
         if provider.supports_batch_daily_ohlcv and deep_symbols else {}
     )
-    for symbol in eligible_symbols[deep_limit:]:
+    for rank, symbol in enumerate(eligible_symbols[deep_limit:], deep_limit + 1):
         quote = quote_map[symbol]
-        frame = daily_map[symbol]
         staged[symbol] = (
-            "skipped", ["خارج أفضل المرشحين بعد الترتيب الرقمي"],
+            "skipped", ["خارج أفضل المرشحين بعد ترتيب النشاط"],
             {
-                "stage": "skipped", "skip_category": "الترتيب الرقمي",
+                "stage": "skipped", "skip_category": "ترتيب النشاط",
                 "price": quote.price,
-                "liquidity": coarse_liquidity(symbol),
-                "change_pct": round(
-                    (quote.price / float(frame["close"].iloc[-2]) - 1) * 100, 2
-                ) if len(frame) >= 2 else 0,
+                "activity_rank": rank,
             },
         )
 

@@ -500,6 +500,22 @@ class AlpacaProvider(MarketDataAdapter):
             if asset.tradable and str(asset.exchange).split(".")[-1].upper() in allowed
         ][:limit]
 
+    def list_most_active_symbols(self, limit: int = 100) -> list[str]:
+        """Ask Alpaca which stocks are actually trading today.
+
+        One request replaces ranking the whole asset list locally, and the
+        order it returns is the liquidity ranking the scanner needs.
+        """
+        payload = self._raw_get(
+            "/v1beta1/screener/stocks/most-actives",
+            {"by": "volume", "top": max(1, min(int(limit), 100))},
+        )
+        return [
+            item["symbol"]
+            for item in (payload.get("most_actives") or [])
+            if item.get("symbol")
+        ]
+
     def estimated_cost_per_call(self) -> float:
         # Free IEX tier: marginal cost per call is ~0 within plan limits (SRS 25.1).
         return 0.0
