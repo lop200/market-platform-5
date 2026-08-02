@@ -10,6 +10,7 @@ from app.db import repository
 from app.db.models import SPXHuntResult, SPXSyntheticObservation
 from app.news.service import UnifiedNewsService
 from app.options.market_clock import (
+    RIYADH,
     market_session,
     serialize_market_session,
     spx_global_session,
@@ -267,6 +268,20 @@ class SPXHunterService:
         )
         return self._save(result)
 
+    @staticmethod
+    def _next_spx_open_ar(session) -> str:
+        """When SPX options next trade, in Riyadh time.
+
+        SPX opens on Cboe's global session at 20:15 New York, hours before the
+        regular bell the rest of the platform counts down to, so reusing the
+        equity figure would send the reader away for nothing.
+        """
+        regular_open = session.next_options_open_at
+        global_open = regular_open.replace(hour=20, minute=15) - timedelta(days=1)
+        opens_at = global_open if global_open > session.new_york_time else regular_open
+        riyadh = opens_at.astimezone(RIYADH)
+        return riyadh.strftime("%A %H:%M بتوقيت الرياض")
+
     def _latest_synthetic(self, now: datetime) -> SPXSyntheticValue | None:
         row = self.db.scalar(
             select(SPXSyntheticObservation)
@@ -450,10 +465,16 @@ class SPXHunterService:
             self.settings.spx_global_trading_hours and spx_global_session(now)
         )
         if not spx_open:
+            # Only promise a saved reading when one survived. Offering "the
+            # last reading" beside an empty panel reads as a broken sniper,
+            # which is how a wiped database looks from the outside.
             synthetic = self._latest_synthetic(now) or SPXSyntheticValue(
                 calculation_timestamp=now,
                 provider_status="options_closed",
-                status_message_ar="سوق الخيارات مغلق — آخر قراءة للمراقبة فقط",
+                status_message_ar=(
+                    "سوق خيارات SPX مغلق ولا توجد قراءة محفوظة من الجلسة السابقة. "
+                    f"الجلسة القادمة تبدأ {self._next_spx_open_ar(session)}."
+                ),
             )
             market["data_age_seconds"] = (
                 max(

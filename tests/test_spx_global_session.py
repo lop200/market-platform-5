@@ -89,3 +89,27 @@ def test_a_stale_rate_degrades_the_reading_rather_than_skewing_it():
     result = calculate_synthetic_value([], stale, session, now=moment)
     # It still runs; only the spot estimate is withheld.
     assert result.provider_status != "options_closed"
+
+
+def test_a_closed_market_does_not_promise_a_reading_it_lacks():
+    """Offering "the last reading" beside an empty panel reads as a fault."""
+    from app.config import Settings as S
+    from app.db import models  # noqa: F401
+    from app.options.market_clock import market_session
+    from app.spx.service import SPXHunterService
+
+    session = market_session(ny(8, 2, 6))  # Sunday morning, nothing trading
+    text = SPXHunterService._next_spx_open_ar(session)
+    assert "بتوقيت الرياض" in text
+    assert S().spx_global_trading_hours is True
+
+
+def test_the_next_open_points_at_the_global_session_not_the_bell():
+    from app.options.market_clock import market_session
+    from app.spx.service import SPXHunterService
+
+    # SPX reopens on Cboe's global session hours before the regular bell, so
+    # quoting the equity open would send the reader away for nothing.
+    session = market_session(ny(8, 2, 6))
+    assert "20:15" not in SPXHunterService._next_spx_open_ar(session)
+    assert SPXHunterService._next_spx_open_ar(session)
