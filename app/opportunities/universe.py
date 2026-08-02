@@ -20,7 +20,11 @@ CORE_SYMBOLS = ("SPY", "QQQ", "IWM", "DIA")
 
 
 def select_scan_universe(
-    provider: MarketDataAdapter, settings: Settings, limit: int
+    provider: MarketDataAdapter,
+    settings: Settings,
+    limit: int,
+    *,
+    prefer_optionable: bool = True,
 ) -> tuple[list[str], dict]:
     """Return the symbols to scan plus a record of where they came from.
 
@@ -49,12 +53,18 @@ def select_scan_universe(
     # ranking it above NVDA spends the deep pass on something untradeable for
     # this strategy. Plain stocks stay in the list, just behind.
     optionable = set(settings.configured_sniper_symbols)
-    with_contracts = [item for item in symbols if item in optionable]
-    without = [item for item in symbols if item not in optionable]
-    symbols = (with_contracts + without)[:limit]
+    if prefer_optionable:
+        with_contracts = [item for item in symbols if item in optionable]
+        without = [item for item in symbols if item not in optionable]
+        symbols = with_contracts + without
+    # Under a low price cap this ordering is worse than none: the names that
+    # carry liquid short-dated contracts all trade well above a few dollars, so
+    # leading with them fills the deep pass with symbols the filter will drop.
+    symbols = symbols[:limit]
     return symbols, {
         "universe_source": source,
         "universe_size": len(symbols),
         "ranked_by_provider": len(ranked),
         "with_option_contracts": len([item for item in symbols if item in optionable]),
+        "optionable_first": prefer_optionable,
     }

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +19,8 @@ from app.db.models import (
 from app.news.service import UnifiedNewsService
 from app.opportunities.indicators import calculate_indicators
 from app.opportunities.market_regime import classify_market, current_session
+from app.opportunities.probability import as_percent, touch_probability
+from app.options.market_clock import NEW_YORK, RIYADH, _at, _next_trading_day
 from app.opportunities.openai_review import review_candidates
 from app.options.service import analyze_options_after_stock
 from app.opportunities.quality import evaluate_quote
@@ -54,6 +56,30 @@ def _fresh_for_scan(quote: Quote, settings: Settings) -> bool:
         ):
             return False
     return True
+
+
+def _session_exit(now: datetime) -> tuple[datetime, str, str, float]:
+    """When a same-day trade must be closed, and how long that leaves.
+
+    Returns the deadline, its Riyadh wording, a plain-language window, and the
+    hours remaining — the last of which drives the reach probability, because a
+    target that needs a week is not reachable before this afternoon's bell.
+    """
+    eastern = now.astimezone(NEW_YORK)
+    close = eastern.replace(hour=15, minute=55, second=0, microsecond=0)
+    if eastern >= close:
+        close = _at(_next_trading_day(eastern.date()), time(15, 55))
+    riyadh = close.astimezone(RIYADH)
+    hours_left = max(0.05, (close - eastern).total_seconds() / 3600)
+    return (
+        close.astimezone(timezone.utc),
+        riyadh.strftime("%Y-%m-%d %H:%M بتوقيت الرياض"),
+        (
+            f"الدخول والخروج في نفس الجلسة — يُغلق قبل الجرس بخمس دقائق، "
+            f"وتبقّى {hours_left:.1f} ساعة"
+        ),
+        hours_left,
+    )
 
 
 def _resample(frame, factor: int):
@@ -184,7 +210,19 @@ def build_opportunity(
     if rr < settings.min_risk_reward:
         return None, ["العائد إلى المخاطرة أقل من الحد المطلوب"], snapshot
     valid_minutes = strategy.valid_minutes
-    expires = datetime.now(timezone.utc) + timedelta(minutes=valid_minutes)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(minutes=valid_minutes)
+    exit_at, exit_label, holding_window, hours_left = _session_exit(now)
+    # Volatility is a 5m standard deviation in percent; annualise by ~16 and
+    # convert the remaining session to trading days so the two agree.
+    annual_vol_pct = float(indicators.get("volatility") or 0) * 16
+    target_probability = as_percent(
+        touch_probability(quote.price, target1, annual_vol_pct, hours_left / 6.5)
+    )
+    probability_basis = (
+        f"احتمال بلوغ {target1:.2f} قبل الإغلاق — محسوب من تذبذب السهم "
+        f"({annual_vol_pct:.0f}% سنويًا) و{hours_left:.1f} ساعة متبقية"
+    )
     technical = min(100, strategy.score + int(min(indicators.get("relative_volume") or 0, 3) * 3))
     liquidity = max(0, min(100, int(100 - float(quote.spread_pct or 100) * 15)))
     news_score = 50 if not news else max(0, 65 - len(risk_flags) * 25)
@@ -230,7 +268,18 @@ def build_opportunity(
         risk_reward=rr,
         valid_for_minutes=valid_minutes,
         expires_at=expires,
-        invalidation_conditions=[strategy.invalidation, "هبوط الحجم", "اتساع السبريد", "صدور خبر سلبي جوهري"],
+        exit_by=exit_at,
+        exit_by_ar=exit_label,
+        holding_window_ar=holding_window,
+        target_probability_pct=target_probability,
+        probability_basis_ar=probability_basis,
+        invalidation_conditions=[
+            strategy.invalidation,
+            "هبوط الحجم",
+            "اتساع السبريد",
+            "صدور خبر سلبي جوهري",
+            f"الإغلاق الإلزامي {exit_label}",
+        ],
         technical_score=technical,
         news_score=news_score,
         liquidity_score=liquidity,
@@ -303,7 +352,14 @@ def scan_market(
 ) -> list[OpportunityResult]:
     regime, regime_inputs = classify_market(provider)
     limit = max(1, min(int(universe_limit or settings.scan_universe_limit), 5000))
-    symbols, universe_inputs = select_scan_universe(provider, settings, limit)
+    symbols, universe_inputs = select_scan_universe(
+        provider,
+        settings,
+        limit,
+        # A few-dollar cap and the options watchlist do not overlap, so stop
+        # pushing contract-bearing names to the front when one is set.
+        prefer_optionable=max_price is None or max_price > settings.penny_scan_max_price,
+    )
     db.add(MarketRegimeRecord(
         regime=regime.value,
         session=current_session(),

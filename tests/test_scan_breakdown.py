@@ -81,14 +81,28 @@ def test_scan_breakdown_is_accounted_and_builds_watchlist(db_session):
     assert watchlist[0]["symbol"] == "NVDA"
 
 
-def test_home_defaults_to_all_prices_and_has_requested_presets():
+def test_home_defaults_to_the_owners_day_trading_range():
+    """The owner scans for shares of a few dollars, in and out the same day."""
     from fastapi.testclient import TestClient
     from app.main import app
 
     html = TestClient(app).get("/").text
-    assert '<option value="all" selected>جميع الأسعار</option>' in html
+    assert '<option value="under5" selected>' in html
+    assert '<option value="all" selected>' not in html
     for label in ("أقل من 5$", "من 5$ إلى 20$", "من 20$ إلى 100$", "أكثر من 100$", "نطاق مخصص"):
         assert label in html
+
+
+def test_opportunity_cards_show_the_exit_deadline_and_the_odds():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    html = TestClient(app).get("/").text
+    # A day trade is defined by when it must be closed, not only when it opens.
+    assert "الإغلاق الإلزامي" in html
+    assert "exit_by_ar" in html
+    assert "target_probability_pct" in html
+    assert "probability_basis_ar" in html
 
 
 def test_search_analyses_in_place_instead_of_navigating_away():

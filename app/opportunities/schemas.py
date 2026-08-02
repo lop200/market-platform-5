@@ -64,6 +64,16 @@ class OpportunityResult(BaseModel):
     risk_reward: float
     valid_for_minutes: int
     expires_at: datetime
+    # expires_at is how long the signal stays valid; these are when the trade
+    # itself has to be closed. A day trade that is still open at the bell is no
+    # longer the trade that was analysed.
+    exit_by: datetime | None = None
+    exit_by_ar: str = ""
+    holding_window_ar: str = ""
+    # Chance the first target is reached before that deadline, from the stock's
+    # own volatility. Not a forecast of direction — see app/opportunities/probability.py.
+    target_probability_pct: int = 0
+    probability_basis_ar: str = ""
     invalidation_conditions: list[str]
     technical_score: int = Field(ge=0, le=100)
     news_score: int = Field(ge=0, le=100)

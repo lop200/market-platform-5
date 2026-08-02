@@ -230,6 +230,10 @@ class Settings(BaseSettings):
     max_candle_age_seconds: int = Field(default=180, alias="MAX_CANDLE_AGE_SECONDS")
     max_quote_candle_skew_seconds: int = Field(default=180, alias="MAX_QUOTE_CANDLE_SKEW_SECONDS")
     max_results: int = Field(default=5, alias="MAX_RESULTS")
+    # Owner's day-trading focus (2026-08-02): shares up to a few dollars, in and
+    # out the same session. Above this the options watchlist is the better
+    # ordering; at or below it, price is what decides.
+    penny_scan_max_price: float = Field(default=5.0, alias="PENNY_SCAN_MAX_PRICE")
     scan_universe_limit: int = Field(default=1000, alias="SCAN_UNIVERSE_LIMIT")
     scan_detailed_limit: int = Field(default=10, alias="SCAN_DETAILED_LIMIT")
     scan_symbols: str = Field(
