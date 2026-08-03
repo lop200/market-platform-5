@@ -19,44 +19,18 @@
 <main class="shell">
   <span class="hide" aria-hidden="true">قنص مشروط — ادخل بعد تحقق الشرط — اهرب الآن — لا صفقة — السوق متضارب</span>
   <header class="top card">
-    <div class="brand"><div class="logo">🎯</div><div><h1>قنّاص SPX</h1><small>قسم مستقل — تداول تجريبي ومراقبة فقط</small></div></div>
-    <div class="actions"><a class="home" href="/">الرئيسية</a><button class="btn primary" id="refresh">تحديث البيانات</button></div>
+    <div class="brand"><div class="logo">🎯</div><div><h1>مؤشر SPX المباشر</h1><small>اتجاه اليوم وتحليل المخاطر من OPRA — تداول تجريبي فقط</small></div></div>
+    <div class="actions"><a class="home" href="/">الرئيسية</a><button class="btn primary" id="refresh">تحديث وتحليل الآن</button></div>
   </header>
 
   <section class="warning" style="margin-top:10px">
     هذه قيمة ضمنية محسوبة من عقود الشراء والبيع عبر بيانات الأوبشن، وليست قيمة SPX الرسمية المنشورة.
   </section>
   <section class="card intraday-chart" aria-labelledby="syntheticTrendTitle">
-    <h2 class="section-title" id="syntheticTrendTitle">مؤشر اتجاه SPX الضمني اليوم</h2>
+    <h2 class="section-title" id="syntheticTrendTitle">SPX المباشر — اتجاه اليوم</h2>
     <p class="muted">يبنى تلقائيًا من قراءات Put-Call Parity الحديثة لعقود SPXW عبر OPRA. لا يستخدم SPY بديلًا عن SPX، ولا يسمح بالدخول قبل اكتمال العينات والجودة.</p>
     <div class="chart-box" id="syntheticChart"><div class="chart-empty">جارٍ جمع قراءات جلسة اليوم…</div></div>
     <div class="chart-meta" id="syntheticChartMeta"></div>
-  </section>
-  <section class="card external-chart" aria-labelledby="externalSpxTitle">
-    <h2 class="section-title" id="externalSpxTitle">مؤشر SPX الخارجي</h2>
-    <p class="muted">رسم SP:SPX مقدم من TradingView للعرض فقط. توقيت البيانات يخضع لترخيص المصدر وقد يكون متأخرًا، ولا يدخل في حسابات القنص أو التسعير داخل المنصة.</p>
-    <div class="tradingview-widget-container">
-      <div class="tradingview-widget-container__widget"></div>
-      <div class="tradingview-widget-copyright">
-        <a href="https://www.tradingview.com/symbols/SP-SPX/" rel="noopener nofollow" target="_blank">SPX chart</a>
-        <span> by TradingView</span>
-      </div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
-      {
-        "autosize": true,
-        "symbol": "SP:SPX",
-        "interval": "1",
-        "timezone": "America/New_York",
-        "theme": "dark",
-        "style": "1",
-        "locale": "ar_AE",
-        "hide_side_toolbar": true,
-        "allow_symbol_change": false,
-        "calendar": false,
-        "support_host": "https://www.tradingview.com"
-      }
-      </script>
-    </div>
   </section>
   <section class="market card" id="market"><div class="empty">جاري قراءة آخر نتيجة محفوظة…</div></section>
   <section class="decision card wait" id="decision"><h2>انتظر</h2><p>جاري التحقق من الحالة…</p></section>
@@ -91,7 +65,8 @@ function setMode(){for(const x of ["near","far"])$("#"+x).classList.toggle("acti
 function renderSyntheticChart(t){
  const rows=(t.series||[]).filter(x=>Number.isFinite(Number(x.value)));const box=$("#syntheticChart"),meta=$("#syntheticChartMeta");
  const ready=Boolean(t.trend_ready),count=Number(t.sample_size||rows.length||0),required=Number(t.samples_required||6),change=Number(t.session_change_points||0),pct=Number(t.session_change_pct||0);
- meta.innerHTML=metric("حالة اتجاه اليوم",ready?"مكتمل":"جارٍ البناء "+count+"/"+required,ready?"green":"yellow")+metric("افتتاح القراءة الضمنية",t.session_open,"blue")+metric("تغير الجلسة",`${change>=0?"+":""}${change.toFixed(2)} (${pct>=0?"+":""}${pct.toFixed(3)}%)`,change>0?"green":change<0?"red":"yellow")+metric("مدة العينة",`${Number(t.sample_span_minutes||0).toFixed(1)} دقيقة`);
+ const lastStamp=rows.length?new Date(rows[rows.length-1].time):null,lastAge=lastStamp?Math.max(0,Math.round((Date.now()-lastStamp.getTime())/1000)):null;
+ meta.innerHTML=metric("حالة البث",lastAge!=null&&lastAge<=90?`مباشر OPRA · ${lastAge}ث`:"بانتظار تحديث","green")+metric("حالة اتجاه اليوم",ready?"مكتمل":"جارٍ البناء "+count+"/"+required,ready?"green":"yellow")+metric("افتتاح القراءة الضمنية",t.session_open,"blue")+metric("تغير الجلسة",`${change>=0?"+":""}${change.toFixed(2)} (${pct>=0?"+":""}${pct.toFixed(3)}%)`,change>0?"green":change<0?"red":"yellow")+metric("مدة العينة",`${Number(t.sample_span_minutes||0).toFixed(1)} دقيقة`)+metric("آخر قراءة",lastStamp?fmtTime(lastStamp.toISOString()):"—");
  if(!rows.length){box.innerHTML='<div class="chart-empty">لا توجد قراءة ضمنية حديثة بعد. يتم الجمع تلقائيًا أثناء جلسة SPX.</div>';return}
  if(rows.length===1){box.innerHTML=`<div class="chart-empty">أول قراءة اليوم: <b>${Number(rows[0].value).toFixed(2)}</b><br>يحتاج تحديد الاتجاه إلى ${required} قراءات زمنية منفصلة.</div>`;return}
  const width=1000,height=220,pad=22,values=rows.map(x=>Number(x.value)),min=Math.min(...values),max=Math.max(...values),range=Math.max(.25,max-min),color=change>0?"#3cd59a":change<0?"#ff6878":"#55b4ff";
@@ -137,8 +112,8 @@ function render(d){
  setMode();
 }
 async function load(){try{const r=await fetch(`/api/v1/spx?strike_mode=${mode}`);render(await r.json())}catch(e){$("#decision").innerHTML="<h2>اهرب الآن</h2><p>تعذر تحميل آخر نتيجة محفوظة.</p>"}}
-async function refresh(){const b=$("#refresh");b.disabled=true;b.textContent="يتم التحديث…";await fetch(`/api/v1/spx/refresh?strike_mode=${mode}`,{method:"POST"});let n=0;clearInterval(refreshTimer);refreshTimer=setInterval(async()=>{await load();if(++n>=8){clearInterval(refreshTimer);b.disabled=false;b.textContent="تحديث البيانات"}},1500)}
-for(const x of ["near","far"])$("#"+x).onclick=()=>{mode=x;localStorage.setItem("spxStrikeMode",mode);setMode();refresh()};$("#refresh").onclick=refresh;setMode();load();liveTimer=setInterval(load,15000);
+async function refresh(){const b=$("#refresh");b.disabled=true;b.textContent="يتم التحديث والتحليل…";await fetch(`/api/v1/spx/refresh?strike_mode=${mode}`,{method:"POST"});let n=0;clearInterval(refreshTimer);refreshTimer=setInterval(async()=>{await load();if(++n>=8){clearInterval(refreshTimer);b.disabled=false;b.textContent="تحديث وتحليل الآن"}},1500)}
+for(const x of ["near","far"])$("#"+x).onclick=()=>{mode=x;localStorage.setItem("spxStrikeMode",mode);setMode();refresh()};$("#refresh").onclick=refresh;setMode();load();liveTimer=setInterval(load,10000);
 </script>
 </body>
 </html>

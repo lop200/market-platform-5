@@ -138,9 +138,15 @@ services:
       - key: SPX_BACKGROUND_REFRESH_ENABLED
         value: "true"
       - key: SPX_BACKGROUND_REFRESH_SECONDS
-        value: "60"
+        value: "30"
       - key: SPX_OBSERVATION_MIN_SPACING_SECONDS
-        value: "45"
+        value: "25"
+      - key: SPX_DIRECTION_MAX_AGE_SECONDS
+        value: "90"
+      - key: SPX_AI_REVIEW_INTERVAL_SECONDS
+        value: "600"
+      - key: SPX_AI_REVIEW_MAX_AGE_SECONDS
+        value: "900"
       - key: SPX_UNDERLYING_PROVIDER
         value: synthetic_opra
       - key: SPX_OPTIONS_PROVIDER

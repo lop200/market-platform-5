@@ -66,16 +66,9 @@ def test_install_files_stay_reachable_while_the_site_is_locked():
         assert path in OPEN_PATH_PREFIXES
 
 
-def test_the_spx_chart_cannot_collapse_to_zero_width():
-    """The widget loaded fine but rendered 0px wide, so it was invisible."""
+def test_the_spx_internal_chart_has_a_visible_fixed_area():
     html = client.get("/spx").text
-    # The global `min-width:0` is what let it collapse; both the container and
-    # the iframe the script injects need their width pinned back.
-    assert ".tradingview-widget-container iframe" in html
-    assert "min-width:min(100%,280px)" in html
-    # The widget script writes height:100% inline onto the container, which
-    # collapses against an auto-height parent. The rule has to outrank it.
-    assert "height:430px!important" in html
-    assert "height:360px!important" in html
-    # And it must still be labelled as a view, not a data source.
-    assert "لا يدخل في حسابات القنص" in html
+    assert 'id="syntheticChart"' in html
+    assert ".chart-box{height:230px" in html
+    assert "مباشر OPRA" in html
+    assert "embed-widget-advanced-chart.js" not in html

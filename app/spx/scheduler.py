@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from threading import Event, Lock, Thread
 
 from app.config import get_settings
@@ -14,10 +15,29 @@ logger = logging.getLogger(__name__)
 _stop = Event()
 _cycle_lock = Lock()
 _thread: Thread | None = None
+_last_review_attempt_at: datetime | None = None
+
+
+def _review_due(snapshot: dict, interval_seconds: int) -> bool:
+    review = snapshot.get("ai_review") or {}
+    if review.get("status") != "completed" or not review.get("reviewed_at"):
+        return True
+    try:
+        stamp = datetime.fromisoformat(
+            str(review["reviewed_at"]).replace("Z", "+00:00")
+        )
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        return (
+            datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)
+        ).total_seconds() >= interval_seconds
+    except Exception:
+        return True
 
 
 def run_spx_sampling_cycle() -> int:
-    """Save one fresh OPRA-derived observation without spending an AI call."""
+    """Save one OPRA observation and run a bounded periodic AI review."""
+    global _last_review_attempt_at
     settings = get_settings()
     if not (
         settings.spx_background_refresh_enabled
@@ -32,9 +52,21 @@ def run_spx_sampling_cycle() -> int:
         return 0
     db = SessionLocal()
     try:
-        SPXHunterService(db, settings).refresh(
-            StrikeMode.NEAR, allow_ai_review=False
+        service = SPXHunterService(db, settings)
+        snapshot = service.snapshot(StrikeMode.NEAR)
+        allow_review = _review_due(
+            snapshot,
+            settings.spx_ai_review_interval_seconds,
         )
+        if _last_review_attempt_at is not None:
+            allow_review = allow_review and (
+                datetime.now(timezone.utc) - _last_review_attempt_at
+            ).total_seconds() >= settings.spx_ai_review_interval_seconds
+        result = service.refresh(
+            StrikeMode.NEAR, allow_ai_review=allow_review
+        )
+        if allow_review and result.get("ai_review"):
+            _last_review_attempt_at = datetime.now(timezone.utc)
         return 1
     except Exception as exc:
         db.rollback()

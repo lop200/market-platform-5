@@ -110,6 +110,35 @@ class SPXHunterService:
         except Exception:
             return []
 
+    def _preserved_ai_review(
+        self, mode: StrikeMode, technical: dict
+    ) -> dict | None:
+        """Keep a recent review across data-only background refreshes."""
+        cached = repository.cache_get_any(
+            self.db, f"{CACHE_PREFIX}:{mode.value}"
+        ) or {}
+        review = cached.get("ai_review") or {}
+        if review.get("status") != "completed" or not review.get("reviewed_at"):
+            return None
+        if review.get("reviewed_direction") != technical.get("direction"):
+            return None
+        try:
+            reviewed_at = datetime.fromisoformat(
+                str(review["reviewed_at"]).replace("Z", "+00:00")
+            )
+            if reviewed_at.tzinfo is None:
+                reviewed_at = reviewed_at.replace(tzinfo=timezone.utc)
+            age = (
+                datetime.now(timezone.utc) - reviewed_at.astimezone(timezone.utc)
+            ).total_seconds()
+            return (
+                review
+                if age <= self.settings.spx_ai_review_max_age_seconds
+                else None
+            )
+        except Exception:
+            return None
+
     def refresh(
         self,
         mode: StrikeMode | str | None = None,
@@ -681,7 +710,7 @@ class SPXHunterService:
             technical, news
         )
         if direction == Direction.NONE or scenario is None:
-            ai = None
+            ai = self._preserved_ai_review(mode, technical)
             if allow_ai_review and technical.get("trend_ready"):
                 ai = review_spx(
                     self.db,
@@ -752,7 +781,7 @@ class SPXHunterService:
             if best
             else "لا يوجد عقد مستوفٍ لفلاتر السيولة والـGreeks وحداثة OPRA."
         )
-        ai = None
+        ai = self._preserved_ai_review(mode, technical)
         if allow_ai_review:
             ai = review_spx(
                 self.db,
@@ -844,17 +873,37 @@ class SPXHunterService:
                     monitoring_only=True,
                     data_age_seconds=effective_age,
                 )
-                cached = {
-                    **cached,
-                    "status": "stale",
-                    "decision": "escape",
-                    "decision_ar": "اهرب الآن",
-                    "reason_ar": "البيانات المخزنة تجاوزت حد الحداثة — ممنوع الدخول",
-                    "market": market,
-                    "best_contract": None,
-                    "ranked_contracts": [],
-                    "refresh_required": True,
-                }
+                if effective_age > self.settings.spx_direction_max_age_seconds:
+                    cached = {
+                        **cached,
+                        "status": "stale",
+                        "decision": "escape",
+                        "decision_ar": "اهرب الآن",
+                        "reason_ar": "قراءة اتجاه SPX تجاوزت حد الحداثة — ممنوع الدخول",
+                        "market": market,
+                        "best_contract": None,
+                        "ranked_contracts": [],
+                        "refresh_required": True,
+                    }
+                else:
+                    market["direction_realtime"] = True
+                    cached = {
+                        **cached,
+                        "status": "monitoring",
+                        "decision": "wait",
+                        "decision_ar": "راقب الاتجاه",
+                        "reason_ar": (
+                            "اتجاه SPX مباشر للمراقبة، وتسعير العقود يحتاج "
+                            "تحديثًا أحدث قبل أي دخول."
+                        ),
+                        "market": market,
+                        "best_contract": None,
+                        "ranked_contracts": [],
+                        "refresh_required": True,
+                    }
+            else:
+                market["direction_realtime"] = True
+                cached = {**cached, "market": market}
             return cached
         now = datetime.now(timezone.utc)
         session = market_session(now)

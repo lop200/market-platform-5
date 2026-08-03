@@ -7,6 +7,7 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.db import repository
 from app.db.models import SPXSyntheticObservation
 from app.main import app
 from app.options.market_clock import market_session
@@ -339,6 +340,50 @@ def test_openai_can_review_direction_without_a_contract(monkeypatch, db_session)
     assert result["preferred_contract_symbol"] is None
 
 
+def test_snapshot_keeps_live_direction_but_blocks_stale_contracts(db_session):
+    generated = datetime.now(timezone.utc) - timedelta(seconds=40)
+    review = {
+        "status": "completed",
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+        "reviewed_direction": "call",
+        "decision_ar": "الاتجاه الصاعد مدعوم",
+    }
+    repository.cache_set(
+        db_session,
+        "spx:hunter:near",
+        {
+            "generated_at": generated.isoformat(),
+            "status": "ready",
+            "decision": "conditional_hunt",
+            "decision_ar": "قنص مشروط",
+            "reason_ar": "اختبار",
+            "market": {"data_age_seconds": 0, "contracts_actionable": True},
+            "technical": {"direction": "call", "trend_ready": True},
+            "ai_review": review,
+            "best_contract": {"symbol": "SPXW-TEST"},
+            "ranked_contracts": [{"symbol": "SPXW-TEST"}],
+        },
+        datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    service = SPXHunterService(
+        db_session,
+        settings(
+            spx_max_data_age_seconds=15,
+            spx_direction_max_age_seconds=90,
+        ),
+    )
+    result = service.snapshot(StrikeMode.NEAR)
+    assert result["status"] == "monitoring"
+    assert result["decision"] == "wait"
+    assert result["technical"]["direction"] == "call"
+    assert result["ai_review"] == review
+    assert result["best_contract"] is None
+    assert result["market"]["contracts_actionable"] is False
+    assert service._preserved_ai_review(
+        StrikeMode.NEAR, {"direction": "call"}
+    ) == review
+
+
 def test_mobile_shell_has_no_horizontal_scroll_and_modes():
     html = TestClient(app).get("/spx").text
     assert 'dir="rtl"' in html
@@ -349,14 +394,11 @@ def test_mobile_shell_has_no_horizontal_scroll_and_modes():
     assert "قنّاص SPX" in html
     assert "اهرب الآن" in html
     assert "قنص مشروط" in html
-    assert "مؤشر SPX الخارجي" in html
-    assert '"symbol": "SP:SPX"' in html
-    assert "s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" in html
-    assert "مؤشر اتجاه SPX الضمني اليوم" in html
+    assert "SPX المباشر — اتجاه اليوم" in html
     assert 'id="syntheticChart"' in html
     assert 'id="aiReview"' in html
-    assert "setInterval(load,15000)" in html
-    assert "لا يدخل في حسابات القنص" in html
+    assert "setInterval(load,10000)" in html
+    assert "embed-widget-advanced-chart.js" not in html
 
 
 def test_spx_snapshot_endpoint_never_waits_for_provider():

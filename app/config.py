@@ -125,10 +125,19 @@ class Settings(BaseSettings):
         default=True, alias="SPX_BACKGROUND_REFRESH_ENABLED"
     )
     spx_background_refresh_seconds: int = Field(
-        default=60, ge=30, le=300, alias="SPX_BACKGROUND_REFRESH_SECONDS"
+        default=30, ge=15, le=300, alias="SPX_BACKGROUND_REFRESH_SECONDS"
     )
     spx_observation_min_spacing_seconds: int = Field(
-        default=45, ge=15, le=300, alias="SPX_OBSERVATION_MIN_SPACING_SECONDS"
+        default=25, ge=10, le=300, alias="SPX_OBSERVATION_MIN_SPACING_SECONDS"
+    )
+    spx_direction_max_age_seconds: int = Field(
+        default=90, ge=30, le=300, alias="SPX_DIRECTION_MAX_AGE_SECONDS"
+    )
+    spx_ai_review_interval_seconds: int = Field(
+        default=600, ge=300, le=3600, alias="SPX_AI_REVIEW_INTERVAL_SECONDS"
+    )
+    spx_ai_review_max_age_seconds: int = Field(
+        default=900, ge=300, le=3600, alias="SPX_AI_REVIEW_MAX_AGE_SECONDS"
     )
     spx_underlying_provider: str = Field(
         default="synthetic_opra", alias="SPX_UNDERLYING_PROVIDER"

@@ -72,6 +72,9 @@ def review_spx(db: Session, settings: Settings, payload: dict) -> dict:
             "model_name": settings.openai_model,
             "reviewed_at": datetime.now(timezone.utc).isoformat(),
             "review_scope": payload.get("review_scope", "direction_only"),
+            "reviewed_direction": (
+                payload.get("technical_direction") or {}
+            ).get("direction"),
             **parsed.model_dump(),
         }
     except Exception:
