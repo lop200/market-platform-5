@@ -237,6 +237,19 @@ def test_home_has_earnings_icon():
     assert "تقويم الإعلانات" in home
 
 
+def test_home_mobile_quick_navigation_keeps_all_three_icons_visible():
+    home = TestClient(app).get("/").text
+
+    assert 'class="quick-nav"' in home
+    assert 'href="/earnings"' in home
+    assert 'href="/news"' in home
+    assert 'href="/spx"' in home
+    assert "grid-template-columns:repeat(3,minmax(0,1fr))" in home
+    assert ".earnings-nav span{display:none}" not in home
+    assert home.count('class="nav-icon"') == 3
+    assert home.count('class="nav-label"') == 3
+
+
 def test_missing_earnings_never_breaks_stock_analysis():
     assert _earnings_prevents_entry({"earnings": None}) is False
     assert _earnings_prevents_entry({}) is False
