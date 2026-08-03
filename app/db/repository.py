@@ -71,15 +71,19 @@ def record_actual_cost(db: Session, ledger_id: int, actual_cost: float) -> CostL
     return row
 
 
-def cache_get(db: Session, key: str) -> dict | None:
+def cache_get(
+    db: Session, key: str, *, now: datetime | None = None
+) -> dict | None:
     row = db.get(CacheEntry, key)
-    now = datetime.now(timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
     if row is None:
         return None
     expiry = row.expires_at
     if expiry.tzinfo is None:
         expiry = expiry.replace(tzinfo=timezone.utc)
-    if expiry <= now:
+    if expiry <= current:
         db.delete(row)
         db.commit()
         return None

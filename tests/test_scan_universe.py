@@ -124,6 +124,28 @@ def test_alpaca_screener_returns_symbols_ranked_by_volume(monkeypatch):
     assert seen["params"] == {"by": "volume", "top": 20}
 
 
+def test_alpaca_batches_overnight_bars_and_follows_pagination(monkeypatch):
+    from app.providers.alpaca_provider import AlpacaProvider
+
+    calls = []
+    bar = {"t": "2026-08-03T01:00:00Z", "o": 10, "h": 11, "l": 9, "c": 10.5, "v": 100}
+
+    def fake_get(self, path, params):
+        calls.append((path, dict(params)))
+        if len(calls) == 1:
+            return {"bars": {"AAPL": [bar]}, "next_page_token": "next"}
+        return {"bars": {"MSFT": [bar]}, "next_page_token": None}
+
+    monkeypatch.setattr(AlpacaProvider, "_active_feed", lambda self: "boats")
+    monkeypatch.setattr(AlpacaProvider, "_raw_get", fake_get)
+    provider = object.__new__(AlpacaProvider)
+    frames = provider.get_intraday_many(["AAPL", "MSFT"], "5m")
+    assert set(frames) == {"AAPL", "MSFT"}
+    assert calls[0][0] == "/v2/stocks/bars"
+    assert calls[0][1]["symbols"] == "AAPL,MSFT"
+    assert calls[1][1]["page_token"] == "next"
+
+
 def test_universe_cache_key_includes_the_limit():
     from app.providers.resilient import ResilientMarketDataProvider
 

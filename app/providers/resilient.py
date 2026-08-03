@@ -38,6 +38,10 @@ class ResilientMarketDataProvider(MarketDataAdapter):
     def supports_batch_daily_ohlcv(self) -> bool:
         return self.inner.supports_batch_daily_ohlcv
 
+    @property
+    def supports_batch_intraday(self) -> bool:
+        return self.inner.supports_batch_intraday
+
     def _call(self, key: str, ttl: int, operation):
         now = time.monotonic()
         cached = self._cache.get(key)
@@ -160,6 +164,25 @@ class ResilientMarketDataProvider(MarketDataAdapter):
         return self._call(
             f"intraday:{symbol}:{interval}", ttl,
             lambda: self.inner.get_intraday(symbol, interval),
+        )
+
+    def get_intraday_many(
+        self, symbols: list[str], interval: str
+    ) -> dict[str, pd.DataFrame]:
+        unique = list(dict.fromkeys(symbols))
+        if not self.inner.supports_batch_intraday:
+            return {
+                symbol: frame
+                for symbol in unique
+                if (frame := self.get_intraday(symbol, interval)) is not None
+            }
+        with self._lock:
+            self._requested_symbols += len(unique)
+        ttl = self.settings.intraday_cache_seconds * (3 if interval == "15m" else 1)
+        return self._call(
+            f"intraday-many:{interval}:{','.join(unique)}",
+            ttl,
+            lambda: self.inner.get_intraday_many(unique, interval),
         )
 
     def list_active_us_symbols(self, limit: int = 1000) -> list[str]:

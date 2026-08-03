@@ -50,7 +50,8 @@ def review_candidates(db: Session, settings: Settings, candidates: list[dict]) -
     if float(total or 0) >= settings.openai_daily_budget_usd:
         return {}
     pending = []
-    for candidate in candidates[: max(3, min(5, settings.openai_candidate_limit))]:
+    limit = max(0, min(5, settings.openai_candidate_limit))
+    for candidate in candidates[:limit]:
         mark = fingerprint(candidate)
         exists = db.scalar(select(AIAnalysisLog.id).where(AIAnalysisLog.data_fingerprint == mark).limit(1))
         if not exists:

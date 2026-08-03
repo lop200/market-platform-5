@@ -81,15 +81,14 @@ def test_scan_breakdown_is_accounted_and_builds_watchlist(db_session):
     assert watchlist[0]["symbol"] == "NVDA"
 
 
-def test_home_defaults_to_the_owners_day_trading_range():
-    """The owner scans for shares of a few dollars, in and out the same day."""
+def test_home_requires_an_explicit_price_filter():
+    """No price range is imposed until the user selects one."""
     from fastapi.testclient import TestClient
     from app.main import app
 
     html = TestClient(app).get("/").text
-    # The wild band leads now: the owner named it and trades that range.
-    assert '<option value="wild" selected>' in html
-    assert '<option value="all" selected>' not in html
+    assert '<option value="wild"' in html
+    assert '<option value="all" selected>' in html
     for label in ("أقل من 5$", "من 5$ إلى 20$", "من 20$ إلى 100$", "أكثر من 100$", "نطاق مخصص"):
         assert label in html
 

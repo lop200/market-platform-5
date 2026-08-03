@@ -104,6 +104,19 @@ class MarketDataAdapter(ABC):
     @abstractmethod
     def get_intraday(self, symbol: str, interval: str) -> pd.DataFrame | None: ...
 
+    @property
+    def supports_batch_intraday(self) -> bool:
+        return False
+
+    def get_intraday_many(
+        self, symbols: list[str], interval: str
+    ) -> dict[str, pd.DataFrame]:
+        return {
+            symbol: frame
+            for symbol in symbols
+            if (frame := self.get_intraday(symbol, interval)) is not None
+        }
+
     @abstractmethod
     def get_quote(self, symbol: str) -> Quote: ...
 

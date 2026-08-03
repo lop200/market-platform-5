@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import select
@@ -161,6 +162,7 @@ def build_opportunity(
     scan_run_id=None,
     quote_override: Quote | None = None,
     daily_override=None,
+    intraday_override=None,
 ) -> tuple[OpportunityResult | None, list[str], dict]:
     quote = quote_override or provider.get_quote(symbol)
     quality = evaluate_quote(quote, settings)
@@ -173,7 +175,11 @@ def build_opportunity(
         "quote_age_seconds": quote.age_seconds,
     }
     daily = daily_override if daily_override is not None else provider.get_daily_ohlcv(symbol, 220)
-    intraday = provider.get_intraday(symbol, "5m")
+    intraday = (
+        intraday_override
+        if intraday_override is not None
+        else provider.get_intraday(symbol, "5m")
+    )
     if intraday is None or len(intraday) < 20 or len(daily) < 20:
         return None, ["لا توجد شموع كافية للتحليل متعدد الأطر"], snapshot
     indicators = calculate_indicators(daily, intraday)
@@ -228,18 +234,44 @@ def build_opportunity(
     )
     if strategy.strategy_id == "no_trade":
         return None, [strategy.reason], snapshot
+    snapshot["strategy_match_pct"] = strategy.match_pct
+    snapshot["strategy_classification_ar"] = strategy.classification_ar
+    snapshot["strategy_checks"] = list(strategy.checks)
+    if strategy.match_pct < settings.min_strategy_match_pct:
+        return None, [
+            f"تحقق شروط الاستراتيجية {strategy.match_pct}% وهو أقل من الحد المطلوب "
+            f"{settings.min_strategy_match_pct}%"
+        ], snapshot
     atr = max(float(indicators.get("atr") or quote.price * 0.03), quote.price * 0.01)
     support = float(indicators.get("support") or quote.bid)
     resistance = float(indicators.get("resistance") or quote.ask)
-    entry = max(float(quote.ask), resistance + 0.01) if strategy.strategy_id in {"volume_breakout", "opening_range_breakout"} else max(float(quote.ask), quote.price)
-    stop = min(support - 0.01, entry - atr * 0.8)
+    bearish_plan = strategy.strategy_id == "support_breakdown"
+    if bearish_plan:
+        entry = min(float(quote.bid), support - 0.01)
+        stop = max(resistance + 0.01, entry + atr * 0.8)
+    else:
+        entry = max(float(quote.ask), resistance + 0.01) if strategy.strategy_id in {"volume_breakout", "opening_range_breakout"} else max(float(quote.ask), quote.price)
+        stop = min(support - 0.01, entry - atr * 0.8)
     stop = max(0.01, round(stop, 2))
     entry = round(entry, 2)
-    if entry <= stop:
+    if (not bearish_plan and entry <= stop) or (bearish_plan and entry >= stop):
         return None, ["لا يمكن بناء وقف خسارة منطقي"], snapshot
-    risk_per_share = entry - stop
-    target1 = round(entry + risk_per_share * settings.min_risk_reward, 2)
-    target2 = round(entry + risk_per_share * (settings.min_risk_reward + 1), 2)
+    risk_per_share = abs(entry - stop)
+    direction = -1 if bearish_plan else 1
+    def target_tick(raw: float) -> float:
+        # Round away from entry so cent precision cannot silently reduce the
+        # configured reward/risk ratio (especially visible in low-priced names).
+        ticks = raw * 100
+        return (math.floor(ticks) if bearish_plan else math.ceil(ticks)) / 100
+
+    target1 = target_tick(
+        entry + direction * risk_per_share * settings.min_risk_reward
+    )
+    target2 = target_tick(
+        entry + direction * risk_per_share * (settings.min_risk_reward + 1)
+    )
+    if target1 <= 0 or target2 <= 0:
+        return None, ["الأهداف المحسوبة غير صالحة لسعر السهم"], snapshot
     rr = risk_reward(entry, stop, target1)
     if rr < settings.min_risk_reward:
         return None, ["العائد إلى المخاطرة أقل من الحد المطلوب"], snapshot
@@ -257,7 +289,10 @@ def build_opportunity(
         f"احتمال بلوغ {target1:.2f} قبل الإغلاق — محسوب من تذبذب السهم "
         f"({annual_vol_pct:.0f}% سنويًا) و{hours_left:.1f} ساعة متبقية"
     )
-    technical = min(100, strategy.score + int(min(indicators.get("relative_volume") or 0, 3) * 3))
+    technical = min(
+        100,
+        round(strategy.match_pct * 0.7 + strategy.score * 0.3),
+    )
     liquidity = max(0, min(100, int(100 - float(quote.spread_pct or 100) * 15)))
     news_score = 50 if not news else max(0, 65 - len(risk_flags) * 25)
     overall = round(technical * 0.55 + liquidity * 0.3 + news_score * 0.15)
@@ -291,10 +326,20 @@ def build_opportunity(
         is_delayed=quote.is_delayed,
         quote_timestamp=_quote_time(quote),
         quote_age_seconds=quote.age_seconds,
-        entry_zone=EntryZone(**{"from": entry, "to": round(entry + min(atr * 0.2, float(quote.ask) * 0.01), 2)}),
+        entry_zone=EntryZone(**{
+            "from": entry,
+            "to": round(
+                entry + direction * min(atr * 0.2, float(quote.ask) * 0.01),
+                2,
+            ),
+        }),
         entry_trigger=strategy.trigger,
         stop_loss=stop,
-        stop_reason=f"أسفل مستوى الإبطال الفني؛ {strategy.invalidation}",
+        stop_reason=(
+            f"أعلى مستوى الإبطال الفني؛ {strategy.invalidation}"
+            if bearish_plan
+            else f"أسفل مستوى الإبطال الفني؛ {strategy.invalidation}"
+        ),
         targets=[
             Target(price=target1, label="الهدف الأول", estimated_horizon="خلال الجلسة"),
             Target(price=target2, label="الهدف الثاني", estimated_horizon="خلال يوم إلى يومين"),
@@ -307,6 +352,10 @@ def build_opportunity(
         holding_window_ar=holding_window,
         target_probability_pct=target_probability,
         probability_basis_ar=probability_basis,
+        strategy_match_pct=strategy.match_pct,
+        strategy_classification_ar=strategy.classification_ar,
+        strategy_setup_class_ar=strategy.setup_class_ar,
+        strategy_checks=list(strategy.checks),
         invalidation_conditions=[
             strategy.invalidation,
             "هبوط الحجم",
@@ -468,6 +517,10 @@ def scan_market(
         provider.get_daily_ohlcv_many(deep_symbols, 220)
         if provider.supports_batch_daily_ohlcv and deep_symbols else {}
     )
+    deep_intraday_map = (
+        provider.get_intraday_many(deep_symbols, "5m")
+        if provider.supports_batch_intraday and deep_symbols else {}
+    )
     for rank, symbol in enumerate(eligible_symbols[deep_limit:], deep_limit + 1):
         quote = quote_map[symbol]
         staged[symbol] = (
@@ -493,6 +546,7 @@ def scan_market(
                 db, provider, settings, symbol, regime, run.id,
                 quote_override=quote_map.get(symbol),
                 daily_override=deep_daily_map.get(symbol),
+                intraday_override=deep_intraday_map.get(symbol),
             )
             observed_price = snapshot.get("price")
             if observed_price is not None and (
@@ -527,14 +581,16 @@ def scan_market(
         if index % 10 == 0:
             db.commit()
     accepted.sort(key=lambda item: item.overall_score, reverse=True)
-    shortlist = accepted[: min(max(3, settings.openai_candidate_limit), 5)]
+    finalist_pool = accepted[: settings.max_results]
+    review_limit = max(0, min(settings.openai_candidate_limit, 5))
+    review_shortlist = finalist_pool[:review_limit]
     option_provider = None
-    if settings.options_enabled and shortlist:
+    if settings.options_enabled and review_shortlist:
         try:
             option_provider = get_option_data_provider()
         except Exception:
             option_provider = None
-    for item in shortlist:
+    for item in review_shortlist:
         stock_analysis = {
             "symbol": item.symbol,
             "status": "conditional_entry",
@@ -582,11 +638,11 @@ def scan_market(
                     if (item.options or {}).get("stock_first_gate_passed") else []
                 ),
             }
-            for item in shortlist
+            for item in review_shortlist
         ],
     )
     final: list[OpportunityResult] = []
-    for item in shortlist:
+    for item in finalist_pool:
         review = reviews.get(item.symbol)
         if review and not review.approved:
             # A candidate that is counted as sent to review and then vanishes

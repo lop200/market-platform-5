@@ -232,7 +232,7 @@ def test_new_strong_news_marks_saved_opportunity_for_reanalysis(db_session):
 
 
 def test_fed_news_enters_spx_context(db_session):
-    service = UnifiedNewsService(db_session, Settings())
+    service = UnifiedNewsService(db_session, Settings(), now=NOW)
     fed = event(
         "Federal Reserve signals interest rate decision",
         source_type="x",

@@ -72,7 +72,7 @@ def refresh_earnings_cache(
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     if not force:
-        cached = repository.cache_get(db, WEEK_CACHE_KEY)
+        cached = repository.cache_get(db, WEEK_CACHE_KEY, now=current)
         if cached:
             logger.info("earnings cache_hit")
             return {**cached, "cache_hit": True}

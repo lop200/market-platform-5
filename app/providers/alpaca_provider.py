@@ -241,6 +241,95 @@ class AlpacaProvider(MarketDataAdapter):
         df.index.name = "datetime"
         return df
 
+    @property
+    def supports_batch_intraday(self) -> bool:
+        return True
+
+    def get_intraday_many(
+        self, symbols: list[str], interval: str
+    ) -> dict[str, pd.DataFrame]:
+        unique_symbols = list(dict.fromkeys(symbols))
+        if not unique_symbols:
+            return {}
+        timeframe_map = {
+            "1m": TimeFrame.Minute,
+            "5m": TimeFrame(5, TimeFrame.Minute.unit),
+            "15m": TimeFrame(15, TimeFrame.Minute.unit),
+            "1h": TimeFrame.Hour,
+        }
+        timeframe = timeframe_map.get(interval)
+        if timeframe is None:
+            raise ValueError(f"unsupported intraday interval '{interval}'")
+        start = datetime.now(timezone.utc) - timedelta(days=5)
+        active_feed = self._active_feed()
+        # Alpaca-py handles pagination for the multi-symbol SIP/IEX request.
+        # BOATS is fetched through the documented multi-symbol endpoint because
+        # one page normally covers 20 symbols x five overnight sessions.
+        if active_feed in {"boats", "overnight"}:
+            timeframe_value = {
+                "1m": "1Min", "5m": "5Min", "15m": "15Min", "1h": "1Hour"
+            }[interval]
+            params = {
+                "symbols": ",".join(unique_symbols),
+                "timeframe": timeframe_value,
+                "start": start.isoformat(),
+                # Historical overnight bars are served by BOATS even when the
+                # latest indicative feed is named "overnight".
+                "feed": "boats",
+                "limit": 10000,
+            }
+            collected: dict[str, list[dict]] = {symbol: [] for symbol in unique_symbols}
+            for _ in range(5):
+                payload = self._raw_get("/v2/stocks/bars", params)
+                for symbol, items in (payload.get("bars") or {}).items():
+                    if symbol in collected:
+                        collected[symbol].extend(items or [])
+                token = payload.get("next_page_token")
+                if not token:
+                    break
+                params["page_token"] = token
+            results = {}
+            for symbol, items in collected.items():
+                if not items:
+                    continue
+                frame = pd.DataFrame([
+                    {
+                        "datetime": item["t"], "open": item["o"],
+                        "high": item["h"], "low": item["l"],
+                        "close": item["c"], "volume": item["v"],
+                    }
+                    for item in items
+                ])
+                frame["datetime"] = pd.to_datetime(frame["datetime"], utc=True)
+                results[symbol] = frame.set_index("datetime")
+            return results
+        request = StockBarsRequest(
+            symbol_or_symbols=unique_symbols,
+            timeframe=timeframe,
+            start=start,
+            feed=active_feed,
+        )
+        bars = self._data_client.get_stock_bars(request).df
+        if bars.empty:
+            return {}
+        results: dict[str, pd.DataFrame] = {}
+        if isinstance(bars.index, pd.MultiIndex):
+            available = set(bars.index.get_level_values(0))
+            for symbol in unique_symbols:
+                if symbol not in available:
+                    continue
+                frame = bars.xs(symbol, level=0)[
+                    ["open", "high", "low", "close", "volume"]
+                ].copy()
+                frame.index.name = "datetime"
+                results[symbol] = frame
+            return results
+        if len(unique_symbols) == 1:
+            frame = bars[["open", "high", "low", "close", "volume"]].copy()
+            frame.index.name = "datetime"
+            results[unique_symbols[0]] = frame
+        return results
+
     def get_quote(self, symbol: str) -> Quote:
         active_feed = self._active_feed()
         if active_feed in {"boats", "overnight"}:

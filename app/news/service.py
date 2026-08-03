@@ -32,9 +32,12 @@ SPX_HEAVY = {"AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "BRK.B", "AVGO", "
 
 
 class UnifiedNewsService:
-    def __init__(self, db: Session, settings: Settings):
+    def __init__(
+        self, db: Session, settings: Settings, *, now: datetime | None = None
+    ):
         self.db = db
         self.settings = settings
+        self.now = now
         self.finnhub = FinnhubCompanyNewsProvider(settings)
         self.sec = SecEdgarNewsProvider(settings)
         self.x = XTrustedNewsProvider(settings)
@@ -277,7 +280,9 @@ class UnifiedNewsService:
         return payload
 
     def market_snapshot(self) -> dict:
-        payload = repository.cache_get(self.db, "news:market:pulse")
+        payload = repository.cache_get(
+            self.db, "news:market:pulse", now=self.now
+        )
         if payload:
             return payload
         stale = repository.cache_get_any(self.db, "news:market:pulse:last_success")

@@ -32,6 +32,23 @@ def test_oversold_reversal_is_disabled_in_bear_market():
     assert choice.strategy_id == "no_trade"
 
 
+def test_strategy_reports_weighted_verification_not_a_win_rate():
+    choice = select_strategy(
+        {
+            "relative_volume": 1.6, "vwap": 10.0, "resistance": 10.1,
+            "rsi": 58, "momentum": 0.8, "ema9": 10.2, "ema20": 10.0,
+            "ema50": 9.8, "macd": .2, "macd_signal": .1,
+            "trend_15m_bullish": True,
+        },
+        10.1,
+        MarketRegime.BULLISH,
+    )
+    assert choice.strategy_id == "volume_breakout"
+    assert choice.match_pct == 100
+    assert choice.classification_ar == "تحقق قوي جدًا"
+    assert sum(item["weight"] for item in choice.checks) == 100
+
+
 def test_stop_before_target_never_counts_as_success():
     now = datetime.now(timezone.utc)
     outcome = evaluate_timeline(

@@ -352,7 +352,12 @@ def analyze_single_stock(
                 "label": f"المستوى {index}",
                 "profit_pct": round(abs(target / entry_from - 1) * 100, 2),
             } for index, target in enumerate(target_prices, 1)]
-            if strategy and strategy.strategy_id != "no_trade" and quality.valid_for_plan:
+            if (
+                strategy
+                and strategy.strategy_id != "no_trade"
+                and strategy.match_pct >= settings.min_strategy_match_pct
+                and quality.valid_for_plan
+            ):
                 status = "conditional_entry"
                 status_ar = "دخول مشروط"
 
@@ -504,6 +509,11 @@ def analyze_single_stock(
                 strategy.trigger if strategy and status == "conditional_entry"
                 else "انتظار Quote حديث ومتزامن وسوق مفتوح ثم إعادة التحليل."
             ),
+            "match_pct": strategy.match_pct if strategy else 0,
+            "classification_ar": strategy.classification_ar if strategy else "غير متحقق",
+            "setup_class_ar": strategy.setup_class_ar if strategy else "غير مصنف",
+            "checks": list(strategy.checks) if strategy else [],
+            "match_disclaimer_ar": "النسبة تقيس تحقق الشروط الحالية وليست نسبة نجاح تاريخية أو ضمان ربح.",
         },
         "trade_plan": ({
             # Without this the numbers read as a mistake: on a short the stop

@@ -74,6 +74,12 @@ class OpportunityResult(BaseModel):
     # own volatility. Not a forecast of direction — see app/opportunities/probability.py.
     target_probability_pct: int = 0
     probability_basis_ar: str = ""
+    # Percentage of the deterministic checklist satisfied by the selected
+    # setup. This is confluence, not a historical win rate or profit promise.
+    strategy_match_pct: int = Field(default=0, ge=0, le=100)
+    strategy_classification_ar: str = ""
+    strategy_setup_class_ar: str = ""
+    strategy_checks: list[dict] = Field(default_factory=list)
     invalidation_conditions: list[str]
     technical_score: int = Field(ge=0, le=100)
     news_score: int = Field(ge=0, le=100)
