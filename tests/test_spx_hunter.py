@@ -7,6 +7,7 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.api import routes_spx
 from app.db import repository
 from app.db.models import SPXSyntheticObservation
 from app.main import app
@@ -405,3 +406,28 @@ def test_spx_snapshot_endpoint_never_waits_for_provider():
     response = TestClient(app).get("/api/v1/spx?strike_mode=near")
     assert response.status_code == 200
     assert response.json()["paper_only"] is True
+
+
+def test_manual_spx_refresh_requests_bounded_ai_review(monkeypatch):
+    calls = []
+
+    class FakeDB:
+        def rollback(self):
+            raise AssertionError("refresh should not fail")
+
+        def close(self):
+            calls.append("closed")
+
+    class FakeService:
+        def __init__(self, db, app_settings):
+            pass
+
+        def refresh(self, strike_mode, *, allow_ai_review=False):
+            calls.append((strike_mode, allow_ai_review))
+
+    monkeypatch.setattr(routes_spx, "SessionLocal", FakeDB)
+    monkeypatch.setattr(routes_spx, "SPXHunterService", FakeService)
+
+    routes_spx._refresh(StrikeMode.NEAR)
+
+    assert calls == [(StrikeMode.NEAR, True), "closed"]

@@ -26,7 +26,12 @@ def spx_snapshot(
 def _refresh(strike_mode: StrikeMode) -> None:
     db = SessionLocal()
     try:
-        SPXHunterService(db, get_settings()).refresh(strike_mode)
+        # This path is triggered by the explicit "refresh and analyze" button.
+        # Keep scheduled refreshes cost-bounded, but let a deliberate user action
+        # request a fresh bounded review of the current deterministic snapshot.
+        SPXHunterService(db, get_settings()).refresh(
+            strike_mode, allow_ai_review=True
+        )
     except Exception:
         db.rollback()
     finally:
