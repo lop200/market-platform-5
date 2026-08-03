@@ -36,6 +36,53 @@ from app.spx.synthetic import SOURCE, calculate_synthetic_value
 CACHE_PREFIX = "spx:hunter"
 
 
+def build_synthetic_review_payload(
+    synthetic: SPXSyntheticValue,
+    technical: dict,
+    scenario: dict | None,
+    news: list[dict],
+    contracts: list,
+) -> dict:
+    """Build bounded OPRA context; TradingView is display-only."""
+    return {
+        "symbol": "Synthetic SPX",
+        "review_scope": "direction_and_contracts" if contracts else "direction_only",
+        "data_label": "estimated_synthetic_forward_not_official_spx",
+        "source": synthetic.source,
+        "synthetic_quality": {
+            "provider_status": synthetic.provider_status,
+            "pairs_used": synthetic.pairs_used,
+            "confidence_score": synthetic.confidence_score,
+            "data_quality_score": synthetic.data_quality_score,
+            "liquidity_score": synthetic.liquidity_score,
+            "median_quote_age_seconds": synthetic.median_quote_age_seconds,
+            "expiration_used": synthetic.expiration_used,
+            "settlement_type": synthetic.settlement_type,
+        },
+        "technical_direction": {
+            key: technical.get(key)
+            for key in (
+                "price", "session_open", "session_change_points",
+                "session_change_pct", "sample_size", "sample_span_minutes",
+                "trend_ready", "direction", "direction_clarity_score",
+                "momentum_score", "support", "resistance", "expected_move",
+                "entry_condition",
+            )
+        },
+        "intraday_series": list(technical.get("series") or [])[-20:],
+        "scenario": scenario,
+        "trusted_news": news[:5],
+        "contracts": [
+            item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+            for item in contracts[:3]
+        ],
+        "allowed_decisions": [
+            "الاتجاه الصاعد مدعوم", "الاتجاه الهابط مدعوم",
+            "الاتجاه غير محسوم", "انتظر", "لا صفقة",
+        ],
+    }
+
+
 def _unavailable_capability(message: str) -> SPXProviderCapabilities:
     return SPXProviderCapabilities(
         provider="alpaca",
@@ -634,6 +681,15 @@ class SPXHunterService:
             technical, news
         )
         if direction == Direction.NONE or scenario is None:
+            ai = None
+            if allow_ai_review and technical.get("trend_ready"):
+                ai = review_spx(
+                    self.db,
+                    self.settings,
+                    build_synthetic_review_payload(
+                        synthetic, technical, None, news, []
+                    ),
+                )
             result = SPXHunterResult(
                 generated_at=now,
                 status="no_trade",
@@ -653,6 +709,7 @@ class SPXHunterService:
                     ]
                     or [0]
                 ),
+                ai_review=ai,
                 warnings_ar=[
                     "هذه قيمة ضمنية محسوبة من عقود Call وPut عبر OPRA، وليست قيمة SPX الرسمية المنشورة.",
                     "لا صفقة قبل اكتمال اتجاه Synthetic SPX وتوافق شروط الجودة.",
@@ -696,24 +753,13 @@ class SPXHunterService:
             else "لا يوجد عقد مستوفٍ لفلاتر السيولة والـGreeks وحداثة OPRA."
         )
         ai = None
-        if best and allow_ai_review:
+        if allow_ai_review:
             ai = review_spx(
                 self.db,
                 self.settings,
-                {
-                    "symbol": "Synthetic SPX",
-                    "scenario": scenario,
-                    "trusted_news": news[:5],
-                    "contracts": [
-                        item.model_dump(mode="json") for item in ranked[:3]
-                    ],
-                    "allowed_decisions": [
-                        "قنص مشروط",
-                        "انتظر",
-                        "اهرب الآن",
-                        "لا صفقة",
-                    ],
-                },
+                build_synthetic_review_payload(
+                    synthetic, technical, scenario, news, ranked
+                ),
             )
             if (
                 ai.get("status") == "completed"

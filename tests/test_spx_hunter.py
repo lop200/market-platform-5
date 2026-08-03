@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pandas as pd
 from fastapi.testclient import TestClient
@@ -15,7 +16,8 @@ from app.spx.engine import (
     rank_contracts,
     technical_analysis,
 )
-from app.spx.review import review_spx
+from app.spx import review as spx_review
+from app.spx.review import SPXReview, review_spx
 from app.spx.schemas import (
     Direction,
     SPXContract,
@@ -24,7 +26,7 @@ from app.spx.schemas import (
     SPXSyntheticValue,
     StrikeMode,
 )
-from app.spx.service import SPXHunterService
+from app.spx.service import SPXHunterService, build_synthetic_review_payload
 
 NOW = datetime(2026, 7, 30, 15, 0, tzinfo=timezone.utc)
 
@@ -147,6 +149,15 @@ def test_synthetic_intraday_series_builds_todays_direction(db_session):
     assert result["direction"] == "call"
     assert result["session_change_points"] == 4.3
     assert len(result["series"]) == 6
+
+    payload = build_synthetic_review_payload(
+        synthetic, result, None, [], []
+    )
+    assert payload["review_scope"] == "direction_only"
+    assert payload["data_label"] == "estimated_synthetic_forward_not_official_spx"
+    assert payload["technical_direction"]["direction"] == "call"
+    assert len(payload["intraday_series"]) == 6
+    assert payload["contracts"] == []
 
 
 def test_conflicting_signals_return_no_trade():
@@ -299,6 +310,35 @@ def test_openai_failure_or_missing_key_does_not_block_page(db_session):
     assert result["status"] == "not_configured"
 
 
+def test_openai_can_review_direction_without_a_contract(monkeypatch, db_session):
+    parsed = SPXReview(
+        approved=False,
+        decision_ar="انتظر",
+        explanation_ar="الاتجاه يحتاج تأكيدًا إضافيًا.",
+        preferred_contract_symbol=None,
+        contradictions_ar=["الزخم ضعيف"],
+        risks_ar=["لا يوجد عقد مستوفٍ"],
+    )
+
+    class FakeResponses:
+        def parse(self, **_kwargs):
+            return SimpleNamespace(
+                output_parsed=parsed,
+                usage=SimpleNamespace(input_tokens=100, output_tokens=50),
+            )
+
+    fake_client = SimpleNamespace(responses=FakeResponses())
+    monkeypatch.setattr(spx_review, "OpenAI", lambda **_kwargs: fake_client)
+    result = review_spx(
+        db_session,
+        settings(spx_ai_review_enabled=True, openai_api_key="test-key"),
+        {"review_scope": "direction_only", "contracts": []},
+    )
+    assert result["status"] == "completed"
+    assert result["review_scope"] == "direction_only"
+    assert result["preferred_contract_symbol"] is None
+
+
 def test_mobile_shell_has_no_horizontal_scroll_and_modes():
     html = TestClient(app).get("/spx").text
     assert 'dir="rtl"' in html
@@ -314,6 +354,7 @@ def test_mobile_shell_has_no_horizontal_scroll_and_modes():
     assert "s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" in html
     assert "مؤشر اتجاه SPX الضمني اليوم" in html
     assert 'id="syntheticChart"' in html
+    assert 'id="aiReview"' in html
     assert "setInterval(load,15000)" in html
     assert "لا يدخل في حسابات القنص" in html
 

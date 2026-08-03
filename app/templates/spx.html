@@ -64,6 +64,7 @@
   <div class="main-layout">
     <div class="grid">
       <section class="card"><h2 class="section-title">الاتجاه والأخبار</h2><div class="levels" id="direction"></div><details><summary>الأخبار المؤثرة الموثوقة</summary><div id="news" class="warnings"></div></details></section>
+      <section class="card"><h2 class="section-title">مراجعة المحلل لاتجاه SPX</h2><div id="aiReview" class="warnings"><div class="empty">لم تصل مراجعة المحلل بعد.</div></div></section>
       <section class="card"><h2 class="section-title">مستويات SPX والدخول المشروط</h2><div class="levels" id="levels"></div><p class="muted" id="trigger">—</p></section>
       <section class="card" id="contractControls">
         <h2 class="section-title">اختيار القرب من السترايك</h2>
@@ -125,6 +126,8 @@ function render(d){
  $("#levels").innerHTML=metric("SPX",t.price,"blue")+metric("الدخول",s.entry,"blue")+metric("الوقف / الإبطال",s.stop,"red")+(s.targets||[]).map((x,i)=>metric(`الهدف ${i+1}`,x,"green")).join("")+metric("المخاطرة إلى العائد",s.risk_reward);
  $("#trigger").textContent=s.trigger||"لا يوجد دخول مشروط قبل اكتمال بيانات SPX والسيناريو.";
  $("#news").innerHTML=(d.news||[]).length?d.news.map(n=>`<div class="warning">${n.headline}<br><small>${n.source_name} — تأثير ${n.spx_impact_score}/100</small></div>`).join(""):'<div class="empty">لا توجد أخبار مؤثرة محفوظة.</div>';
+ const ai=d.ai_review||{},aiLists=[...(ai.contradictions_ar||[]),...(ai.risks_ar||[])];
+ $("#aiReview").innerHTML=ai.status==="completed"?`<div class="warning ${ai.approved?"":"error"}"><b>${dash(ai.decision_ar)}</b><p>${dash(ai.explanation_ar)}</p><small>${ai.review_scope==="direction_only"?"مراجعة الاتجاه فقط — لا يوجد عقد صالح":"مراجعة الاتجاه والعقود"} · ${dash(ai.model_name)} · ${fmtTime(ai.reviewed_at)}</small></div>${aiLists.map(x=>`<div class="warning">${x}</div>`).join("")}`:`<div class="empty">${dash(ai.message_ar||"المحلل ينتظر اكتمال ست قراءات OPRA أو طلب تحديث يدوي.")}</div>`;
  $("#best").innerHTML=blocked?'<h2 class="section-title">الدخول واختيار العقد معطلان</h2><div class="empty">يلزم سعر SPX حديث موثوق، وسلسلة OPRA حديثة، وجميع Greeks والسيولة والجودة المطلوبة.</div>':`<h2 class="section-title">أفضل عقد</h2>${renderContract(d.best_contract,true)}`;
  $("#contracts").innerHTML=blocked?'<div class="empty">لا تعرض عقود قابلة للتنفيذ في هذه الحالة.</div>':((d.ranked_contracts||[]).length?d.ranked_contracts.map(c=>`<article class="card contract-mini">${renderContract(c,false)}</article>`).join(""):'<div class="empty">لا توجد عقود حقيقية مستوفية للشروط.</div>');
  $("#warnings").innerHTML=[`<div class="warning ${d.decision==="escape"?"error":""}">${d.reason_ar}</div>`,...(d.warnings_ar||[]).map(x=>`<div class="warning">${x}</div>`)].join("");
