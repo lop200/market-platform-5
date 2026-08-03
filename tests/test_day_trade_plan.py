@@ -13,21 +13,20 @@ def utc(hour, minute=0, day=31):
     return datetime(2026, 7, day, hour, minute, tzinfo=timezone.utc)
 
 
-def test_the_exit_deadline_lands_before_the_closing_bell():
-    # 14:00 UTC is 10:00 New York, six hours before the 15:55 exit.
+def test_the_regular_session_exits_before_its_bell():
+    # 14:00 UTC is 10:00 New York, inside the regular session.
     exit_at, label, window, hours = _session_exit(utc(14))
     assert exit_at.astimezone(timezone.utc).hour == 19  # 15:55 New York
     assert "بتوقيت الرياض" in label
-    assert "نفس الجلسة" in window
+    assert "الجلسة الرسمية" in window
     assert 5.5 < hours < 6.5
 
 
-def test_after_the_bell_the_deadline_rolls_to_the_next_session():
-    # 21:00 UTC is 17:00 New York — today's exit has passed.
-    today, _, _, _ = _session_exit(utc(14))
-    tomorrow, _, _, hours = _session_exit(utc(21))
-    assert tomorrow > today
-    assert hours > 12
+def test_after_hours_exits_at_its_own_door_not_tomorrow_afternoon():
+    """The old rule quoted a 20-hour "fast" trade held across the auction."""
+    _, _, window, hours = _session_exit(utc(21))  # 17:00 New York
+    assert "ما بعد الإغلاق" in window
+    assert hours < 3.5
 
 
 def test_time_left_never_reaches_zero():
@@ -48,3 +47,41 @@ def test_a_low_price_cap_stops_leading_with_option_names():
     rich, rich_inputs = select_scan_universe(provider, settings, 6)
     assert rich[0] == "NVDA"
     assert rich_inputs["optionable_first"] is True
+
+
+def _exit_at(month, day, hour, minute=0):
+    """New York wall clock, which is what the session doors follow."""
+    from app.options.market_clock import NEW_YORK
+    from app.opportunities.scanner import _session_exit
+
+    return _session_exit(datetime(2026, month, day, hour, minute, tzinfo=NEW_YORK))
+
+
+def test_each_session_closes_at_its_own_door():
+    # 2026-08-03 is a Monday.
+    _, _, overnight, hours_night = _exit_at(8, 3, 0)
+    assert "التداول الليلي" in overnight
+    assert hours_night < 4.5  # the book shuts at 03:55, not this afternoon
+
+    _, _, premarket, hours_pre = _exit_at(8, 3, 5)
+    assert "ما قبل الافتتاح" in premarket
+    assert hours_pre < 5
+
+    _, _, regular, _ = _exit_at(8, 3, 10)
+    assert "الجلسة الرسمية" in regular
+
+
+def test_a_night_trade_is_never_carried_across_the_opening():
+    """Holding through an auction is a different trade with gap risk."""
+    exit_at, _, _, hours = _exit_at(8, 3, 0)
+    from app.options.market_clock import NEW_YORK
+
+    assert exit_at.astimezone(NEW_YORK).hour == 3  # 03:55, before the book shuts
+    assert hours < 4.5
+
+
+def test_the_weekend_offers_no_window_instead_of_a_twenty_hour_snipe():
+    # Sunday: falling back to the regular bell quoted a 20-hour "fast" trade.
+    _, _, window, hours = _exit_at(8, 2, 10)
+    assert "لا توجد نافذة" in window
+    assert hours == 0.05

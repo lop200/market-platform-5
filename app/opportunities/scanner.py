@@ -58,24 +58,58 @@ def _fresh_for_scan(quote: Quote, settings: Settings) -> bool:
     return True
 
 
-def _session_exit(now: datetime) -> tuple[datetime, str, str, float]:
-    """When a same-day trade must be closed, and how long that leaves.
+# Each session ends at its own door, five minutes early. A trade opened in the
+# overnight book must be closed before that book shuts, not carried into the
+# next afternoon: holding across an opening auction is a different trade with a
+# different risk, and gap moves dwarf anything a fast setup was aiming for.
+SESSION_EXITS = {
+    "overnight": (time(3, 55), "التداول الليلي"),
+    "pre_market": (time(9, 25), "ما قبل الافتتاح"),
+    "regular": (time(15, 55), "الجلسة الرسمية"),
+    "early_close": (time(12, 55), "الإغلاق المبكر"),
+    "after_hours": (time(19, 55), "ما بعد الإغلاق"),
+}
 
-    Returns the deadline, its Riyadh wording, a plain-language window, and the
-    hours remaining — the last of which drives the reach probability, because a
-    target that needs a week is not reachable before this afternoon's bell.
+
+def _session_exit(now: datetime) -> tuple[datetime, str, str, float]:
+    """When this trade must be flat, and how many hours that leaves.
+
+    The deadline follows the session the trade is opened in, so a 3am Riyadh
+    entry closes before the overnight book does rather than being measured
+    against an afternoon bell it was never meant to reach. The hours remaining
+    drive the reach probability, because a target needing a week is not
+    reachable before this window shuts.
     """
+    from app.options.market_clock import market_session
+
     eastern = now.astimezone(NEW_YORK)
-    close = eastern.replace(hour=15, minute=55, second=0, microsecond=0)
-    if eastern >= close:
-        close = _at(_next_trading_day(eastern.date()), time(15, 55))
+    session = market_session(now)
+    if session.code not in SESSION_EXITS:
+        # Weekend or holiday: there is no window to snipe inside. Falling back
+        # to the regular bell would have quoted a twenty-hour "fast" trade.
+        opens = session.next_stock_open_at.astimezone(RIYADH)
+        return (
+            session.next_stock_open_at.astimezone(timezone.utc),
+            opens.strftime("%Y-%m-%d %H:%M بتوقيت الرياض"),
+            f"لا توجد نافذة تداول الآن — تفتح {opens.strftime('%Y-%m-%d %H:%M')} بتوقيت الرياض",
+            0.05,
+        )
+    clock, label = SESSION_EXITS[session.code]
+    close = eastern.replace(
+        hour=clock.hour, minute=clock.minute, second=0, microsecond=0
+    )
+    if close <= eastern:
+        # The overnight book runs past midnight, so its door is tomorrow's.
+        close += timedelta(days=1)
+        if session.code != "overnight":
+            close = _at(_next_trading_day(eastern.date()), clock)
     riyadh = close.astimezone(RIYADH)
     hours_left = max(0.05, (close - eastern).total_seconds() / 3600)
     return (
         close.astimezone(timezone.utc),
         riyadh.strftime("%Y-%m-%d %H:%M بتوقيت الرياض"),
         (
-            f"الدخول والخروج في نفس الجلسة — يُغلق قبل الجرس بخمس دقائق، "
+            f"قنص داخل {label} — الخروج قبل إغلاق النافذة بخمس دقائق، "
             f"وتبقّى {hours_left:.1f} ساعة"
         ),
         hours_left,
