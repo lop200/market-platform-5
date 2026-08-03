@@ -13,6 +13,7 @@ from app.db.models import SPXSyntheticObservation
 from app.main import app
 from app.options.market_clock import market_session
 from app.spx.engine import (
+    breakout_outlook,
     directional_scenario,
     escape_reason,
     rank_contracts,
@@ -111,6 +112,35 @@ def test_spx_call_and_put_scenarios_are_deterministic():
     assert down["direction"] == "put"
     assert up["targets"][0] > up["entry"]
     assert down["targets"][0] < down["entry"]
+
+
+def test_breakout_outlook_has_conditional_call_and_put_percentages():
+    technical = technical_analysis(history(rising=False), quote(5399))
+    outlook = breakout_outlook(
+        technical, news_impact_score=88, data_quality_score=95
+    )
+
+    assert outlook["ready"] is True
+    assert outlook["put_trigger"] < technical["price"]
+    assert outlook["call_trigger"] > technical["price"]
+    assert 35 <= outlook["call_probability_pct"] <= 88
+    assert 35 <= outlook["put_probability_pct"] <= 88
+    assert outlook["put_probability_pct"] > outlook["call_probability_pct"]
+    assert outlook["estimate_type"] == "conditional_continuation"
+
+
+def test_breakout_outlook_withholds_percentages_until_trend_ready():
+    outlook = breakout_outlook({
+        "trend_ready": False,
+        "price": 5500,
+        "support": 5498,
+        "resistance": 5502,
+        "expected_move": 2,
+    })
+
+    assert outlook["ready"] is False
+    assert outlook["call_probability_pct"] is None
+    assert outlook["put_probability_pct"] is None
 
 
 def test_synthetic_intraday_series_builds_todays_direction(db_session):
@@ -398,6 +428,9 @@ def test_mobile_shell_has_no_horizontal_scroll_and_modes():
     assert "SPX المباشر — اتجاه اليوم" in html
     assert 'id="syntheticChart"' in html
     assert 'id="aiReview"' in html
+    assert "احتمالات كسر SPX" in html
+    assert "احتمال استمرار PUT" in html
+    assert "احتمال استمرار CALL" in html
     assert "setInterval(load,10000)" in html
     assert "embed-widget-advanced-chart.js" not in html
 

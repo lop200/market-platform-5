@@ -29,6 +29,67 @@ def _age(stamp: datetime | None, now: datetime) -> int:
     return max(0, int((now - stamp.astimezone(timezone.utc)).total_seconds()))
 
 
+def breakout_outlook(
+    technical: dict,
+    *,
+    news_impact_score: int = 0,
+    data_quality_score: int = 100,
+) -> dict:
+    """Deterministic conditional continuation estimates for both SPX sides.
+
+    The percentages estimate continuation *after* a confirmed level break. They
+    are comparative scenario estimates, not profit probabilities, and therefore
+    are not required to add up to 100.
+    """
+    ready = bool(technical.get("trend_ready", True))
+    price = float(technical.get("price") or 0)
+    support = float(technical.get("support") or price)
+    resistance = float(technical.get("resistance") or price)
+    expected_move = max(0.1, float(technical.get("expected_move") or 0.1))
+    buffer = max(0.25, expected_move * 0.2)
+    call_trigger = round(max(price, resistance) + buffer, 2)
+    put_trigger = round(min(price, support) - buffer, 2)
+    if not ready:
+        return {
+            "ready": False,
+            "call_trigger": call_trigger,
+            "put_trigger": put_trigger,
+            "call_probability_pct": None,
+            "put_probability_pct": None,
+            "estimate_type": "conditional_continuation",
+        }
+
+    direction = str(technical.get("direction") or "none")
+    clarity = _score(float(technical.get("direction_clarity_score") or 0))
+    momentum = _score(float(technical.get("momentum_score") or 0))
+    alignment = _score(float(technical.get("timeframe_alignment_score") or 0))
+    quality = _score(float(data_quality_score))
+    news_penalty = max(0, _score(float(news_impact_score)) - 60) * 0.08
+    base = 38 + momentum * 0.14 + alignment * 0.12 + quality * 0.1 - news_penalty
+
+    def probability(side: str) -> int:
+        if direction == side:
+            adjustment = clarity * 0.24
+        elif direction in {"call", "put"}:
+            adjustment = (100 - clarity) * 0.05
+        else:
+            adjustment = 0
+        return max(35, min(88, round(base + adjustment)))
+
+    return {
+        "ready": True,
+        "call_trigger": call_trigger,
+        "put_trigger": put_trigger,
+        "call_probability_pct": probability("call"),
+        "put_probability_pct": probability("put"),
+        "estimate_type": "conditional_continuation",
+        "method_ar": (
+            "تقدير مشروط بعد تحقق الكسر والثبات، محسوب من وضوح الاتجاه "
+            "والزخم وتوافق الأطر وجودة البيانات ومخاطر الأخبار؛ وليس احتمال ربح."
+        ),
+    }
+
+
 def technical_analysis(frame: pd.DataFrame, quote: SPXQuote) -> dict:
     """Deterministic SPX levels and scores from provider values only."""
     if frame.empty or len(frame) < 30:

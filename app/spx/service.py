@@ -17,6 +17,7 @@ from app.options.market_clock import (
     spx_options_session,
 )
 from app.spx.engine import (
+    breakout_outlook,
     directional_scenario,
     escape_reason,
     rank_contracts,
@@ -237,6 +238,12 @@ class SPXHunterService:
             )
             return self._save(result)
         news = self._news()
+        news_impact_score = max(
+            [int(item.get("spx_impact_score", 0)) for item in news] or [0]
+        )
+        technical["breakout_outlook"] = breakout_outlook(
+            technical, news_impact_score=news_impact_score
+        )
         direction, scenario, scenario_decision = directional_scenario(technical, news)
         if direction == Direction.NONE or scenario is None:
             result = SPXHunterResult(
@@ -706,6 +713,14 @@ class SPXHunterService:
         technical = self._synthetic_technical(synthetic)
         self._store_synthetic(synthetic)
         news = self._news()
+        news_impact_score = max(
+            [int(item.get("spx_impact_score", 0)) for item in news] or [0]
+        )
+        technical["breakout_outlook"] = breakout_outlook(
+            technical,
+            news_impact_score=news_impact_score,
+            data_quality_score=synthetic.data_quality_score or 0,
+        )
         direction, scenario, scenario_decision = directional_scenario(
             technical, news
         )
