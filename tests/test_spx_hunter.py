@@ -6,6 +6,7 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.db.models import SPXSyntheticObservation
 from app.main import app
 from app.options.market_clock import market_session
 from app.spx.engine import (
@@ -20,6 +21,7 @@ from app.spx.schemas import (
     SPXContract,
     SPXProviderCapabilities,
     SPXQuote,
+    SPXSyntheticValue,
     StrikeMode,
 )
 from app.spx.service import SPXHunterService
@@ -105,6 +107,46 @@ def test_spx_call_and_put_scenarios_are_deterministic():
     assert down["direction"] == "put"
     assert up["targets"][0] > up["entry"]
     assert down["targets"][0] < down["entry"]
+
+
+def test_synthetic_intraday_series_builds_todays_direction(db_session):
+    values = [5500.0, 5500.8, 5501.7, 5502.5, 5503.4]
+    for index, value in enumerate(values):
+        db_session.add(SPXSyntheticObservation(
+            observed_at=NOW - timedelta(minutes=5 - index),
+            forward_value=value,
+            spot_estimate=None,
+            lower_bound=value - .25,
+            upper_bound=value + .25,
+            pairs_used=10,
+            confidence_score=85,
+            data_quality_score=90,
+            expiration="2026-08-05",
+            settlement_type="PM_CASH",
+            source="Alpaca OPRA Synthetic",
+            payload_json={},
+        ))
+    db_session.commit()
+    synthetic = SPXSyntheticValue(
+        synthetic_forward_value=5504.3,
+        lower_bound=5504.0,
+        upper_bound=5504.6,
+        pairs_used=10,
+        expiration_used="2026-08-05",
+        settlement_type="PM_CASH",
+        calculation_timestamp=NOW,
+        confidence_score=85,
+        data_quality_score=90,
+        source="Alpaca OPRA Synthetic",
+        provider_status="ready",
+        status_message_ar="جاهز",
+    )
+    result = SPXHunterService(db_session, settings())._synthetic_technical(synthetic)
+    assert result["sample_size"] == 6
+    assert result["trend_ready"] is True
+    assert result["direction"] == "call"
+    assert result["session_change_points"] == 4.3
+    assert len(result["series"]) == 6
 
 
 def test_conflicting_signals_return_no_trade():
@@ -270,6 +312,9 @@ def test_mobile_shell_has_no_horizontal_scroll_and_modes():
     assert "مؤشر SPX الخارجي" in html
     assert '"symbol": "SP:SPX"' in html
     assert "s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" in html
+    assert "مؤشر اتجاه SPX الضمني اليوم" in html
+    assert 'id="syntheticChart"' in html
+    assert "setInterval(load,15000)" in html
     assert "لا يدخل في حسابات القنص" in html
 
 

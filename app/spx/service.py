@@ -10,6 +10,7 @@ from app.db import repository
 from app.db.models import SPXHuntResult, SPXSyntheticObservation
 from app.news.service import UnifiedNewsService
 from app.options.market_clock import (
+    NEW_YORK,
     RIYADH,
     market_session,
     serialize_market_session,
@@ -62,7 +63,12 @@ class SPXHunterService:
         except Exception:
             return []
 
-    def refresh(self, mode: StrikeMode | str | None = None) -> dict:
+    def refresh(
+        self,
+        mode: StrikeMode | str | None = None,
+        *,
+        allow_ai_review: bool = True,
+    ) -> dict:
         mode = StrikeMode(mode or self.settings.spx_default_strike_mode)
         now = datetime.now(timezone.utc)
         session = market_session(now)
@@ -110,6 +116,7 @@ class SPXHunterService:
                 session=session,
                 mode=mode,
                 now=now,
+                allow_ai_review=allow_ai_review,
             )
         if not capabilities.underlying_available:
             result = SPXHunterResult(
@@ -197,7 +204,7 @@ class SPXHunterService:
                 f"{direction.value.upper()} قريب من السترايك بعد تحقق شرط SPX وإعادة تسعير Bid/Ask."
             )
         ai = None
-        if best:
+        if best and allow_ai_review:
             ai = review_spx(self.db, self.settings, {
                 "symbol": "SPX", "scenario": scenario, "trusted_news": news[:5],
                 "contracts": [item.model_dump(mode="json") for item in ranked[:3]],
@@ -302,21 +309,46 @@ class SPXHunterService:
     def _synthetic_technical(
         self, synthetic: SPXSyntheticValue
     ) -> dict:
+        observed_at = synthetic.calculation_timestamp
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+        eastern = observed_at.astimezone(NEW_YORK)
+        session_start = eastern.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).astimezone(timezone.utc)
         rows = list(
             self.db.scalars(
                 select(SPXSyntheticObservation)
+                .where(
+                    SPXSyntheticObservation.observed_at >= session_start,
+                    SPXSyntheticObservation.expiration == synthetic.expiration_used,
+                    SPXSyntheticObservation.settlement_type == synthetic.settlement_type,
+                    SPXSyntheticObservation.source == synthetic.source,
+                )
                 .order_by(SPXSyntheticObservation.observed_at.desc())
                 .limit(60)
             )
         )
-        values = [
-            float(row.forward_value)
+        observations = [
+            {
+                "time": (
+                    row.observed_at.replace(tzinfo=timezone.utc)
+                    if row.observed_at.tzinfo is None
+                    else row.observed_at.astimezone(timezone.utc)
+                ),
+                "value": float(row.forward_value),
+            }
             for row in reversed(rows)
             if row.forward_value is not None
         ]
         current = float(synthetic.synthetic_forward_value or 0)
-        if not values or abs(values[-1] - current) > 1e-9:
-            values.append(current)
+        if (
+            not observations
+            or abs(observations[-1]["value"] - current) > 1e-9
+            or abs((observed_at - observations[-1]["time"]).total_seconds()) >= 1
+        ):
+            observations.append({"time": observed_at, "value": current})
+        values = [item["value"] for item in observations]
         support = min(values[-20:])
         resistance = max(values[-20:])
         changes = [
@@ -385,6 +417,22 @@ class SPXHunterService:
             "source": SOURCE,
             "is_official_spx": False,
             "sample_size": len(values),
+            "trend_ready": len(values) >= 6,
+            "samples_required": 6,
+            "session_open": round(values[0], 2),
+            "session_change_points": round(current - values[0], 2),
+            "session_change_pct": round(
+                (current / values[0] - 1) * 100, 3
+            ) if values[0] else 0,
+            "sample_span_minutes": round(
+                (observations[-1]["time"] - observations[0]["time"]).total_seconds()
+                / 60,
+                1,
+            ),
+            "series": [
+                {"time": item["time"].isoformat(), "value": round(item["value"], 2)}
+                for item in observations[-60:]
+            ],
             "support": round(support, 2),
             "resistance": round(resistance, 2),
             "expected_move": round(expected_move, 2),
@@ -411,6 +459,28 @@ class SPXHunterService:
             or not synthetic.settlement_type
         ):
             return
+        latest = self.db.scalar(
+            select(SPXSyntheticObservation)
+            .where(
+                SPXSyntheticObservation.expiration == synthetic.expiration_used,
+                SPXSyntheticObservation.settlement_type == synthetic.settlement_type,
+                SPXSyntheticObservation.source == synthetic.source,
+            )
+            .order_by(SPXSyntheticObservation.observed_at.desc())
+            .limit(1)
+        )
+        if latest is not None:
+            latest_at = latest.observed_at
+            if latest_at.tzinfo is None:
+                latest_at = latest_at.replace(tzinfo=timezone.utc)
+            current_at = synthetic.calculation_timestamp
+            if current_at.tzinfo is None:
+                current_at = current_at.replace(tzinfo=timezone.utc)
+            if (
+                current_at.astimezone(timezone.utc)
+                - latest_at.astimezone(timezone.utc)
+            ).total_seconds() < self.settings.spx_observation_min_spacing_seconds:
+                return
         self.db.add(
             SPXSyntheticObservation(
                 observed_at=synthetic.calculation_timestamp,
@@ -437,6 +507,7 @@ class SPXHunterService:
         session,
         mode: StrikeMode,
         now: datetime,
+        allow_ai_review: bool,
     ) -> dict:
         market.update(
             source=SOURCE,
@@ -625,7 +696,7 @@ class SPXHunterService:
             else "لا يوجد عقد مستوفٍ لفلاتر السيولة والـGreeks وحداثة OPRA."
         )
         ai = None
-        if best:
+        if best and allow_ai_review:
             ai = review_spx(
                 self.db,
                 self.settings,

@@ -20,6 +20,7 @@ from app.live.prices import start_price_stream, stop_price_stream
 from app.opportunities.audit_scheduler import start_audit_scheduler, stop_audit_scheduler
 from app.providers.factory import get_market_data_provider
 from app.security.site_lock import SiteLockMiddleware
+from app.spx.scheduler import start_spx_scheduler, stop_spx_scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
 
@@ -46,12 +47,16 @@ async def lifespan(app: FastAPI):
         routes_dashboard._news_executor.submit(routes_dashboard._refresh_news)
     if settings.spx_enabled and settings.alpaca_api_key and not os.environ.get("PYTEST_CURRENT_TEST"):
         routes_spx._executor.submit(routes_spx._refresh, routes_spx.StrikeMode.NEAR)
+        if settings.spx_background_refresh_enabled:
+            start_spx_scheduler()
     streaming = not os.environ.get("PYTEST_CURRENT_TEST") and start_price_stream(settings)
     yield
     if streaming:
         stop_price_stream()
     if started:
         stop_audit_scheduler()
+    if settings.spx_background_refresh_enabled:
+        stop_spx_scheduler()
 
 
 app = FastAPI(

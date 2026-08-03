@@ -135,6 +135,12 @@ services:
         value: "true"
       - key: SPX_AI_REVIEW_ENABLED
         value: "true"
+      - key: SPX_BACKGROUND_REFRESH_ENABLED
+        value: "true"
+      - key: SPX_BACKGROUND_REFRESH_SECONDS
+        value: "60"
+      - key: SPX_OBSERVATION_MIN_SPACING_SECONDS
+        value: "45"
       - key: SPX_UNDERLYING_PROVIDER
         value: synthetic_opra
       - key: SPX_OPTIONS_PROVIDER
