@@ -87,7 +87,8 @@ def test_home_defaults_to_the_owners_day_trading_range():
     from app.main import app
 
     html = TestClient(app).get("/").text
-    assert '<option value="under5" selected>' in html
+    # The wild band leads now: the owner named it and trades that range.
+    assert '<option value="wild" selected>' in html
     assert '<option value="all" selected>' not in html
     for label in ("أقل من 5$", "من 5$ إلى 20$", "من 20$ إلى 100$", "أكثر من 100$", "نطاق مخصص"):
         assert label in html

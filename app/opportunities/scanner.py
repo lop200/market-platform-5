@@ -363,10 +363,15 @@ def _demote_rejected_candidate(row: StockCandidate | None, review) -> None:
     row.accepted = False
     snapshot = dict(row.snapshot_json or {})
     snapshot["stage"] = "analyzed"
+    # reasons_ar is the reviewer's read of the data, which often sounds
+    # positive; printing it beside a rejection reads as a contradiction. A live
+    # scan showed "bullish regime, strong technicals" next to a refusal. Lead
+    # with the verdict and keep its analysis as context.
+    analysis = (review.reasons_ar or [None])[0] or review.analysis_summary_ar
     snapshot["watch_reason"] = (
-        (review.reasons_ar or [None])[0]
-        or review.analysis_summary_ar
-        or "لم تعتمد المراجعة الذكية الدخول"
+        f"لم تعتمد المراجعة الذكية الدخول — {analysis}"
+        if analysis
+        else "لم تعتمد المراجعة الذكية الدخول"
     )
     snapshot["activation_condition"] = (
         (review.warnings_ar or [None])[0] or "انتظار تحسّن المعطيات ثم إعادة المراجعة"

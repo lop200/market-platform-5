@@ -24,7 +24,10 @@ def test_rejected_candidate_keeps_the_reviewers_reason():
     _demote_rejected_candidate(row, _review())
     assert row.accepted is False
     assert row.snapshot_json["stage"] == "analyzed"
-    assert row.snapshot_json["watch_reason"] == "السيولة الليلية لا تكفي لخطة منضبطة"
+    # The verdict leads; the reviewer's read follows as context. A live scan
+    # showed a positive-sounding analysis printed beside a refusal.
+    assert row.snapshot_json["watch_reason"].startswith("لم تعتمد المراجعة الذكية الدخول")
+    assert "السيولة الليلية لا تكفي لخطة منضبطة" in row.snapshot_json["watch_reason"]
     assert row.snapshot_json["price"] == 197.0
     assert row.exclusion_reasons == ["لم تعتمد المراجعة الذكية الدخول"]
 
@@ -35,7 +38,7 @@ def test_rejection_without_reasons_still_explains_itself():
         exclusion_reasons=[], snapshot_json={"stage": "candidate"},
     )
     _demote_rejected_candidate(row, _review(reasons_ar=[], warnings_ar=[]))
-    assert row.snapshot_json["watch_reason"] == "المعطيات غير كافية."
+    assert row.snapshot_json["watch_reason"].startswith("لم تعتمد المراجعة الذكية الدخول")
     assert row.snapshot_json["activation_condition"]
 
 
@@ -58,4 +61,4 @@ def test_rejected_candidate_reaches_the_watchlist(db_session):
     breakdown, watchlist = _scan_breakdown(db_session, run)
     assert breakdown["candidates"] == 0
     assert [item["symbol"] for item in watchlist] == ["NVDA"]
-    assert watchlist[0]["reason"] == "السيولة الليلية لا تكفي لخطة منضبطة"
+    assert watchlist[0]["reason"].startswith("لم تعتمد المراجعة الذكية الدخول")

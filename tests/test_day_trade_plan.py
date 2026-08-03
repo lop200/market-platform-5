@@ -85,3 +85,23 @@ def test_the_weekend_offers_no_window_instead_of_a_twenty_hour_snipe():
     _, _, window, hours = _exit_at(8, 2, 10)
     assert "لا توجد نافذة" in window
     assert hours == 0.05
+
+
+def test_the_wild_band_is_offered_and_labelled_on_the_card():
+    """The owner named this band; a card must carry the label, not just the
+    filter that produced it — filters get changed, saved results outlive them."""
+    from fastapi.testclient import TestClient
+
+    from app.config import Settings
+    from app.main import app
+
+    html = TestClient(app).get("/").text
+    assert 'value="wild"' in html
+    assert "الأسهم المجنونة" in html
+    assert "wild:[0.5,5]" in html
+    assert "wild-flag" in html
+
+    settings = Settings()
+    # The floor is the point: a live scan surfaced stocks at seven cents.
+    assert settings.wild_scan_min_price == 0.50
+    assert settings.wild_scan_max_price == 5.0

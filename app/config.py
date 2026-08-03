@@ -234,6 +234,11 @@ class Settings(BaseSettings):
     # out the same session. Above this the options watchlist is the better
     # ordering; at or below it, price is what decides.
     penny_scan_max_price: float = Field(default=5.0, alias="PENNY_SCAN_MAX_PRICE")
+    # The "wild" band the owner named. The floor is the point of it: a live
+    # night scan surfaced SXTC at $0.067 and MGN at $0.070, where the spread
+    # alone is 5-15% round trip and eats the target before the stock moves.
+    wild_scan_min_price: float = Field(default=0.50, alias="WILD_SCAN_MIN_PRICE")
+    wild_scan_max_price: float = Field(default=5.0, alias="WILD_SCAN_MAX_PRICE")
     scan_universe_limit: int = Field(default=1000, alias="SCAN_UNIVERSE_LIMIT")
     scan_detailed_limit: int = Field(default=10, alias="SCAN_DETAILED_LIMIT")
     scan_symbols: str = Field(
