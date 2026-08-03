@@ -20,7 +20,12 @@ from app.db.models import (
 from app.news.service import UnifiedNewsService
 from app.opportunities.indicators import calculate_indicators
 from app.opportunities.market_regime import classify_market, current_session
-from app.opportunities.probability import as_percent, touch_probability
+from app.opportunities.price_verification import PriceVerification, verify_external_price
+from app.opportunities.probability import (
+    as_percent,
+    intraday_expected_move,
+    touch_probability_from_expected_move,
+)
 from app.options.market_clock import NEW_YORK, RIYADH, _at, _next_trading_day
 from app.opportunities.openai_review import review_candidates
 from app.options.service import analyze_options_after_stock
@@ -163,6 +168,7 @@ def build_opportunity(
     quote_override: Quote | None = None,
     daily_override=None,
     intraday_override=None,
+    verification_override: PriceVerification | None = None,
 ) -> tuple[OpportunityResult | None, list[str], dict]:
     quote = quote_override or provider.get_quote(symbol)
     quality = evaluate_quote(quote, settings)
@@ -173,7 +179,35 @@ def build_opportunity(
         "ask": quote.ask,
         "spread_pct": quote.spread_pct,
         "quote_age_seconds": quote.age_seconds,
+        "provider": quote.provider if quote.provider != "unknown" else provider.provider_name,
+        "feed": quote.feed,
+        "price_source": quote.price_source,
+        "last_trade": quote.last_trade,
+        "last_trade_at": quote.trade_as_of,
+        "bid_at": quote.bid_as_of,
+        "ask_at": quote.ask_as_of,
+        "bar_close": quote.bar_close,
+        "bar_at": quote.bar_as_of,
     }
+    if not quality.accepted:
+        snapshot["data_status"] = "data_conflict" if any("Data Conflict" in item for item in quality.reasons) else "stale_or_invalid"
+        snapshot["watch_reason"] = quality.reasons[0]
+        snapshot["activation_condition"] = "تحديث السعر وBid/Ask وتقلص السبريد ثم إعادة فحص الإشارة"
+        return None, quality.reasons, snapshot
+    verification = verification_override or verify_external_price(symbol, quote, settings)
+    snapshot["external_verification"] = {
+        "status": verification.status,
+        "provider": verification.provider,
+        "price": verification.price,
+        "as_of": verification.as_of.isoformat() if verification.as_of else None,
+        "age_seconds": verification.age_seconds,
+        "divergence_pct": verification.divergence_pct,
+    }
+    if not verification.accepted:
+        snapshot["data_status"] = "data_conflict"
+        snapshot["watch_reason"] = verification.reason_ar
+        snapshot["activation_condition"] = "تطابق السعر مع مصدر مستقل حديث ثم إعادة التحليل"
+        return None, [verification.reason_ar], snapshot
     daily = daily_override if daily_override is not None else provider.get_daily_ohlcv(symbol, 220)
     intraday = (
         intraday_override
@@ -203,17 +237,16 @@ def build_opportunity(
             "صاعد" if (indicators.get("ema9") or 0) > (indicators.get("ema20") or 0)
             else "هابط"
         ),
-        "liquidity": round(float(quote.price) * float(indicators.get("average_volume") or 0), 0),
+        "volume": int(indicators.get("session_volume") or quote.volume or 0),
+        "dollar_volume": round(float(quote.price) * float(indicators.get("session_volume") or 0), 0),
+        "relative_volume": indicators.get("relative_volume"),
+        "bid_ask_spread_pct": quote.spread_pct,
         "volatility": indicators.get("volatility"),
         "support": indicators.get("support"),
         "resistance": indicators.get("resistance"),
         "watch_reason": "لم تكتمل شروط الدخول الفني الحالية",
         "activation_condition": "انتظار تأكيد حجم وشمعة فوق المقاومة أو ارتداد مؤكد من الدعم",
     })
-    if not quality.accepted:
-        snapshot["watch_reason"] = quality.reasons[0]
-        snapshot["activation_condition"] = "تحديث السعر وBid/Ask وتقلص السبريد ثم إعادة فحص الإشارة"
-        return None, quality.reasons, snapshot
     if (indicators.get("average_volume") or 0) < settings.min_avg_daily_volume:
         return None, ["متوسط حجم التداول أقل من الحد المسموح"], snapshot
     if (indicators.get("relative_volume") or 0) < settings.min_relative_volume:
@@ -275,19 +308,35 @@ def build_opportunity(
     rr = risk_reward(entry, stop, target1)
     if rr < settings.min_risk_reward:
         return None, ["العائد إلى المخاطرة أقل من الحد المطلوب"], snapshot
+    target_distance = abs(target1 - entry)
+    spread_to_target_pct = (
+        float(quote.spread or 0) / target_distance * 100 if target_distance > 0 else 100.0
+    )
+    snapshot["spread_to_target_pct"] = round(spread_to_target_pct, 2)
+    if spread_to_target_pct > settings.max_spread_to_target_pct:
+        return None, ["السبريد يلتهم نسبة كبيرة من الهدف المتوقع"], snapshot
     valid_minutes = strategy.valid_minutes
     now = datetime.now(timezone.utc)
     expires = now + timedelta(minutes=valid_minutes)
     exit_at, exit_label, holding_window, hours_left = _session_exit(now)
-    # Volatility is a 5m standard deviation in percent; annualise by ~16 and
-    # convert the remaining session to trading days so the two agree.
-    annual_vol_pct = float(indicators.get("volatility") or 0) * 16
-    target_probability = as_percent(
-        touch_probability(quote.price, target1, annual_vol_pct, hours_left / 6.5)
+    expected_move_pct, annual_vol_pct = intraday_expected_move(
+        intraday,
+        current_price=quote.price,
+        atr=float(indicators.get("atr") or 0),
+        horizon_hours=hours_left,
     )
+    probability = touch_probability_from_expected_move(
+        quote.price, target1, expected_move_pct
+    )
+    target_probability = as_percent(probability) if probability is not None else 0
+    if probability is None or target_probability < settings.min_target_probability_pct:
+        snapshot["target_probability_pct"] = target_probability
+        snapshot["probability_status"] = "unavailable" if probability is None else "zero"
+        return None, ["احتمال بلوغ الهدف صفر أو لا يمكن حسابه من بيانات حديثة"], snapshot
     probability_basis = (
-        f"احتمال بلوغ {target1:.2f} قبل الإغلاق — محسوب من تذبذب السهم "
-        f"({annual_vol_pct:.0f}% سنويًا) و{hours_left:.1f} ساعة متبقية"
+        f"احتمال لمس {target1:.2f} قبل نهاية النافذة — محسوب من عوائد شموع 5 دقائق الحديثة "
+        f"وATR؛ الحركة المتوقعة {expected_move_pct:.2f}% خلال {hours_left:.1f} ساعة "
+        f"(التذبذب السنوي المكافئ {annual_vol_pct:.0f}% للعرض فقط)"
     )
     technical = min(
         100,
@@ -321,11 +370,22 @@ def build_opportunity(
         bid=round(float(quote.bid), 4),
         ask=round(float(quote.ask), 4),
         spread_pct=round(float(quote.spread_pct), 2),
+        volume=int(indicators.get("session_volume") or quote.volume or 0),
+        dollar_volume=round(float(quote.price) * float(indicators.get("session_volume") or 0), 2),
+        relative_volume=round(float(indicators.get("relative_volume") or 0), 3),
         data_source=quote.provider if quote.provider != "unknown" else provider.provider_name,
         data_feed=quote.feed,
         is_delayed=quote.is_delayed,
         quote_timestamp=_quote_time(quote),
         quote_age_seconds=quote.age_seconds,
+        last_trade=round(float(quote.last_trade), 4) if quote.last_trade is not None else None,
+        last_trade_timestamp=datetime.fromisoformat(quote.trade_as_of.replace("Z", "+00:00")) if quote.trade_as_of else None,
+        price_source=quote.price_source,
+        external_price=verification.price,
+        external_provider=verification.provider,
+        external_timestamp=verification.as_of,
+        price_divergence_pct=verification.divergence_pct,
+        data_status="verified" if verification.accepted else verification.status,
         entry_zone=EntryZone(**{
             "from": entry,
             "to": round(
@@ -380,6 +440,12 @@ def build_opportunity(
         max_loss_sar=plan.max_loss_sar,
         capital_used_pct=plan.capital_used_pct,
         estimated_profit_sar=plan.estimated_profit_sar,
+        order_type="limit",
+        market_orders_allowed=False,
+        bracket_required=True,
+        max_risk_usd=round(plan.max_loss_sar / settings.usd_sar_rate, 2),
+        spread_to_target_pct=round(spread_to_target_pct, 2),
+        expected_move_pct=expected_move_pct,
     )
     snapshot["result"] = result.model_dump(mode="json", by_alias=True)
     return result, [], snapshot
@@ -427,6 +493,53 @@ def _demote_rejected_candidate(row: StockCandidate | None, review) -> None:
     )
     row.snapshot_json = snapshot
     row.exclusion_reasons = ["لم تعتمد المراجعة الذكية الدخول"]
+
+
+INVERSE_ETF_GROUPS = {
+    "TQQQ": ("nasdaq", 1),
+    "SQQQ": ("nasdaq", -1),
+    "SOXL": ("semiconductors", 1),
+    "SOXS": ("semiconductors", -1),
+}
+
+
+def resolve_inverse_etf_conflicts(
+    opportunities: list[OpportunityResult],
+    regime: MarketRegime,
+    nasdaq_direction: str | None = None,
+) -> tuple[list[OpportunityResult], list[OpportunityResult]]:
+    """Keep one coherent scenario from each leveraged/inverse ETF pair."""
+    grouped: dict[str, list[OpportunityResult]] = {}
+    passthrough: list[OpportunityResult] = []
+    for item in opportunities:
+        mapping = INVERSE_ETF_GROUPS.get(item.symbol)
+        if mapping is None:
+            passthrough.append(item)
+        else:
+            grouped.setdefault(mapping[0], []).append(item)
+    alternates: list[OpportunityResult] = []
+    for group, rows in grouped.items():
+        desired = (
+            1 if (nasdaq_direction == "bullish" or regime == MarketRegime.BULLISH)
+            else -1 if (nasdaq_direction == "bearish" or regime == MarketRegime.BEARISH)
+            else 0
+        )
+        def alignment(item: OpportunityResult) -> tuple[int, int]:
+            etf_sign = INVERSE_ETF_GROUPS[item.symbol][1]
+            trade_sign = -1 if "breakdown" in item.strategy_id else 1
+            exposure = etf_sign * trade_sign
+            return (1 if desired and exposure == desired else 0, item.overall_score)
+        winner = max(rows, key=alignment)
+        passthrough.append(winner)
+        for row in rows:
+            if row is not winner:
+                row.status = OpportunityStatus.WATCH
+                row.warnings_ar = [
+                    f"سيناريو بديل مشروط بانقلاب اتجاه {group}؛ لا يعتمد مع {winner.symbol} في الدفعة نفسها."
+                ]
+                alternates.append(row)
+    passthrough.sort(key=lambda item: item.overall_score, reverse=True)
+    return passthrough, alternates
 
 
 def scan_market(
@@ -581,6 +694,19 @@ def scan_market(
         if index % 10 == 0:
             db.commit()
     accepted.sort(key=lambda item: item.overall_score, reverse=True)
+    accepted, alternate_etfs = resolve_inverse_etf_conflicts(
+        accepted, regime, str(regime_inputs.get("nasdaq_direction") or "")
+    )
+    for alternate in alternate_etfs:
+        row = candidate_rows.get(alternate.symbol)
+        if row:
+            row.accepted = False
+            snapshot = dict(row.snapshot_json or {})
+            snapshot["stage"] = "analyzed"
+            snapshot["watch_reason"] = alternate.warnings_ar[0]
+            snapshot["activation_condition"] = "إعادة المسح بعد انقلاب اتجاه Nasdaq وتأكيد النظام السوقي"
+            row.snapshot_json = snapshot
+            row.exclusion_reasons = [alternate.warnings_ar[0]]
     finalist_pool = accepted[: settings.max_results]
     review_limit = max(0, min(settings.openai_candidate_limit, 5))
     review_shortlist = finalist_pool[:review_limit]

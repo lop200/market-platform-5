@@ -257,6 +257,8 @@ def rank_contracts(
         if risk > settings.spx_max_risk_score:
             rejected["risk"] += 1; continue
         suitability = _score(delta_score * .25 + strike_score * .25 + spread_score * .2 + liquidity * .2 + theta_score * .1)
+        if suitability < settings.spx_min_contract_quality_score:
+            rejected["quality_below_minimum"] += 1; continue
         target_rows = _premium_scenarios(item, mid, scenario["targets"], underlying)
         premium_stop_conservative = max(0.01, mid * (1 - min(.45, .25 + float(item.iv) * .15)))
         premium_stop_cautious = max(0.01, mid * (1 - min(.30, .16 + float(item.iv) * .08)))
@@ -313,10 +315,11 @@ def escape_reason(
     news: list[dict],
     best: RankedSPXContract | None,
     settings: Settings,
+    options_session_open: bool | None = None,
 ) -> str | None:
     if data_age is None or data_age > settings.spx_max_data_age_seconds:
         return "البيانات قديمة"
-    if not session.options_actionable:
+    if not (session.options_actionable if options_session_open is None else options_session_open):
         return "سوق الخيارات مغلق"
     if technical and technical.get("direction") == "none":
         return "تضارب الفريمات والزخم"

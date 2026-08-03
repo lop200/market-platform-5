@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pandas as pd
+import pytest
 
 from app.config import Settings
 from app.opportunities.scanner import build_opportunity
@@ -47,10 +48,18 @@ class PremarketProvider(FakeProvider):
         return Quote(**{**original.__dict__, "session": "pre_market"})
 
 
+@pytest.fixture(autouse=True)
+def realistic_intraday_move(monkeypatch):
+    monkeypatch.setattr(
+        "app.opportunities.scanner.intraday_expected_move",
+        lambda *args, **kwargs: (20.0, 60.0),
+    )
+
+
 def test_builds_schema_valid_entry_stop_targets(db_session):
     settings = Settings(
         min_avg_daily_volume=100_000, min_relative_volume=1,
-        max_spread_pct=2, news_provider="none",
+        max_spread_pct=2, news_provider="none", price_verification_enabled=False,
     )
     result, reasons, snapshot = build_opportunity(
         db_session, FakeProvider(), settings, "TEST", MarketRegime.BULLISH
@@ -73,6 +82,7 @@ def test_premarket_result_is_kept_and_labeled_separately(db_session):
             min_relative_volume=1,
             max_spread_pct=2,
             news_provider="none",
+            price_verification_enabled=False,
         ),
         "QQQ",
         MarketRegime.BULLISH,
@@ -109,6 +119,7 @@ def test_scanner_builds_a_breakdown_as_a_short_plan(db_session, monkeypatch):
             min_relative_volume=.5,
             max_spread_pct=2,
             news_provider="none",
+            price_verification_enabled=False,
         ),
         "SHORT",
         MarketRegime.BEARISH,
@@ -134,3 +145,26 @@ def test_openai_schema_forbids_unknown_fields():
         pass
     else:
         raise AssertionError("strict schema accepted an unknown field")
+
+
+def test_zero_or_uncomputable_target_probability_never_emits_entry(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.opportunities.scanner.intraday_expected_move",
+        lambda *args, **kwargs: (None, None),
+    )
+    result, reasons, snapshot = build_opportunity(
+        db_session,
+        FakeProvider(),
+        Settings(
+            min_avg_daily_volume=100_000,
+            min_relative_volume=1,
+            max_spread_pct=2,
+            news_provider="none",
+            price_verification_enabled=False,
+        ),
+        "ZERO",
+        MarketRegime.BULLISH,
+    )
+    assert result is None
+    assert snapshot["target_probability_pct"] == 0
+    assert any("احتمال" in reason for reason in reasons)

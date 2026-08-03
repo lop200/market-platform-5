@@ -20,8 +20,9 @@ def test_the_hours_the_owner_actually_trades_are_open():
 
 
 def test_the_gap_between_sessions_is_closed():
-    # 09:20 sits after the global close and before the regular open.
-    assert spx_global_session(ny(7, 30, 9, 20)) is False
+    # Cboe's current GTH window runs through 09:25 ET.
+    assert spx_global_session(ny(7, 30, 9, 20)) is True
+    assert spx_global_session(ny(7, 30, 9, 26)) is False
     # Mid-afternoon belongs to the regular session, not this one.
     assert spx_global_session(ny(7, 30, 14)) is False
     # 20:00 is fifteen minutes early.

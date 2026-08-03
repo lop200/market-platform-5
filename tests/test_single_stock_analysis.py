@@ -74,12 +74,13 @@ class SingleSymbolProvider(MarketDataAdapter):
         return True
 
 
-def test_nvda_analysis_ignores_scanner_price_range_and_remains_complete(db_session):
+def test_nvda_analysis_ignores_scanner_price_range_and_remains_complete(db_session, monkeypatch):
+    monkeypatch.setattr("app.stocks.analysis.intraday_expected_move", lambda *args, **kwargs: (10.0, 55.0))
     provider = SingleSymbolProvider()
     result = analyze_single_stock(
         db_session,
         provider,
-        Settings(news_provider="none"),
+        Settings(news_provider="none", price_verification_enabled=False),
         "NVDA",
     )
     assert result["symbol"] == "NVDA"
@@ -93,9 +94,10 @@ def test_nvda_analysis_ignores_scanner_price_range_and_remains_complete(db_sessi
     assert set(provider.requested) <= {"NVDA", "SPY", "QQQ", "IWM"}
 
 
-def test_single_symbol_result_has_charts_safe_probabilities_and_time_window(db_session):
+def test_single_symbol_result_has_charts_safe_probabilities_and_time_window(db_session, monkeypatch):
+    monkeypatch.setattr("app.stocks.analysis.intraday_expected_move", lambda *args, **kwargs: (10.0, 55.0))
     result = analyze_single_stock(
-        db_session, SingleSymbolProvider(), Settings(news_provider="none"), "NVDA"
+        db_session, SingleSymbolProvider(), Settings(news_provider="none", price_verification_enabled=False), "NVDA"
     )
     assert all(result["charts"][frame] for frame in ("1m", "5m", "15m", "1h", "1d"))
     assert "ليس ضمانًا" in result["probability_disclaimer"]

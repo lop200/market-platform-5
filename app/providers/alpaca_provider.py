@@ -94,8 +94,6 @@ class AlpacaProvider(MarketDataAdapter):
         trade_time = AlpacaProvider._parse_rfc3339(latest_trade.get("t"))
         bar_time = AlpacaProvider._parse_rfc3339(minute_bar.get("t"))
         candidates: list[tuple[pd.Timestamp, float, str]] = []
-        if trade_time is not None and latest_trade.get("p") is not None:
-            candidates.append((trade_time, float(latest_trade["p"]), "latest_trade"))
         if (
             quote_time is not None
             and latest_quote.get("bp") is not None
@@ -108,11 +106,14 @@ class AlpacaProvider(MarketDataAdapter):
                     "latest_quote_mid",
                 )
             )
-        if bar_time is not None and minute_bar.get("c") is not None:
+        elif trade_time is not None and latest_trade.get("p") is not None:
+            candidates.append((trade_time, float(latest_trade["p"]), "latest_trade"))
+        elif bar_time is not None and minute_bar.get("c") is not None:
             candidates.append((bar_time, float(minute_bar["c"]), "latest_minute_bar"))
         if not candidates:
             raise ValueError(f"no overnight snapshot data returned for symbol '{symbol}'")
-        newest_time, price, source = max(candidates, key=lambda item: item[0])
+        newest_time, price, source = candidates[0]
+        price = round(price, 8)
         return Quote(
             symbol=symbol,
             price=price,
@@ -493,15 +494,19 @@ class AlpacaProvider(MarketDataAdapter):
         trade = self._newer(direct_trade, getattr(snapshot, "latest_trade", None))
         bar = self._newer(direct_bar, getattr(snapshot, "minute_bar", None))
         candidates = []
-        if trade is not None:
-            candidates.append((trade.timestamp, float(trade.price), "latest_trade"))
         if q is not None and q.bid_price and q.ask_price:
             candidates.append((q.timestamp, (float(q.bid_price) + float(q.ask_price)) / 2, "latest_quote_mid"))
-        if bar is not None:
+        elif trade is not None:
+            candidates.append((trade.timestamp, float(trade.price), "latest_trade"))
+        elif bar is not None:
             candidates.append((bar.timestamp, float(bar.close), "latest_minute_bar"))
         if not candidates:
             raise ValueError(f"no realtime snapshot data returned for symbol '{symbol}'")
-        newest_timestamp, price, source = max(candidates, key=lambda item: item[0])
+        # A trade, quote midpoint and minute close are different market facts.
+        # The actionable reference is always the current executable midpoint;
+        # the other values remain separate reconciliation inputs.
+        newest_timestamp, price, source = candidates[0]
+        price = round(price, 8)
         return Quote(
             symbol=symbol, price=price,
             bid=float(q.bid_price) if q is not None and q.bid_price else None,

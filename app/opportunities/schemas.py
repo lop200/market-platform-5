@@ -51,11 +51,22 @@ class OpportunityResult(BaseModel):
     bid: float
     ask: float
     spread_pct: float
+    volume: int = 0
+    dollar_volume: float = 0
+    relative_volume: float = 0
     data_source: str
     data_feed: str | None = None
     is_delayed: bool
     quote_timestamp: datetime
     quote_age_seconds: int
+    last_trade: float | None = None
+    last_trade_timestamp: datetime | None = None
+    price_source: str = "unknown"
+    external_price: float | None = None
+    external_provider: str | None = None
+    external_timestamp: datetime | None = None
+    price_divergence_pct: float | None = None
+    data_status: str = "unverified"
     entry_zone: EntryZone
     entry_trigger: str
     stop_loss: float
@@ -95,6 +106,12 @@ class OpportunityResult(BaseModel):
     max_loss_sar: float = 0
     capital_used_pct: float = 0
     estimated_profit_sar: list[float] = Field(default_factory=list)
+    order_type: str = "limit"
+    market_orders_allowed: bool = False
+    bracket_required: bool = True
+    max_risk_usd: float = 0
+    spread_to_target_pct: float = 0
+    expected_move_pct: float | None = None
     options: dict | None = None
 
 

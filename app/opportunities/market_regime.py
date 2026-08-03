@@ -37,7 +37,14 @@ def classify_market(provider: MarketDataAdapter) -> tuple[MarketRegime, dict]:
         except Exception:
             signals[symbol] = None
     if available < 2:
+        signals["nasdaq_direction"] = "unknown"
         return MarketRegime.HIGH_RISK, signals
+    qqq_change = signals.get("QQQ")
+    signals["nasdaq_direction"] = (
+        "bullish" if qqq_change is not None and qqq_change > 0
+        else "bearish" if qqq_change is not None and qqq_change < 0
+        else "neutral"
+    )
     if positive == available:
         return MarketRegime.BULLISH, signals
     if positive == 0:

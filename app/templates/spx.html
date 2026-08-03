@@ -59,7 +59,7 @@
     <div class="grid">
       <section class="card"><h2 class="section-title">الاتجاه والأخبار</h2><div class="levels" id="direction"></div><details><summary>الأخبار المؤثرة الموثوقة</summary><div id="news" class="warnings"></div></details></section>
       <section class="card"><h2 class="section-title">مستويات SPX والدخول المشروط</h2><div class="levels" id="levels"></div><p class="muted" id="trigger">—</p></section>
-      <section class="card">
+      <section class="card" id="contractControls">
         <h2 class="section-title">اختيار القرب من السترايك</h2>
         <div class="mode"><button id="near" data-mode="near">قريب من السترايك<br><small>جودة وسيولة أفضل</small></button><button id="far" data-mode="far">أبعد قليلًا — مخاطرة أعلى<br><small>أرخص ويحتاج حركة أسرع</small></button></div>
         <p class="warning hide" id="farWarning">العقد الأبعد أرخص، لكنه يحتاج حركة أسرع وأقوى.</p>
@@ -103,12 +103,13 @@ function render(d){
   ["مصدر بيانات الأوبشن",m.opra_status],["آخر تسعيرة",fmtTime(m.last_quote)],["عمر البيانات",m.data_age_seconds==null?"—":m.data_age_seconds+" ثانية"]
  ].map(x=>metric(...x)).join("");
  const dc=$("#decision");dc.className="decision card "+(d.decision==="escape"?"escape":d.decision==="conditional_hunt"?"hunt":"wait");dc.innerHTML=`<h2>${dash(d.decision_ar)}</h2><p>${dash(d.reason_ar)}</p><div class="statusline"><span class="badge blue">Paper only</span><span class="badge ${m.contracts_actionable?"green":"yellow"}">${m.contracts_actionable?"العقود قابلة للمراقبة المشروطة":"لا دخول الآن"}</span><span class="badge blue">${mode==="near"?"قريب من السترايك":"أبعد قليلًا"}</span></div>`;
+ const blocked=!m.contracts_actionable;for(const id of ["near","far"])$("#"+id).disabled=blocked;$("#contractControls").classList.toggle("error",blocked);$("#contractControls .section-title").textContent=blocked?"اختيار العقود معطل — البيانات أو الجلسة غير صالحة":"اختيار القرب من السترايك";
  $("#direction").innerHTML=metric("الاتجاه",d.direction==="call"?"صاعد / Call":d.direction==="put"?"هابط / Put":"لا اتجاه واضح","blue")+metric("وضوح الاتجاه",t.direction_clarity_score==null?"—":t.direction_clarity_score+"/100")+metric("قوة الزخم",t.momentum_score==null?"—":t.momentum_score+"/100")+metric("تأثير الخبر",d.news_impact_score+"/100","yellow");
  $("#levels").innerHTML=metric("SPX",t.price,"blue")+metric("الدخول",s.entry,"blue")+metric("الوقف / الإبطال",s.stop,"red")+(s.targets||[]).map((x,i)=>metric(`الهدف ${i+1}`,x,"green")).join("")+metric("المخاطرة إلى العائد",s.risk_reward);
  $("#trigger").textContent=s.trigger||"لا يوجد دخول مشروط قبل اكتمال بيانات SPX والسيناريو.";
  $("#news").innerHTML=(d.news||[]).length?d.news.map(n=>`<div class="warning">${n.headline}<br><small>${n.source_name} — تأثير ${n.spx_impact_score}/100</small></div>`).join(""):'<div class="empty">لا توجد أخبار مؤثرة محفوظة.</div>';
- $("#best").innerHTML=`<h2 class="section-title">أفضل عقد</h2>${renderContract(d.best_contract,true)}`;
- $("#contracts").innerHTML=(d.ranked_contracts||[]).length?d.ranked_contracts.map(c=>`<article class="card contract-mini">${renderContract(c,false)}</article>`).join(""):'<div class="empty">لا توجد عقود حقيقية مستوفية للشروط.</div>';
+ $("#best").innerHTML=blocked?'<h2 class="section-title">الدخول واختيار العقد معطلان</h2><div class="empty">يلزم سعر SPX حديث موثوق، وسلسلة OPRA حديثة، وجميع Greeks والسيولة والجودة المطلوبة.</div>':`<h2 class="section-title">أفضل عقد</h2>${renderContract(d.best_contract,true)}`;
+ $("#contracts").innerHTML=blocked?'<div class="empty">لا تعرض عقود قابلة للتنفيذ في هذه الحالة.</div>':((d.ranked_contracts||[]).length?d.ranked_contracts.map(c=>`<article class="card contract-mini">${renderContract(c,false)}</article>`).join(""):'<div class="empty">لا توجد عقود حقيقية مستوفية للشروط.</div>');
  $("#warnings").innerHTML=[`<div class="warning ${d.decision==="escape"?"error":""}">${d.reason_ar}</div>`,...(d.warnings_ar||[]).map(x=>`<div class="warning">${x}</div>`)].join("");
  $("#provider").innerHTML=metric("المصدر",syn.source||m.source||cap.provider,"blue")+metric("حالة Synthetic",syn.provider_status||"—",syn.provider_status==="ready"?"green":"yellow")+metric("SPX الرسمي",cap.underlying_available?"متاح":"غير متاح")+metric("Option Chain",cap.option_chain_available?"متاح":"غير متاح")+metric("مصدر بيانات الأوبشن",cap.opra_available?"متاح":"غير متاح")+metric("بيانات حساسية العقد",cap.greeks_available?"متاحة":"غير متاحة")+metric("معدل الفائدة",syn.risk_free_rate_used)+metric("مصدر الفائدة",syn.risk_free_rate_source)+metric("Dividend yield",syn.dividend_yield_used)+metric("Spot estimate",syn.spot_estimate_label_ar||"معطل");
  $("#updated").innerHTML=metric("آخر تحليل",fmtTime(d.generated_at))+metric("وضع السترايك",mode)+metric("حالة النتيجة",d.status)+metric("صلاحية القراءة",s.valid_minutes?`${s.valid_minutes} دقائق`:"—");

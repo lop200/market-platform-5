@@ -120,6 +120,10 @@ class RankedOptionContract(BaseModel):
     risk_notes_ar: list[str] = Field(default_factory=list)
     sniper_mode_ar: str | None = None
     budget_fit: bool = True
+    recommended_contracts: int = Field(default=1, ge=0, le=1)
+    order_type: str = "limit"
+    market_orders_allowed: bool = False
+    bracket_required: bool = True
     required_move_pct: float = 0
     time_remaining_minutes: int | None = None
     time_stop_minutes: int | None = None

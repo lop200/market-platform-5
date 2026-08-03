@@ -12,7 +12,7 @@ from app.options.market_clock import (
     NEW_YORK,
     is_early_close,
     nyse_holidays,
-    spx_global_session,
+    spx_options_session,
 )
 from app.spx.schemas import SPXContract, SPXSyntheticValue, SyntheticPairResult
 
@@ -116,8 +116,7 @@ def calculate_synthetic_value(
     # check has to agree with it or the calculator refuses work the caller
     # asked for. SPX trades Cboe's global session as well as the regular one.
     if not (
-        session.options_actionable
-        or (settings.spx_global_trading_hours and spx_global_session(now))
+        spx_options_session(now, allow_global=settings.spx_global_trading_hours)
     ):
         return _empty(
             now,

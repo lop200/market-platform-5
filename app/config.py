@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     spx_min_open_interest: int = Field(default=100, alias="SPX_MIN_OPEN_INTEREST")
     spx_min_volume: int = Field(default=10, alias="SPX_MIN_VOLUME")
     spx_max_risk_score: int = Field(default=70, alias="SPX_MAX_RISK_SCORE")
+    spx_min_contract_quality_score: int = Field(
+        default=70, alias="SPX_MIN_CONTRACT_QUALITY_SCORE"
+    )
     spx_max_data_age_seconds: int = Field(default=15, alias="SPX_MAX_DATA_AGE_SECONDS")
     spx_news_enabled: bool = Field(default=True, alias="SPX_NEWS_ENABLED")
     spx_ai_review_enabled: bool = Field(default=True, alias="SPX_AI_REVIEW_ENABLED")
@@ -230,6 +233,30 @@ class Settings(BaseSettings):
     max_quote_timestamp_skew_seconds: int = Field(default=5, alias="MAX_QUOTE_TIMESTAMP_SKEW_SECONDS")
     max_candle_age_seconds: int = Field(default=180, alias="MAX_CANDLE_AGE_SECONDS")
     max_quote_candle_skew_seconds: int = Field(default=180, alias="MAX_QUOTE_CANDLE_SKEW_SECONDS")
+    max_price_source_divergence_pct: float = Field(
+        default=1.0, alias="MAX_PRICE_SOURCE_DIVERGENCE_PCT"
+    )
+    price_verification_enabled: bool = Field(
+        default=True, alias="PRICE_VERIFICATION_ENABLED"
+    )
+    price_verification_required: bool = Field(
+        default=True, alias="PRICE_VERIFICATION_REQUIRED"
+    )
+    price_verification_max_age_seconds: int = Field(
+        default=120, alias="PRICE_VERIFICATION_MAX_AGE_SECONDS"
+    )
+    price_verification_max_divergence_pct: float = Field(
+        default=1.0, alias="PRICE_VERIFICATION_MAX_DIVERGENCE_PCT"
+    )
+    price_verification_cache_seconds: int = Field(
+        default=15, alias="PRICE_VERIFICATION_CACHE_SECONDS"
+    )
+    min_target_probability_pct: int = Field(
+        default=1, alias="MIN_TARGET_PROBABILITY_PCT"
+    )
+    max_spread_to_target_pct: float = Field(
+        default=25.0, alias="MAX_SPREAD_TO_TARGET_PCT"
+    )
     max_results: int = Field(default=8, alias="MAX_RESULTS")
     # Owner's day-trading focus (2026-08-02): shares up to a few dollars, in and
     # out the same session. Above this the options watchlist is the better

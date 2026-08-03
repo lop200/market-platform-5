@@ -11,6 +11,12 @@ from app.db.models import UserRiskSettings
 from app.news.service import UnifiedNewsService
 from app.opportunities.indicators import calculate_indicators
 from app.opportunities.market_regime import classify_market, current_session
+from app.opportunities.price_verification import verify_external_price
+from app.opportunities.probability import (
+    as_percent,
+    intraday_expected_move,
+    touch_probability_from_expected_move,
+)
 from app.opportunities.risk import position_size, risk_reward
 from app.opportunities.schemas import MarketRegime
 from app.opportunities.strategies import select_strategy
@@ -156,8 +162,10 @@ def _time_estimate(distance_pct: float | None, volatility: float | None, atr_pct
 def _market_session_label(session: str | None = None) -> str:
     if session:
         direct = {
+            "overnight": "تداول ليلي — أسهم فقط",
             "pre_market": "قبل السوق",
             "regular": "السوق مفتوح",
+            "early_close": "جلسة رسمية — إغلاق مبكر",
             "after_hours": "بعد السوق",
             "closed": "السوق مغلق",
         }.get(session)
@@ -302,8 +310,15 @@ def analyze_single_stock(
         market_open = current_session() in {"pre_market", "open", "mid_session", "close"}
         warnings.append("تعذر التحقق المباشر من ساعة السوق")
     quality = evaluate_plan_data(quote, primary, settings, market_open=market_open)
+    verification = (
+        verify_external_price(symbol, quote, settings)
+        if quote is not None
+        else None
+    )
     warnings.extend(quality.warnings)
     warnings.extend(quality.reasons)
+    if verification is not None and not verification.accepted:
+        warnings.append(verification.reason_ar)
     strategy = (
         select_strategy(indicators, price or 0, regime, verified_news=verified_recent_news)
         if indicators and price else None
@@ -357,6 +372,7 @@ def analyze_single_stock(
                 and strategy.strategy_id != "no_trade"
                 and strategy.match_pct >= settings.min_strategy_match_pct
                 and quality.valid_for_plan
+                and (verification is None or verification.accepted)
             ):
                 status = "conditional_entry"
                 status_ar = "دخول مشروط"
@@ -372,10 +388,53 @@ def analyze_single_stock(
         entry_from = entry_to = stop = rr = None
         targets = []
 
+    expected_move_pct = annual_vol_pct = None
+    target_touch_probability = None
+    if status == "conditional_entry" and primary is not None and entry_from and stop and targets:
+        from app.options.market_clock import market_session
+        session = market_session(started)
+        hours_left = max(
+            5 / 60,
+            ((session.session_closes_at - session.new_york_time).total_seconds() / 3600)
+            if session.session_closes_at else 0,
+        )
+        expected_move_pct, annual_vol_pct = intraday_expected_move(
+            primary,
+            current_price=price,
+            atr=float(indicators.get("atr") or 0),
+            horizon_hours=hours_left,
+        )
+        target_touch_probability = touch_probability_from_expected_move(
+            price, targets[0]["price"], expected_move_pct
+        )
+        spread_to_target = float(quote.spread or 0) / max(abs(targets[0]["price"] - entry_from), .01) * 100
+        if (
+            target_touch_probability is None
+            or as_percent(target_touch_probability) < settings.min_target_probability_pct
+            or spread_to_target > settings.max_spread_to_target_pct
+        ):
+            status = "no_trade"
+            status_ar = "لا دخول — احتمال الهدف أو تكلفة السبريد غير صالحين"
+            warnings.append("لا تُعرض خطة عندما يكون احتمال الهدف صفرًا/غير محسوب أو يلتهم السبريد الهدف.")
+            entry_from = entry_to = stop = rr = None
+            targets = []
+
     stop_distance_pct = round(abs(entry_from - stop) / entry_from * 100, 2) if entry_from and stop else None
     target_distance = targets[0]["profit_pct"] if targets else None
     atr_pct = float(indicators.get("atr") or 0) / price * 100 if price else None
-    probabilities = _probabilities(indicators, regime, rr) if status == "conditional_entry" else None
+    probabilities = None
+    if status == "conditional_entry" and target_touch_probability is not None:
+        target2_probability = touch_probability_from_expected_move(price, targets[1]["price"], expected_move_pct)
+        stop_probability = touch_probability_from_expected_move(price, stop, expected_move_pct)
+        probabilities = {
+            "entry": as_percent(touch_probability_from_expected_move(price, entry_from, expected_move_pct) or 0),
+            "target_1": as_percent(target_touch_probability),
+            "target_2": as_percent(target2_probability or 0),
+            "stop": as_percent(stop_probability or 0),
+            "confidence": "تقدير حركة وليس ضمان نجاح",
+            "numeric": True,
+            "basis_ar": f"عوائد 5 دقائق + ATR؛ حركة متوقعة {expected_move_pct:.2f}% وتذبذب سنوي مكافئ {annual_vol_pct:.0f}%.",
+        }
     time_estimate = (
         _time_estimate(target_distance, indicators.get("volatility"), atr_pct)
         if status == "conditional_entry" else None
@@ -441,6 +500,8 @@ def analyze_single_stock(
         data_status = "delayed"
     else:
         data_status = "stale"
+    if verification is not None and not verification.accepted:
+        data_status = "data_conflict"
     result = {
         "symbol": symbol,
         "company_name": profile.get("name") or symbol,
@@ -480,6 +541,12 @@ def analyze_single_stock(
             "provider": quote.provider if quote else provider.provider_name,
             "feed": quote.feed if quote else None,
             "data_status": data_status,
+            "external_provider": verification.provider if verification else None,
+            "external_price": verification.price if verification else None,
+            "external_timestamp": verification.as_of.isoformat() if verification and verification.as_of else None,
+            "external_age_seconds": verification.age_seconds if verification else None,
+            "price_divergence_pct": verification.divergence_pct if verification else None,
+            "verification_status": verification.status if verification else "unavailable",
             "delayed": (quote.is_delayed or quote.age_seconds > settings.max_quote_age_seconds) if quote else True,
             "market_session": _market_session_label(quote.session if quote else None),
         },
@@ -548,9 +615,12 @@ def analyze_single_stock(
             "strengths": [strategy.reason] if strategy and strategy.strategy_id != "no_trade" else [],
             "risks": warnings[:2] + missing[:2],
             "position_size": plan,
+            "order_type": "limit",
+            "market_orders_allowed": False,
+            "bracket_required": True,
         } if status == "conditional_entry" else None),
         "probabilities": probabilities,
-        "probability_disclaimer": "النسب تقديرية مبنية على البيانات الحالية وليست ضمانًا للربح. هذا التقدير ليس ضمانًا.",
+        "probability_disclaimer": "طريقة الحساب: عوائد شموع 5 دقائق الحديثة مع ATR والحركة المتوقعة حتى إغلاق النافذة. التقدير ليس ضمانًا للربح.",
         "time_estimate": time_estimate,
         "scenarios": {
             "bullish": (

@@ -8,12 +8,12 @@ NEW_YORK = ZoneInfo("America/New_York")
 RIYADH = ZoneInfo("Asia/Riyadh")
 
 # Cboe lists SPX index options in a Global Trading Hours session as well as the
-# regular one: 20:15 to 09:15 New York, Sunday evening through Friday morning.
+# regular one: 20:15 to 09:25 New York, Sunday evening through Friday morning.
 # Equity options have no such session, so this applies to the index only. A
 # clock that knows nothing but 09:30-16:00 reports SPX as closed for most of
 # the hours a Gulf-based owner is actually awake to trade it.
 SPX_GLOBAL_OPEN = time(20, 15)
-SPX_GLOBAL_CLOSE = time(9, 15)
+SPX_GLOBAL_CLOSE = time(9, 25)
 
 
 @dataclass(frozen=True)
@@ -123,6 +123,18 @@ def spx_global_session(now: datetime | None = None) -> bool:
     if clock < SPX_GLOBAL_CLOSE:
         return _trading_day(eastern.date())
     return False
+
+
+def spx_options_session(now: datetime | None = None, *, allow_global: bool = True) -> bool:
+    """Cboe SPX session gate, distinct from company-equity options."""
+    eastern = (now or datetime.now(tz=NEW_YORK)).astimezone(NEW_YORK)
+    clock = eastern.time().replace(tzinfo=None)
+    if allow_global and spx_global_session(eastern):
+        return True
+    if not _trading_day(eastern.date()):
+        return False
+    close = time(13, 15) if is_early_close(eastern.date()) else time(16, 15)
+    return time(9, 30) <= clock < close
 
 
 def market_session(now: datetime | None = None) -> MarketSession:

@@ -66,6 +66,8 @@ def evaluate_plan_data(
             reasons.append("السبريد أعلى من الحد المسموح")
         if price_age is None or price_age > settings.max_quote_age_seconds:
             reasons.append("أحدث سعر من Trade/Quote/Bar أقدم من الحد المسموح")
+        if trade_age is None or trade_age > settings.max_quote_age_seconds:
+            reasons.append("آخر صفقة أقدم من الحد المسموح")
         if bid_age is None or ask_age is None or max(bid_age, ask_age) > settings.max_quote_age_seconds:
             reasons.append("Bid/Ask أقدم من الحد المسموح لبناء خطة")
         bid_time = _utc(quote.bid_as_of or quote.as_of)
@@ -79,6 +81,14 @@ def evaluate_plan_data(
             warnings.append("قد لا يسجل IEX صفقة أو شمعة في كل دقيقة خلال pre-market.")
         if quote.is_delayed:
             warnings.append("بيانات المزود متأخرة")
+        references = [
+            value for value in (quote.mid, quote.last_trade, quote.bar_close)
+            if value is not None and value > 0
+        ]
+        if len(references) >= 2:
+            divergence = (max(references) - min(references)) / min(references) * 100
+            if divergence > settings.max_price_source_divergence_pct:
+                reasons.append("Data Conflict — اختلاف داخلي بين Mid وآخر صفقة والشمعة")
 
     candle_age = None
     quote_candle_skew = None

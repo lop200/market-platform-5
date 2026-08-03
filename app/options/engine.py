@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime, timezone
+import math
 
 from app.config import Settings
 from app.opportunities.probability import (
@@ -522,10 +523,14 @@ def rank_option_chain(
         probability_itm = finish_in_the_money(
             underlying, item.strike, iv, horizon_days, is_call=is_call
         )
-        # Settlement is priced by implied volatility; how far the stock actually
-        # travels is better described by its own recent range. The 5m standard
-        # deviation annualises by roughly 16 (sqrt of 252 sessions).
-        hv_pct = float(indicator_values.get("volatility") or 0) * 16 or iv * 100
+        # The stock volatility input is a 5-minute return standard deviation.
+        # There are about 78 such bars per session, so annualisation is
+        # sqrt(78*252), not sqrt(252).
+        hv_pct = (
+            float(indicator_values.get("volatility") or 0)
+            * math.sqrt(78 * 252)
+            or iv * 100
+        )
         probability_touch = touch_probability(
             underlying, item.strike, hv_pct, horizon_days
         )
@@ -607,6 +612,14 @@ def rank_option_chain(
             else item.strike - underlying,
         )
         warnings = []
+        option_target_gain = max(0.01, scenarios[0].estimated_contract_price - entry)
+        spread_to_target_pct = spread / option_target_gain * 100
+        spread_target_ok = spread_to_target_pct <= settings.max_spread_to_target_pct
+        probability_ok = as_percent(probability_touch) > 0 and as_percent(probability_break_even) > 0
+        if not spread_target_ok:
+            warnings.append("الفارق بين سعري الشراء والبيع يلتهم نسبة كبيرة من هدف العقد.")
+        if not probability_ok:
+            warnings.append("احتمال لمس السترايك أو نقطة التعادل صفر؛ العقد غير قابل للدخول.")
         if iv_crush:
             warnings.append("تحذير: التذبذب قد يهبط فجأة بعد إعلان الأرباح القادم.")
         if news_penalty:
@@ -690,6 +703,8 @@ def rank_option_chain(
             and oi >= settings.options_min_open_interest
             and budget_fit
             and theta_affordable
+            and spread_target_ok
+            and probability_ok
             and not (sniper.enabled and first_five_minutes)
             and not near_close_without_momentum
         )
@@ -811,6 +826,10 @@ def rank_option_chain(
                 selection_reason_ar=selection_reason,
                 risk_notes_ar=list(warnings),
                 budget_fit=budget_fit,
+                recommended_contracts=1,
+                order_type="limit",
+                market_orders_allowed=False,
+                bracket_required=True,
                 required_move_pct=required_move_pct,
                 time_remaining_minutes=time_remaining,
                 time_stop_minutes=(

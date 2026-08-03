@@ -87,7 +87,10 @@ def _scan_breakdown(db: Session, run: StockScanRun) -> tuple[dict, list[dict]]:
                 "price": snapshot.get("price"),
                 "change_pct": snapshot.get("change_pct"),
                 "trend": snapshot.get("trend") or "غير مكتمل",
-                "liquidity": snapshot.get("liquidity"),
+                "volume": snapshot.get("volume"),
+                "dollar_volume": snapshot.get("dollar_volume"),
+                "relative_volume": snapshot.get("relative_volume"),
+                "bid_ask_spread_pct": snapshot.get("bid_ask_spread_pct"),
                 "volatility": snapshot.get("volatility"),
                 "support": snapshot.get("support"),
                 "resistance": snapshot.get("resistance"),
@@ -110,7 +113,20 @@ def _scan_breakdown(db: Session, run: StockScanRun) -> tuple[dict, list[dict]]:
 
 
 def _opportunity_payload(row: StockOpportunity) -> dict:
-    return {**row.result_json, "opportunity_id": str(row.id)}
+    payload = {**row.result_json, "opportunity_id": str(row.id)}
+    expiry = row.expires_at
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    if expiry <= datetime.now(timezone.utc) or row.status == OpportunityStatus.EXPIRED.value:
+        payload.update(
+            status=OpportunityStatus.EXPIRED.value,
+            execution_blocked=True,
+            entry_zone=None,
+            stop_loss=None,
+            targets=[],
+            message_ar="منتهية — ممنوع التنفيذ؛ أعد التحليل بسعر حديث",
+        )
+    return payload
 
 
 def build_results_summary(db: Session) -> dict:
@@ -205,6 +221,7 @@ def refresh_opportunity(opportunity_id: str, db: Session = Depends(get_db)) -> S
 
 @router.get("/scans/{run_id}")
 def scan_status(run_id: str, db: Session = Depends(get_db)) -> dict:
+    expire_old_opportunities(db)
     try:
         run_uuid = uuid.UUID(run_id)
     except ValueError:
@@ -295,8 +312,17 @@ def get_risk_settings(db: Session = Depends(get_db)) -> dict:
         db.refresh(row)
     return {
         "capital_sar": float(row.capital_sar), "max_risk_pct": float(row.max_risk_pct),
+        "account_balance_usd": round(float(row.capital_sar) / settings.usd_sar_rate, 2),
+        "max_risk_usd": round(
+            float(row.capital_sar) * float(row.max_risk_pct) / 100 / settings.usd_sar_rate,
+            2,
+        ),
         "max_open_positions": row.max_open_positions,
         "daily_loss_limit_pct": float(row.daily_loss_limit_pct), "currency": row.currency,
+        "order_type": "limit",
+        "market_orders_allowed": False,
+        "bracket_required": True,
+        "max_option_contracts": 1,
     }
 
 

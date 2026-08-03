@@ -54,7 +54,7 @@ def test_snapshot_members_can_be_newer_than_direct_responses():
     )
 
     assert result.price == 181.42
-    assert result.price_source == "latest_trade"
+    assert result.price_source == "latest_quote_mid"
     assert result.trade_as_of == now.isoformat()
 
 
@@ -92,7 +92,7 @@ def test_batch_quotes_fetches_quote_trade_bar_and_snapshot():
 
     assert provider._data_client.calls == ["quote", "trade", "bar", "snapshot"]
     assert results["NVDA"].price == 181.42
-    assert results["NVDA"].price_source == "latest_trade"
+    assert results["NVDA"].price_source == "latest_quote_mid"
 
 
 def test_session_uses_new_york_clock_with_utc_input():

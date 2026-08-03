@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import math
 
+import pandas as pd
+
 TRADING_DAYS_PER_YEAR = 252
 CALENDAR_DAYS_PER_YEAR = 365
 # A 0DTE contract can have minutes left. Five minutes is the numerical floor
@@ -54,6 +56,51 @@ def touch_probability(
     if sigma_horizon <= 0:
         return 0.0
     z = abs(math.log(level_price / current_price)) / sigma_horizon
+    return max(0.0, min(1.0, 2 * (1 - standard_normal_cdf(z))))
+
+
+def intraday_expected_move(
+    intraday: pd.DataFrame,
+    *,
+    current_price: float,
+    atr: float,
+    horizon_hours: float,
+    bar_minutes: int = 5,
+) -> tuple[float | None, float | None]:
+    """Return expected move % and equivalent annual volatility.
+
+    The estimate is built from recent intraday log returns and the intraday ATR,
+    scaled to the remaining number of bars. It intentionally does not reuse a
+    pre-market price with a daily/annual volatility placeholder.
+    """
+    if current_price <= 0 or intraday is None or len(intraday) < 20:
+        return None, None
+    closes = intraday["close"].astype(float).tail(120)
+    returns = closes.apply(math.log).diff().dropna().tail(78)
+    realized_per_bar = float(returns.std()) if len(returns) >= 19 else 0.0
+    if not math.isfinite(realized_per_bar) or realized_per_bar <= 0:
+        return None, None
+    bars = max(1.0, horizon_hours * 60 / bar_minutes)
+    realized_move_pct = realized_per_bar * math.sqrt(bars) * 100
+    atr_move_pct = (
+        max(0.0, float(atr)) / current_price * math.sqrt(max(1.0, bars / 14)) * 100
+    )
+    expected_move_pct = max(realized_move_pct, atr_move_pct)
+    annualized_pct = realized_per_bar * math.sqrt(78 * TRADING_DAYS_PER_YEAR) * 100
+    if not all(math.isfinite(value) and value > 0 for value in (expected_move_pct, annualized_pct)):
+        return None, None
+    return round(expected_move_pct, 4), round(annualized_pct, 4)
+
+
+def touch_probability_from_expected_move(
+    current_price: float, level_price: float, expected_move_pct: float | None
+) -> float | None:
+    if current_price <= 0 or level_price <= 0 or not expected_move_pct or expected_move_pct <= 0:
+        return None
+    if current_price == level_price:
+        return 1.0
+    sigma = expected_move_pct / 100
+    z = abs(math.log(level_price / current_price)) / sigma
     return max(0.0, min(1.0, 2 * (1 - standard_normal_cdf(z))))
 
 

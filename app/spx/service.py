@@ -13,7 +13,7 @@ from app.options.market_clock import (
     RIYADH,
     market_session,
     serialize_market_session,
-    spx_global_session,
+    spx_options_session,
 )
 from app.spx.engine import (
     directional_scenario,
@@ -177,18 +177,17 @@ class SPXHunterService:
             )
         except Exception as exc:
             ranked, rejected = [], {f"provider_{type(exc).__name__}": 1}
-        best = ranked[0] if ranked else None
+        session_ok = spx_options_session(
+            now, allow_global=self.settings.spx_global_trading_hours
+        )
+        ranked = [item.model_copy(update={"actionable": session_ok}) for item in ranked]
+        best = ranked[0] if ranked and session_ok else None
         escape = escape_reason(
             technical=technical, session=session, data_age=market["data_age_seconds"],
             news=news, best=best, settings=self.settings,
+            options_session_open=session_ok,
         )
-        market["contracts_actionable"] = bool(
-            best
-            and (
-                session.options_actionable
-                or (self.settings.spx_global_trading_hours and spx_global_session())
-            )
-        )
+        market["contracts_actionable"] = bool(best and best.actionable)
         if escape:
             decision, decision_ar, reason = "escape", "اهرب الآن", escape
         elif not best:
@@ -215,7 +214,7 @@ class SPXHunterService:
             news_impact_score=max([int(item.get("spx_impact_score", 0)) for item in news] or [0]),
             direction=direction, scenario=scenario, best_contract=best,
             ranked_contracts=ranked, rejected_contracts=rejected, ai_review=ai,
-            refresh_required=not session.options_actionable,
+            refresh_required=not session_ok,
             warnings_ar=[
                 "Paper Trading ومراقبة فقط — لا توجد أوامر حقيقية.",
                 "دخول مشروط، وليس سعرًا مضمونًا.",
@@ -226,7 +225,7 @@ class SPXHunterService:
                     if self.settings.spx_allow_0dte else []
                 ),
                 *([] if mode == StrikeMode.NEAR else ["العقد الأبعد أرخص، لكنه يحتاج حركة أسرع وأقوى."]),
-                *([] if session.options_actionable else ["قراءة للمراقبة فقط — أعد تسعير العقد بعد الافتتاح."]),
+                *([] if session_ok else ["قراءة للمراقبة فقط — أعد تسعير العقد بعد افتتاح جلسة SPX."]),
             ],
         )
         return self._save(result)
@@ -461,8 +460,8 @@ class SPXHunterService:
         # SPX also trades Cboe's global session, so "not the regular session"
         # is not the same as closed. Ask the provider and let the freshness of
         # what comes back decide, rather than refusing before the question.
-        spx_open = session.options_actionable or (
-            self.settings.spx_global_trading_hours and spx_global_session(now)
+        spx_open = spx_options_session(
+            now, allow_global=self.settings.spx_global_trading_hours
         )
         if not spx_open:
             # Only promise a saved reading when one survived. Offering "the
@@ -600,8 +599,23 @@ class SPXHunterService:
             session=session,
             now=now,
         )
-        best = ranked[0] if ranked else None
-        market["contracts_actionable"] = bool(best)
+        synthetic_ok = bool(
+            synthetic.provider_status == "ready"
+            and synthetic.synthetic_forward_value is not None
+            and synthetic.expiration_used
+            and synthetic.settlement_type
+            and synthetic.pairs_used >= self.settings.spx_synthetic_min_pairs
+            and synthetic.data_quality_score >= self.settings.spx_synthetic_min_data_quality_score
+            and synthetic.confidence_score >= self.settings.spx_synthetic_min_confidence_score
+            and synthetic.median_quote_age_seconds is not None
+            and synthetic.median_quote_age_seconds <= self.settings.spx_synthetic_max_quote_age_seconds
+        )
+        session_ok = spx_options_session(
+            now, allow_global=self.settings.spx_global_trading_hours
+        )
+        ranked = [item.model_copy(update={"actionable": synthetic_ok and session_ok}) for item in ranked]
+        best = ranked[0] if ranked and synthetic_ok and session_ok else None
+        market["contracts_actionable"] = bool(best and best.actionable)
         market["monitoring_only"] = not bool(best)
         decision = "conditional_hunt" if best else "no_trade"
         decision_ar = "قنص مشروط" if best else "لا صفقة"
@@ -702,6 +716,28 @@ class SPXHunterService:
         mode = StrikeMode(mode or self.settings.spx_default_strike_mode)
         cached = repository.cache_get_any(self.db, f"{CACHE_PREFIX}:{mode.value}")
         if cached:
+            generated = datetime.fromisoformat(str(cached.get("generated_at")).replace("Z", "+00:00"))
+            age = max(0, int((datetime.now(timezone.utc) - generated).total_seconds()))
+            market = dict(cached.get("market") or {})
+            data_age = market.get("data_age_seconds")
+            effective_age = age + int(data_age or 0)
+            if effective_age > self.settings.spx_max_data_age_seconds:
+                market.update(
+                    contracts_actionable=False,
+                    monitoring_only=True,
+                    data_age_seconds=effective_age,
+                )
+                cached = {
+                    **cached,
+                    "status": "stale",
+                    "decision": "escape",
+                    "decision_ar": "اهرب الآن",
+                    "reason_ar": "البيانات المخزنة تجاوزت حد الحداثة — ممنوع الدخول",
+                    "market": market,
+                    "best_contract": None,
+                    "ranked_contracts": [],
+                    "refresh_required": True,
+                }
             return cached
         now = datetime.now(timezone.utc)
         session = market_session(now)
