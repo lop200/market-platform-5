@@ -26,6 +26,23 @@ class PriceVerification:
     divergence_pct: float | None = None
     reason_ar: str = ""
 
+    @property
+    def data_status(self) -> str:
+        """Return a UI status that does not mislabel verification outages.
+
+        ``data_conflict`` is reserved for two fresh observations whose prices
+        genuinely disagree.  A stale or unavailable independent observation
+        still blocks entry when verification is required, but it is a data
+        availability problem rather than evidence of conflicting prices.
+        """
+        if self.accepted:
+            return "verified"
+        return {
+            "data_conflict": "data_conflict",
+            "stale": "external_stale",
+            "unavailable": "external_unavailable",
+        }.get(self.status, "external_unverified")
+
 
 def _age_seconds(value: datetime) -> int:
     if value.tzinfo is None:

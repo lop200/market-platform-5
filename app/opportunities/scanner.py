@@ -204,9 +204,15 @@ def build_opportunity(
         "divergence_pct": verification.divergence_pct,
     }
     if not verification.accepted:
-        snapshot["data_status"] = "data_conflict"
+        snapshot["data_status"] = verification.data_status
         snapshot["watch_reason"] = verification.reason_ar
-        snapshot["activation_condition"] = "تطابق السعر مع مصدر مستقل حديث ثم إعادة التحليل"
+        snapshot["activation_condition"] = (
+            "وصول سعر حديث من مصدر التحقق الخارجي ثم إعادة التحليل"
+            if verification.status == "stale"
+            else "استعادة مصدر التحقق الخارجي ثم إعادة التحليل"
+            if verification.status == "unavailable"
+            else "تطابق السعر مع مصدر مستقل حديث ثم إعادة التحليل"
+        )
         return None, [verification.reason_ar], snapshot
     daily = daily_override if daily_override is not None else provider.get_daily_ohlcv(symbol, 220)
     intraday = (

@@ -501,7 +501,7 @@ def analyze_single_stock(
     else:
         data_status = "stale"
     if verification is not None and not verification.accepted:
-        data_status = "data_conflict"
+        data_status = verification.data_status
     result = {
         "symbol": symbol,
         "company_name": profile.get("name") or symbol,
