@@ -159,9 +159,9 @@ def review_single_analysis(db: Session, settings: Settings, analysis: dict) -> d
             for item in sorted(
                 [
                     item for item in analysis.get("news", [])
-                    if item.get("official") or item.get("reliability_score", 0) >= 70
+                    if item.get("official") or (item.get("reliability_score") or 0) >= 70
                 ],
-                key=lambda item: item.get("impact_score", 0),
+                key=lambda item: item.get("impact_score") or -1,
                 reverse=True,
             )[:5]
         ],

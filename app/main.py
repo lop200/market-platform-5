@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +25,25 @@ from app.security.site_lock import SiteLockMiddleware
 from app.spx.scheduler import start_spx_scheduler, stop_spx_scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
+
+APP_VERSION = "2.0.0"
+BUILD_TIME = os.environ.get("BUILD_TIME") or datetime.now(timezone.utc).isoformat()
+
+
+def _git_sha() -> str | None:
+    deployed = os.environ.get("RENDER_GIT_COMMIT")
+    if deployed:
+        return deployed
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
 
 
 @asynccontextmanager
@@ -62,7 +83,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="منصة تحليل الأسهم الأمريكية",
     description="تحليل مشروط للأسهم الأمريكية، دون تنفيذ تداول آلي أو ضمان للربح.",
-    version="2.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 app.add_middleware(SiteLockMiddleware)
@@ -108,4 +129,15 @@ def health() -> dict:
         "ai_provider": "openai",
         "openai_configured": bool(settings.openai_api_key),
         "deployed_commit_sha": os.environ.get("RENDER_GIT_COMMIT"),
+    }
+
+
+@app.get("/health/version")
+def health_version() -> dict:
+    settings = get_settings()
+    return {
+        "git_sha": _git_sha(),
+        "build_time": BUILD_TIME,
+        "app_version": APP_VERSION,
+        "environment": settings.app_env,
     }

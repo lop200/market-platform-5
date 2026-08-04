@@ -27,6 +27,8 @@ EVENT_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("employment", ("payrolls", "unemployment", "jobs report", "employment")),
     ("interest_rates", ("interest rate", "rate cut", "rate hike", "treasury yield")),
     ("geopolitical", ("war", "sanctions", "geopolitical", "military strike")),
+    ("geopolitical", ("invasion", "ceasefire", "armed conflict", "export controls", "export restrictions", "tariff")),
+    ("technology", ("artificial intelligence", "ai chip", "semiconductor", "data center", "cloud computing", "cybersecurity")),
     ("product_launch", ("product launch", "launches", "unveils")),
     ("management_change", ("chief executive", "ceo resign", "cfo resign", "appoints ceo")),
     ("rumor", ("rumor", "unconfirmed", "reportedly", "sources say")),
@@ -56,7 +58,9 @@ def classify_event(text: str, *, filing_form: str | None = None) -> str:
     return "other"
 
 
-def score_event(event_type: str, *, official: bool, source_type: str) -> tuple[str, int, int, list[str]]:
+def score_event(
+    event_type: str, *, official: bool, source_type: str, text: str = ""
+) -> tuple[str, int | None, int | None, list[str], str]:
     negative = {
         "offering", "dilution", "atm", "reverse_split", "halt", "lawsuit",
         "analyst_downgrade", "insider_sell",
@@ -68,25 +72,40 @@ def score_event(event_type: str, *, official: bool, source_type: str) -> tuple[s
         "reverse_split": 86, "fed": 90, "inflation": 88, "employment": 82,
         "interest_rates": 90, "earnings": 85, "guidance": 85,
         "lawsuit": 75, "management_change": 70, "rumor": 65,
-    }.get(event_type, 55)
+        "geopolitical": 80, "technology": 62, "company_specific": 58,
+        "analyst_upgrade": 65, "analyst_downgrade": 65, "product_launch": 62,
+        "merger": 78, "acquisition": 76, "sec_filing": 60,
+    }.get(event_type)
+    if base is None:
+        return sentiment, None, None, [], "لم تُكتشف إشارة قابلة للتصنيف؛ لم تُنشأ درجة افتراضية."
+    normalized = normalize_headline(text)
+    severity_hits = sum(
+        phrase in normalized
+        for phrase in ("material", "unexpected", "emergency", "record", "cuts", "raises", "major")
+    )
+    base += min(6, severity_hits * 2)
     impact = min(100, base + (5 if official else -10))
     urgency = min(100, impact + (5 if event_type in HIGH_RISK else 0))
     flags = [event_type] if event_type in HIGH_RISK | {"lawsuit", "rumor", "guidance"} else []
     if source_type == "x" and not official:
         flags.append("unconfirmed")
-    return sentiment, impact, urgency, flags
+    reason = (
+        f"تصنيف {event_type} مع {severity_hits} إشارة شدة؛ "
+        + ("المصدر رسمي." if official else "المصدر غير رسمي، فطُبق خصم تحقق.")
+    )
+    return sentiment, impact, urgency, flags, reason
 
 
 def apply_safety(event: NewsEvent, *, analysis_direction: str | None = None, analysis_issued_at=None) -> NewsEvent:
     risky_official = event.is_official and (
         event.event_type in HIGH_RISK
-        or (event.event_type == "lawsuit" and event.impact_score >= 80)
+        or (event.event_type == "lawsuit" and (event.impact_score or 0) >= 80)
     )
     event.prevent_entry = risky_official
-    event.raise_risk = event.impact_score >= 70 or event.event_type in {"rumor", "guidance"}
+    event.raise_risk = (event.impact_score or 0) >= 70 or event.event_type in {"rumor", "guidance"}
     if analysis_issued_at is not None:
         event.invalidates_previous_analysis = (
-            event.published_at > analysis_issued_at and event.impact_score >= 75
+            event.published_at > analysis_issued_at and (event.impact_score or 0) >= 75
         )
     if analysis_direction:
         bullish = any(token in analysis_direction.lower() for token in ("bull", "صاعد"))
@@ -103,7 +122,9 @@ def apply_safety(event: NewsEvent, *, analysis_direction: str | None = None, ana
         if event.raise_risk
         else "يُستخدم كسياق مساعد فقط مع التحليل الفني والسيولة."
     )
-    if event.reliability_score < 60 or event.event_type == "rumor":
+    if event.reliability_score is None:
+        event.status_message_ar = "غير مصنف — لا توجد درجة موثوقية قابلة للتبرير"
+    elif event.reliability_score < 60 or event.event_type == "rumor":
         event.status_message_ar = "خبر غير مؤكد — لا يعتمد عليه للتنفيذ"
     elif event.conflict_warning:
         event.status_message_ar = "مصادر متعارضة — انتظر التأكيد"
@@ -113,7 +134,7 @@ def apply_safety(event: NewsEvent, *, analysis_direction: str | None = None, ana
 
 
 def deduplicate(events: list[NewsEvent], *, window_seconds: int = 10_800) -> list[NewsEvent]:
-    ranked = sorted(events, key=lambda x: (x.reliability_score, x.is_official, -x.age_seconds), reverse=True)
+    ranked = sorted(events, key=lambda x: (x.reliability_score or -1, x.is_official, -x.age_seconds), reverse=True)
     kept: list[NewsEvent] = []
     for event in ranked:
         duplicate = None
@@ -138,4 +159,4 @@ def deduplicate(events: list[NewsEvent], *, window_seconds: int = 10_800) -> lis
                 duplicate.status_message_ar = "مصادر متعارضة — انتظر التأكيد"
             continue
         kept.append(event)
-    return sorted(kept, key=lambda x: (x.published_at, x.impact_score), reverse=True)
+    return sorted(kept, key=lambda x: (x.published_at, x.impact_score or -1), reverse=True)

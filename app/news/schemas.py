@@ -23,9 +23,13 @@ class NewsEvent(BaseModel):
     market_scope: str = "company"
     event_type: str = "other"
     sentiment: str = "neutral"
-    impact_score: int = 0
-    reliability_score: int = 0
-    urgency_score: int = 0
+    impact_score: int | None = None
+    reliability_score: int | None = None
+    urgency_score: int | None = None
+    score_status: str = "unscored"
+    impact_reason_ar: str = ""
+    reliability_reason_ar: str = ""
+    entity_match_reason: str = ""
     is_official: bool = False
     is_duplicate: bool = False
     language: str = "en"

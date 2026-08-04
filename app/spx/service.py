@@ -94,6 +94,15 @@ def _unavailable_capability(message: str) -> SPXProviderCapabilities:
     )
 
 
+def spx_min_dte(settings: Settings) -> int:
+    """Apply the documented SPX expiry flags without silently skipping 1DTE."""
+    if settings.spx_allow_0dte:
+        return 0
+    if settings.spx_allow_1dte:
+        return 1
+    return 2
+
+
 class SPXHunterService:
     def __init__(self, db: Session, settings: Settings, provider=None):
         self.db = db
@@ -102,7 +111,6 @@ class SPXHunterService:
 
     def _provider(self):
         return self.provider or AlpacaSPXProvider(self.settings)
-
     def _news(self) -> list[dict]:
         if not self.settings.spx_news_enabled:
             return []
@@ -159,6 +167,7 @@ class SPXHunterService:
             "realtime": False,
             "contracts_actionable": False,
             "monitoring_only": True,
+            "data_state": "NO_DATA",
         })
         if not self.settings.spx_enabled:
             result = SPXHunterResult(
@@ -220,8 +229,10 @@ class SPXHunterService:
             })
             if age > self.settings.spx_max_data_age_seconds:
                 raise StaleSPXData
+            market["data_state"] = "LIVE"
             technical = technical_analysis(history, quote)
         except StaleSPXData:
+            market["data_state"] = "STALE"
             result = SPXHunterResult(
                 generated_at=now, status="stale", decision="escape",
                 decision_ar="اهرب الآن", reason_ar="البيانات قديمة",
@@ -257,7 +268,7 @@ class SPXHunterService:
             return self._save(result)
         try:
             contracts = provider.get_chain(
-                min_dte=0 if self.settings.spx_allow_0dte else 2,
+                min_dte=spx_min_dte(self.settings),
                 max_dte=21,
                 underlying_price=quote.price,
             )
@@ -664,13 +675,7 @@ class SPXHunterService:
             )
         try:
             contracts = provider.get_synthetic_chain(
-                min_dte=(
-                    0
-                    if self.settings.spx_allow_0dte
-                    else 1
-                    if self.settings.spx_allow_1dte
-                    else 2
-                ),
+                min_dte=spx_min_dte(self.settings),
                 max_dte=21,
             )
             synthetic = calculate_synthetic_value(
@@ -701,6 +706,14 @@ class SPXHunterService:
             last_quote=synthetic.calculation_timestamp.isoformat(),
             data_age_seconds=synthetic.median_quote_age_seconds,
             realtime=synthetic.provider_status == "ready",
+            data_state=(
+                "LIVE" if synthetic.provider_status == "ready"
+                else "STALE" if synthetic.provider_status == "stale"
+                else "NO_DATA" if synthetic.provider_status in {
+                    "unavailable", "opra_unavailable"
+                }
+                else "BLOCKED"
+            ),
         )
         if synthetic.provider_status != "ready":
             return self._synthetic_failure(

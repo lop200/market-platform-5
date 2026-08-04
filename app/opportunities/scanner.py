@@ -36,6 +36,40 @@ from app.opportunities.strategies import select_strategy
 from app.opportunities.universe import select_scan_universe
 from app.providers.base import MarketDataAdapter, Quote
 from app.providers.factory import get_option_data_provider
+from app.markets.volume import resolve_volume_metrics
+
+
+def _volume_metrics(quote: Quote, indicators: dict | None = None) -> tuple[int, float, str]:
+    return resolve_volume_metrics(quote, indicators)
+
+
+def _trace_candidate_score(snapshot: dict) -> tuple[int, dict]:
+    indicators = snapshot.get("indicators") or {}
+    price = float(snapshot.get("price") or 0)
+    volume = int(snapshot.get("volume") or 0)
+    dollar_volume = float(snapshot.get("dollar_volume") or price * volume)
+    relative_volume = float(snapshot.get("relative_volume") or indicators.get("relative_volume") or 0)
+    change_pct = float(snapshot.get("change_pct") or 0)
+    components = {
+        "data_quality": 15 if snapshot.get("data_state") in {"LIVE", "VALIDATION_WARNING"} else 0,
+        "liquidity": min(25, round(max(0.0, math.log10(max(dollar_volume, 1)) - 3) / 5 * 25)),
+        "relative_volume": min(20, round(min(relative_volume, 3) / 3 * 20)),
+        "momentum": min(20, round(abs(change_pct) / 5 * 20)),
+        "trend": 10 if snapshot.get("trend") in {"صاعد", "هابط"} else 0,
+        "levels": 10 if snapshot.get("support") and snapshot.get("resistance") else 0,
+    }
+    raw_total = sum(components.values())
+    score = round(raw_total * 59 / 100)
+    return score, {
+        "inputs": {
+            "price": price, "volume": volume, "dollar_volume": dollar_volume,
+            "relative_volume": relative_volume, "change_pct": change_pct,
+            "volume_source": snapshot.get("volume_source"),
+        },
+        "components": components,
+        "raw_total": raw_total,
+        "total": score,
+    }
 
 
 def _fresh_for_scan(quote: Quote, settings: Settings) -> bool:
@@ -172,6 +206,7 @@ def build_opportunity(
 ) -> tuple[OpportunityResult | None, list[str], dict]:
     quote = quote_override or provider.get_quote(symbol)
     quality = evaluate_quote(quote, settings)
+    initial_volume, initial_dollar_volume, initial_volume_source = _volume_metrics(quote)
     snapshot: dict = {
         "symbol": symbol,
         "price": quote.price,
@@ -188,6 +223,10 @@ def build_opportunity(
         "ask_at": quote.ask_as_of,
         "bar_close": quote.bar_close,
         "bar_at": quote.bar_as_of,
+        "data_state": "LIVE" if quality.accepted else "BLOCKED",
+        "volume": initial_volume,
+        "dollar_volume": initial_dollar_volume,
+        "volume_source": initial_volume_source,
     }
     if not quality.accepted:
         snapshot["data_status"] = "data_conflict" if any("Data Conflict" in item for item in quality.reasons) else "stale_or_invalid"
@@ -202,7 +241,23 @@ def build_opportunity(
         "as_of": verification.as_of.isoformat() if verification.as_of else None,
         "age_seconds": verification.age_seconds,
         "divergence_pct": verification.divergence_pct,
+        "reason_ar": verification.reason_ar,
+        "primary": {
+            "provider": snapshot["provider"],
+            "feed": quote.feed,
+            "age_seconds": quote.age_seconds,
+            "fresh": quality.accepted,
+        },
+        "decision": (
+            "alpaca_sip_primary_finnhub_ignored"
+            if verification.status == "validation_warning"
+            else "providers_consistent" if verification.accepted else "blocked"
+        ),
     }
+    snapshot["data_state"] = (
+        "VALIDATION_WARNING" if verification.status == "validation_warning"
+        else "LIVE" if verification.accepted else "BLOCKED"
+    )
     if not verification.accepted:
         snapshot["data_status"] = verification.data_status
         snapshot["watch_reason"] = verification.reason_ar
@@ -236,6 +291,7 @@ def build_opportunity(
         )
     snapshot["indicators"] = indicators
     previous_close = float(daily["close"].astype(float).iloc[-2]) if len(daily) >= 2 else quote.price
+    volume, dollar_volume, volume_source = _volume_metrics(quote, indicators)
     snapshot.update({
         "stage": "analyzed",
         "change_pct": round((quote.price / previous_close - 1) * 100, 2) if previous_close else 0,
@@ -243,8 +299,9 @@ def build_opportunity(
             "صاعد" if (indicators.get("ema9") or 0) > (indicators.get("ema20") or 0)
             else "هابط"
         ),
-        "volume": int(indicators.get("session_volume") or quote.volume or 0),
-        "dollar_volume": round(float(quote.price) * float(indicators.get("session_volume") or 0), 0),
+        "volume": volume,
+        "dollar_volume": dollar_volume,
+        "volume_source": volume_source,
         "relative_volume": indicators.get("relative_volume"),
         "bid_ask_spread_pct": quote.spread_pct,
         "volatility": indicators.get("volatility"),
@@ -376,8 +433,8 @@ def build_opportunity(
         bid=round(float(quote.bid), 4),
         ask=round(float(quote.ask), 4),
         spread_pct=round(float(quote.spread_pct), 2),
-        volume=int(indicators.get("session_volume") or quote.volume or 0),
-        dollar_volume=round(float(quote.price) * float(indicators.get("session_volume") or 0), 2),
+        volume=volume,
+        dollar_volume=dollar_volume,
         relative_volume=round(float(indicators.get("relative_volume") or 0), 3),
         data_source=quote.provider if quote.provider != "unknown" else provider.provider_name,
         data_feed=quote.feed,
@@ -391,7 +448,7 @@ def build_opportunity(
         external_provider=verification.provider,
         external_timestamp=verification.as_of,
         price_divergence_pct=verification.divergence_pct,
-        data_status="verified" if verification.accepted else verification.status,
+        data_status=verification.data_status,
         entry_zone=EntryZone(**{
             "from": entry,
             "to": round(
@@ -676,14 +733,11 @@ def scan_market(
                 reasons = ["السعر خارج نطاق الماسح المحدد"]
         except Exception as exc:
             result, reasons, snapshot = None, ["تعذر تحليل بيانات السهم"], {"error_type": type(exc).__name__}
-        score = result.overall_score if result else min(
-            59,
-            round(
-                min(float(snapshot.get("indicators", {}).get("relative_volume") or 0), 3) * 12
-                + (20 if snapshot.get("trend") == "صاعد" else 8)
-                + (15 if snapshot.get("support") and snapshot.get("resistance") else 0)
-            ),
-        )
+        if result:
+            score = result.overall_score
+            snapshot["score_debug"] = {"source": "opportunity_result", "total": score}
+        else:
+            score, snapshot["score_debug"] = _trace_candidate_score(snapshot)
         snapshot["stage"] = "candidate" if result else "analyzed"
         snapshot["watch_reason"] = reasons[0] if reasons else snapshot.get("watch_reason")
         candidate_row = StockCandidate(

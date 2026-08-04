@@ -12,6 +12,7 @@ from app.news.classification import (
     apply_safety,
     classify_event,
     deduplicate,
+    score_event,
 )
 from app.news.providers import (
     FinnhubCompanyNewsProvider,
@@ -98,6 +99,88 @@ def test_finnhub_company_news_is_normalized(monkeypatch):
     assert row.symbols == ["AAPL"]
     assert row.event_type == "earnings"
     assert row.source_type == "finnhub"
+
+
+def test_finnhub_nvda_rejects_unrelated_vanguard_and_butterfield(monkeypatch):
+    provider = FinnhubCompanyNewsProvider(Settings(finnhub_api_key="key"))
+    monkeypatch.setattr(provider, "_get", lambda *_args, **_kwargs: [
+        {
+            "headline": "Nvidia expands AI data center platform",
+            "summary": "NVDA announced new semiconductor systems.",
+            "source": "Reuters", "url": "https://example.com/nvda",
+            "datetime": int(NOW.timestamp()), "related": "NVDA",
+        },
+        {
+            "headline": "Want $1 Million in Retirement? This Vanguard ETF Could Get You There",
+            "summary": "A diversified Vanguard fund for long-term savers.",
+            "source": "Yahoo", "url": "https://example.com/vanguard",
+            "datetime": int(NOW.timestamp()),
+        },
+        {
+            "headline": "Butterfield reports quarterly banking results",
+            "summary": "The Bank of N.T. Butterfield posted earnings.",
+            "source": "Reuters", "url": "https://example.com/butterfield",
+            "datetime": int(NOW.timestamp()), "related": "NTB",
+        },
+    ])
+    rows = provider.company("NVDA", now=NOW)
+    assert [row.headline for row in rows] == ["Nvidia expands AI data center platform"]
+    assert rows[0].entity_match_reason
+
+
+def test_provider_related_metadata_cannot_assign_a_general_market_story_to_nvda(monkeypatch):
+    provider = FinnhubCompanyNewsProvider(Settings(finnhub_api_key="key"))
+    monkeypatch.setattr(provider, "_get", lambda *_args, **_kwargs: [{
+        "headline": "Wall Street rallies as the Dow closes at a record",
+        "summary": "Nvidia and several other companies rose during a broad market rally.",
+        "source": "Reuters", "url": "https://example.com/market",
+        "datetime": int(NOW.timestamp()), "related": "NVDA",
+    }])
+    assert provider.company("NVDA", now=NOW) == []
+
+
+def test_finnhub_pltr_only_accepts_palantir_entity(monkeypatch):
+    provider = FinnhubCompanyNewsProvider(Settings(finnhub_api_key="key"))
+    monkeypatch.setattr(provider, "_get", lambda *_args, **_kwargs: [
+        {
+            "headline": "Palantir Technologies wins a software contract",
+            "summary": "The company expanded its artificial intelligence platform.",
+            "source": "Reuters", "url": "https://example.com/pltr",
+            "datetime": int(NOW.timestamp()),
+        },
+        {
+            "headline": "Vanguard lowers fees on four index funds",
+            "summary": "The asset manager announced lower fund expenses.",
+            "source": "Reuters", "url": "https://example.com/funds",
+            "datetime": int(NOW.timestamp()),
+        },
+    ])
+    rows = provider.company("PLTR", now=NOW)
+    assert len(rows) == 1
+    assert rows[0].symbols == ["PLTR"]
+
+
+def test_unclassified_news_is_unscored_instead_of_using_fallback():
+    sentiment, impact, urgency, flags, reason = score_event(
+        "other", official=False, source_type="finnhub", text="A general lifestyle headline"
+    )
+    assert sentiment == "neutral"
+    assert impact is None and urgency is None
+    assert flags == []
+    assert "لم تُنشأ درجة افتراضية" in reason
+
+
+def test_news_classification_separates_geopolitical_technology_and_company_specific():
+    assert classify_event("New export controls escalate geopolitical tensions") == "geopolitical"
+    assert classify_event("Artificial intelligence semiconductor demand accelerates") == "technology"
+    provider = FinnhubCompanyNewsProvider(Settings(finnhub_api_key="key"))
+    provider._get = lambda *_args, **_kwargs: [{
+        "headline": "Palantir appoints a new board member",
+        "summary": "Palantir announced the appointment.",
+        "source": "Reuters", "url": "https://example.com/board",
+        "datetime": int(NOW.timestamp()),
+    }]
+    assert provider.company("PLTR", now=NOW)[0].event_type == "company_specific"
 
 
 def test_x_requires_token_allowlist_and_explicit_enablement():

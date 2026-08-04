@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.config import Settings
-from app.options.market_clock import NEW_YORK, spx_global_session
+from app.options.market_clock import NEW_YORK, market_session, serialize_market_session, spx_global_session
 
 
 # 2026-07-30 is a Thursday, 2026-07-31 a Friday, 2026-08-01 a Saturday.
@@ -77,6 +77,30 @@ def test_the_discount_rate_is_present_and_plausible():
     # Freshness is checked against these, so they cannot be blank.
     assert settings.spx_risk_free_rate_updated_at
     assert settings.spx_dividend_yield_updated_at
+
+
+def test_regular_open_and_close_are_distinct_and_dst_safe_in_summer_and_winter():
+    summer = serialize_market_session(market_session(
+        datetime(2026, 7, 30, 8, 0, tzinfo=NEW_YORK)
+    ))
+    winter = serialize_market_session(market_session(
+        datetime(2026, 1, 8, 8, 0, tzinfo=NEW_YORK)
+    ))
+    assert summer["regular_stock_open_at"] != summer["regular_stock_close_at"]
+    assert winter["regular_stock_open_at"] != winter["regular_stock_close_at"]
+    summer_open = datetime.fromisoformat(summer["regular_stock_open_at"])
+    winter_open = datetime.fromisoformat(winter["regular_stock_open_at"])
+    assert summer_open.astimezone().utcoffset() is not None
+    assert summer_open.utcoffset().total_seconds() == -4 * 3600
+    assert winter_open.utcoffset().total_seconds() == -5 * 3600
+
+
+def test_spx_expiry_floor_follows_explicit_0dte_and_1dte_flags():
+    from app.spx.service import spx_min_dte
+
+    assert spx_min_dte(Settings(spx_allow_0dte=False, spx_allow_1dte=False)) == 2
+    assert spx_min_dte(Settings(spx_allow_0dte=False, spx_allow_1dte=True)) == 1
+    assert spx_min_dte(Settings(spx_allow_0dte=True, spx_allow_1dte=False)) == 0
 
 
 def test_a_stale_rate_degrades_the_reading_rather_than_skewing_it():

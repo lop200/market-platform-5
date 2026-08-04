@@ -238,7 +238,7 @@ def news_snapshot(db: Session = Depends(get_db)) -> dict:
             })
     items.sort(
         key=lambda item: (
-            item.get("impact_score", 0),
+            item.get("impact_score") or -1,
             item.get("published_at", ""),
         ),
         reverse=True,

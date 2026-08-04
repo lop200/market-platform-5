@@ -8,6 +8,7 @@ import httpx
 
 from app.config import Settings
 from app.news.classification import classify_event, score_event
+from app.news.entities import company_story_matches
 from app.news.schemas import NewsEvent
 
 
@@ -29,7 +30,8 @@ def _event(
     summary: str,
     symbols: list[str],
     official: bool,
-    reliability: int,
+    reliability: int | None,
+    reliability_reason_ar: str = "",
     market_scope: str = "company",
     filing_form: str | None = None,
     received_at: datetime | None = None,
@@ -37,7 +39,11 @@ def _event(
     now = received_at or datetime.now(timezone.utc)
     published = published_at if published_at.tzinfo else published_at.replace(tzinfo=timezone.utc)
     event_type = classify_event(f"{headline} {summary}", filing_form=filing_form)
-    sentiment, impact, urgency, flags = score_event(event_type, official=official, source_type=source_type)
+    if event_type == "other" and market_scope == "company" and symbols:
+        event_type = "company_specific"
+    sentiment, impact, urgency, flags, impact_reason = score_event(
+        event_type, official=official, source_type=source_type, text=f"{headline} {summary}"
+    )
     return NewsEvent(
         id=_id(source_type, source_url or f"{headline}:{published.isoformat()}"),
         source_type=source_type,
@@ -56,6 +62,9 @@ def _event(
         impact_score=impact,
         reliability_score=reliability,
         urgency_score=urgency,
+        score_status="scored" if impact is not None and reliability is not None else "unscored",
+        impact_reason_ar=impact_reason,
+        reliability_reason_ar=reliability_reason_ar,
         is_official=official,
         verified_at=now if official else None,
         risk_flags=flags,
@@ -86,21 +95,45 @@ class FinnhubCompanyNewsProvider:
             "from": (current - timedelta(days=5)).date().isoformat(),
             "to": current.date().isoformat(),
         })
-        return [
-            _event(
+        results: list[NewsEvent] = []
+        for item in (raw or [])[:30]:
+            if not item.get("headline") or not item.get("datetime"):
+                continue
+            matches, match_reason = company_story_matches(
+                symbol, item.get("headline") or "", item.get("summary") or "",
+                related=item.get("related"),
+            )
+            if not matches:
+                continue
+            source = item.get("source") or "Finnhub"
+            source_weight = {
+                "reuters": 18, "associated press": 18, "bloomberg": 17,
+                "wsj": 16, "cnbc": 13, "yahoo": 8,
+            }.get(str(source).lower(), 5)
+            reliability = 64 + source_weight
+            evidence = [f"وزن سمعة الناشر {source_weight}/18"]
+            if item.get("url"):
+                reliability += 4
+                evidence.append("رابط مصدر متاح")
+            if item.get("summary"):
+                reliability += 4
+                evidence.append("ملخص قابل للفحص")
+            row = _event(
                 source_type="finnhub",
-                source_name=item.get("source") or "Finnhub",
+                source_name=source,
                 source_url=item.get("url"),
                 published_at=datetime.fromtimestamp(item.get("datetime") or 0, timezone.utc),
                 headline=item.get("headline"),
                 summary=item.get("summary"),
                 symbols=[symbol],
                 official=False,
-                reliability=78,
+                reliability=min(92, reliability),
+                reliability_reason_ar="؛ ".join(evidence),
                 received_at=current,
             )
-            for item in (raw or [])[:30] if item.get("headline") and item.get("datetime")
-        ]
+            row.entity_match_reason = match_reason
+            results.append(row)
+        return results
 
     def market(self, now: datetime | None = None) -> list[NewsEvent]:
         current = now or datetime.now(timezone.utc)
@@ -115,7 +148,8 @@ class FinnhubCompanyNewsProvider:
                 summary=item.get("summary"),
                 symbols=[],
                 official=False,
-                reliability=78,
+                reliability=70,
+                reliability_reason_ar="خبر سوق عام من مزود مجمع؛ لا توجد مطابقة كيان شركة.",
                 market_scope="market",
                 received_at=current,
             )

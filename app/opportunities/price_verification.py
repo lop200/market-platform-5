@@ -36,12 +36,55 @@ class PriceVerification:
         availability problem rather than evidence of conflicting prices.
         """
         if self.accepted:
-            return "verified"
+            return "validation_warning" if self.status == "validation_warning" else "verified"
         return {
             "data_conflict": "data_conflict",
             "stale": "external_stale",
             "unavailable": "external_unavailable",
         }.get(self.status, "external_unverified")
+
+
+def _fresh_alpaca_sip(primary: Quote, settings: Settings) -> bool:
+    ages = (primary.bid_age_seconds, primary.ask_age_seconds)
+    return (
+        primary.provider.lower() == "alpaca"
+        and (primary.feed or "").lower() == "sip"
+        and primary.bid is not None
+        and primary.ask is not None
+        and primary.bid > 0
+        and primary.ask >= primary.bid
+        and all(age is not None and age <= settings.max_quote_age_seconds for age in ages)
+    )
+
+
+def _validation_failure(
+    primary: Quote,
+    settings: Settings,
+    *,
+    status: str,
+    provider: str | None,
+    reason_ar: str,
+    price: float | None = None,
+    as_of: datetime | None = None,
+    age_seconds: int | None = None,
+) -> PriceVerification:
+    if _fresh_alpaca_sip(primary, settings):
+        return PriceVerification(
+            True, "validation_warning", provider, price, as_of, age_seconds,
+            reason_ar=(
+                f"{reason_ar}؛ تم تجاهله لأن Alpaca SIP مباشر وحديث، "
+                "وFinnhub مصدر تحقق مساعد وليس veto."
+            ),
+        )
+    return PriceVerification(
+        not settings.price_verification_required,
+        status,
+        provider,
+        price,
+        as_of,
+        age_seconds,
+        reason_ar=reason_ar,
+    )
 
 
 def _age_seconds(value: datetime) -> int:
@@ -69,10 +112,8 @@ def verify_external_price(
 
     if reference_price is None:
         if not settings.finnhub_api_key:
-            accepted = not settings.price_verification_required
-            return PriceVerification(
-                accepted,
-                "unavailable",
+            return _validation_failure(
+                primary, settings, status="unavailable", provider=reference_provider,
                 reason_ar="تعذر التحقق الخارجي المستقل من السعر",
             )
         with _cache_lock:
@@ -98,32 +139,22 @@ def verify_external_price(
         except LookupError:
             pass
         except Exception:
-            accepted = not settings.price_verification_required
-            return PriceVerification(
-                accepted,
-                "unavailable",
-                provider=reference_provider,
+            return _validation_failure(
+                primary, settings, status="unavailable", provider=reference_provider,
                 reason_ar="تعذر التحقق الخارجي المستقل من السعر",
             )
 
     if not reference_price or reference_price <= 0 or reference_as_of is None:
-        accepted = not settings.price_verification_required
-        return PriceVerification(
-            accepted,
-            "unavailable",
-            provider=reference_provider,
+        return _validation_failure(
+            primary, settings, status="unavailable", provider=reference_provider,
             reason_ar="سعر التحقق الخارجي أو وقته غير صالح",
         )
 
     age = _age_seconds(reference_as_of)
     if age > settings.price_verification_max_age_seconds:
-        return PriceVerification(
-            False,
-            "stale",
-            reference_provider,
-            reference_price,
-            reference_as_of,
-            age,
+        return _validation_failure(
+            primary, settings, status="stale", provider=reference_provider,
+            price=reference_price, as_of=reference_as_of, age_seconds=age,
             reason_ar="سعر التحقق الخارجي قديم",
         )
 

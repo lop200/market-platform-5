@@ -91,8 +91,8 @@ function render(d){
   ["Expiration",syn.expiration_used],["Settlement",syn.settlement_type],
   ["درجة الثقة",syn.confidence_score==null?"—":syn.confidence_score+"/100"],["جودة البيانات",syn.data_quality_score==null?"—":syn.data_quality_score+"/100"],
   ["حالة سوق SPX",m.stock_label_ar||m.stock_status],["خيارات SPX",m.options_label_ar||m.options_status],["وقت نيويورك",m.new_york_time?new Date(m.new_york_time).toLocaleString("ar-SA",{timeZone:"America/New_York"}):"—"],
-  ["وقت الرياض",fmtTime(m.riyadh_time)],["الجلسة",m.stock_status],["الافتتاح القادم",fmtTime(m.next_options_open_at)],
-  ["الإغلاق",fmtTime(m.session_closes_at)],["مباشر",m.realtime?"نعم":"لا"],["المصدر",m.source||cap.provider],
+  ["وقت الرياض",fmtTime(m.riyadh_time)],["الجلسة",m.stock_status],["الافتتاح القادم",fmtTime(m.regular_stock_open_at)],
+  ["الإغلاق",fmtTime(m.regular_stock_close_at)],["حالة البيانات",m.data_state||"NO_DATA"],["مباشر",m.realtime?"نعم":"لا"],["المصدر",m.source||cap.provider],
   ["مصدر بيانات الأوبشن",m.opra_status],["آخر تسعيرة",fmtTime(m.last_quote)],["عمر البيانات",m.data_age_seconds==null?"—":m.data_age_seconds+" ثانية"]
  ].map(x=>metric(...x)).join("");
  const dc=$("#decision");dc.className="decision card "+(d.decision==="escape"?"escape":d.decision==="conditional_hunt"?"hunt":"wait");dc.innerHTML=`<h2>${dash(d.decision_ar)}</h2><p>${dash(d.reason_ar)}</p><div class="statusline"><span class="badge blue">Paper only</span><span class="badge ${m.contracts_actionable?"green":"yellow"}">${m.contracts_actionable?"العقود قابلة للمراقبة المشروطة":"لا دخول الآن"}</span><span class="badge blue">${mode==="near"?"قريب من السترايك":"أبعد قليلًا"}</span></div>`;

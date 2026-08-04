@@ -99,6 +99,9 @@ def _scan_breakdown(db: Session, run: StockScanRun) -> tuple[dict, list[dict]]:
                 ),
                 "activation_condition": snapshot.get("activation_condition")
                 or "انتظار اكتمال شروط الاستراتيجية",
+                "volume_source": snapshot.get("volume_source"),
+                "data_state": snapshot.get("data_state"),
+                "score_debug": snapshot.get("score_debug"),
             })
     counts["final_opportunities"] = db.scalar(
         select(func.count(StockOpportunity.id)).where(StockOpportunity.scan_run_id == run.id)

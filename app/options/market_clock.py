@@ -27,6 +27,8 @@ class MarketSession:
     new_york_time: datetime
     riyadh_time: datetime
     session_closes_at: datetime | None
+    regular_stock_open_at: datetime
+    regular_stock_close_at: datetime
     next_stock_open_at: datetime
     next_options_open_at: datetime
     early_close: bool
@@ -184,6 +186,14 @@ def market_session(now: datetime | None = None) -> MarketSession:
     options_open = weekday_open and time(9, 30) <= clock < regular_close
     options_status = "open" if options_open else "opens_later"
     options_label = "مفتوح" if options_open else "يفتح بعد مدة"
+    if weekday_open and clock < regular_close:
+        regular_stock_open = _at(eastern.date(), time(9, 30))
+        regular_stock_close = _at(eastern.date(), regular_close)
+    else:
+        next_regular_day = _next_trading_day(eastern.date())
+        regular_stock_open = _at(next_regular_day, time(9, 30))
+        next_regular_close = time(13) if is_early_close(next_regular_day) else time(16)
+        regular_stock_close = _at(next_regular_day, next_regular_close)
     return MarketSession(
         code=code,
         label_ar=label,
@@ -196,6 +206,8 @@ def market_session(now: datetime | None = None) -> MarketSession:
         new_york_time=eastern,
         riyadh_time=eastern.astimezone(RIYADH),
         session_closes_at=session_close,
+        regular_stock_open_at=regular_stock_open,
+        regular_stock_close_at=regular_stock_close,
         next_stock_open_at=next_stock_open,
         next_options_open_at=next_options_open,
         early_close=early,
@@ -219,6 +231,8 @@ def serialize_market_session(session: MarketSession) -> dict:
         "session_closes_at": (
             session.session_closes_at.isoformat() if session.session_closes_at else None
         ),
+        "regular_stock_open_at": session.regular_stock_open_at.isoformat(),
+        "regular_stock_close_at": session.regular_stock_close_at.isoformat(),
         "next_stock_open_at": session.next_stock_open_at.isoformat(),
         "next_options_open_at": session.next_options_open_at.isoformat(),
         "early_close": session.early_close,

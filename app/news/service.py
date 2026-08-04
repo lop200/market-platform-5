@@ -10,6 +10,7 @@ from app.config import Settings
 from app.db import repository
 from app.db.models import NewsItem, OpportunityEvent, StockOpportunity, TrustedNewsSource
 from app.news.classification import MARKET_EVENTS, apply_safety, deduplicate
+from app.news.entities import filter_company_events
 from app.news.providers import (
     FinnhubCompanyNewsProvider,
     SecEdgarNewsProvider,
@@ -109,7 +110,7 @@ class UnifiedNewsService:
     def _invalidate_opportunities(self, events: list[NewsEvent]) -> None:
         by_symbol = {}
         for event in events:
-            if event.impact_score < 75:
+            if (event.impact_score or 0) < 75:
                 continue
             for symbol in event.symbols:
                 by_symbol.setdefault(symbol, []).append(event)
@@ -131,7 +132,7 @@ class UnifiedNewsService:
             ]
             if not newer:
                 continue
-            strongest = max(newer, key=lambda item: item.impact_score)
+            strongest = max(newer, key=lambda item: item.impact_score or -1)
             row.status = "needs_news_reanalysis"
             result = dict(row.result_json or {})
             result.update({
@@ -172,7 +173,7 @@ class UnifiedNewsService:
                 self._save_usage(usage)
                 return [
                     apply_safety(item, analysis_direction=direction, analysis_issued_at=analysis_issued_at)
-                    for item in self._events(cached)
+                    for item in filter_company_events(self._events(cached), symbol)
                 ]
         events: list[NewsEvent] = []
         status: dict[str, str] = {}
@@ -191,10 +192,11 @@ class UnifiedNewsService:
                 status["sec"] = "disabled"
         except Exception as exc:
             status["sec"] = f"unavailable:{type(exc).__name__}"
+        events = filter_company_events(events, symbol)
         cleaned = [
             apply_safety(item, analysis_direction=direction, analysis_issued_at=analysis_issued_at)
             for item in deduplicate(events)
-            if item.reliability_score >= 60
+            if (item.reliability_score or 0) >= 60
         ]
         now = datetime.now(timezone.utc)
         if cleaned:
@@ -211,7 +213,7 @@ class UnifiedNewsService:
         else:
             stale = repository.cache_get_any(self.db, stale_key)
             if stale:
-                cleaned = self._events(stale)
+                cleaned = filter_company_events(self._events(stale), symbol)
         self._save_usage(usage)
         return cleaned
 
@@ -251,7 +253,7 @@ class UnifiedNewsService:
         cleaned = [
             apply_safety(item)
             for item in deduplicate(events)
-            if item.reliability_score >= 60
+            if (item.reliability_score or 0) >= 60
         ]
         now = datetime.now(timezone.utc)
         payload = NewsSnapshot(
@@ -297,7 +299,7 @@ class UnifiedNewsService:
             item for item in events
             if item.event_type in MARKET_EVENTS
             or bool(set(item.symbols) & SPX_HEAVY)
-            or (item.market_scope == "market" and item.impact_score >= 75)
+            or (item.market_scope == "market" and (item.impact_score or 0) >= 75)
         ]
         rows = []
         for item in relevant[:20]:
@@ -309,7 +311,7 @@ class UnifiedNewsService:
             )
             rows.append({
                 **item.model_dump(mode="json"),
-                "spx_impact_score": min(100, item.impact_score + (8 if item.event_type in MARKET_EVENTS else 0)),
+                "spx_impact_score": min(100, (item.impact_score or 0) + (8 if item.event_type in MARKET_EVENTS else 0)),
                 "potential_direction_ar": direction,
                 "impact_valid_minutes": 240 if item.event_type in MARKET_EVENTS else 90,
                 "scheduled_in_seconds": None,

@@ -7,6 +7,8 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.config import Settings
+from app.markets.data_state import resolve_data_state
+from app.markets.volume import resolve_volume_metrics
 from app.db.models import UserRiskSettings
 from app.news.service import UnifiedNewsService
 from app.opportunities.indicators import calculate_indicators
@@ -255,10 +257,12 @@ def analyze_single_stock(
     previous_close = float(daily["close"].iloc[-2]) if daily is not None and len(daily) >= 2 else None
     change_pct = ((price / previous_close) - 1) * 100 if price and previous_close else None
     average_volume = indicators.get("average_volume")
-    volume = quote.volume if quote and quote.volume is not None else (
-        int(primary["volume"].sum()) if primary is not None and not primary.empty else None
-    )
-    dollar_volume = float(price * volume) if price and volume else None
+    if quote is not None:
+        volume, dollar_volume, volume_source = resolve_volume_metrics(quote, indicators)
+    else:
+        volume = int(primary["volume"].sum()) if primary is not None and not primary.empty else None
+        dollar_volume = float(price * volume) if price and volume else None
+        volume_source = "intraday_session_bars" if volume else "unavailable"
 
     news_items = []
     verified_recent_news = False
@@ -274,7 +278,7 @@ def analyze_single_stock(
         for item in news[:6]:
             age_hours = max(0, int((started - item.published_at).total_seconds() / 3600))
             verified_recent_news = verified_recent_news or (
-                item.is_official and age_hours <= 24 and item.reliability_score >= 80
+                item.is_official and age_hours <= 24 and (item.reliability_score or 0) >= 80
             )
             news_prevent_entry = news_prevent_entry or item.prevent_entry
             news_raise_risk = news_raise_risk or item.raise_risk
@@ -300,6 +304,9 @@ def analyze_single_stock(
                 "invalidates_analysis": item.invalidates_previous_analysis,
                 "status_message_ar": item.status_message_ar,
                 "relation_reason_ar": item.relation_reason_ar,
+                "impact_reason_ar": item.impact_reason_ar,
+                "reliability_reason_ar": item.reliability_reason_ar,
+                "score_status": item.score_status,
             })
     except Exception:
         warnings.append("تعذر مزود الأخبار، واكتمل التحليل الفني دون أخبار")
@@ -502,6 +509,14 @@ def analyze_single_stock(
         data_status = "stale"
     if verification is not None and not verification.accepted:
         data_status = verification.data_status
+    elif verification is not None and verification.status == "validation_warning":
+        data_status = verification.data_status
+    state_machine = resolve_data_state(
+        primary_available=quote is not None,
+        primary_fresh=data_status in {"live_sip", "live_overnight", "live_partial", "validation_warning"},
+        blocked=data_status in {"data_conflict", "external_stale", "external_unavailable", "external_unverified"},
+        validator_status=verification.status if verification else None,
+    ).value
     result = {
         "symbol": symbol,
         "company_name": profile.get("name") or symbol,
@@ -519,6 +534,7 @@ def analyze_single_stock(
             "average_volume": _safe_number(average_volume, 0),
             "relative_volume": indicators.get("relative_volume"),
             "dollar_volume": _safe_number(dollar_volume, 0),
+            "volume_source": volume_source,
             "volatility": indicators.get("volatility"),
             "market_cap": profile.get("market_cap"),
             "float_shares": profile.get("float_shares"),
@@ -541,6 +557,8 @@ def analyze_single_stock(
             "provider": quote.provider if quote else provider.provider_name,
             "feed": quote.feed if quote else None,
             "data_status": data_status,
+            "state_machine": state_machine,
+            "primary_live": data_status in {"live_sip", "live_overnight", "validation_warning"},
             "external_provider": verification.provider if verification else None,
             "external_price": verification.price if verification else None,
             "external_timestamp": verification.as_of.isoformat() if verification and verification.as_of else None,
@@ -559,9 +577,20 @@ def analyze_single_stock(
         "is_expired": valid_minutes == 0,
         "data_quality": quality.as_dict(),
         "data_quality_message": (
-            None if quality.valid_for_plan
+            (
+                None
+                if status == "conditional_entry"
+                else f"البيانات صالحة للتحليل، لكن الحالة النهائية {status_ar} بسبب عدم اكتمال شروط الفرصة."
+            )
+            if quality.valid_for_plan
             else "البيانات الحالية غير صالحة لبناء دخول أو وقف أو أهداف."
         ),
+        "final_state": {
+            "data_ready": quality.valid_for_plan,
+            "decision": status,
+            "decision_ar": status_ar,
+            "actionable": status == "conditional_entry",
+        },
         "status": status,
         "status_ar": status_ar,
         "strategy": {

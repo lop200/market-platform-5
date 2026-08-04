@@ -51,7 +51,7 @@ def test_external_price_divergence_becomes_data_conflict():
     assert result.divergence_pct > 1
 
 
-def test_stale_external_price_is_not_mislabeled_as_data_conflict():
+def test_stale_finnhub_does_not_veto_fresh_alpaca_sip():
     result = verify_external_price(
         "NVDA",
         _quote(symbol="NVDA", price=197.16, bid=197.02, ask=197.30),
@@ -64,10 +64,28 @@ def test_stale_external_price_is_not_mislabeled_as_data_conflict():
         reference_as_of=datetime.now(timezone.utc) - timedelta(hours=65),
         reference_provider="finnhub",
     )
+    assert result.accepted
+    assert result.status == "validation_warning"
+    assert result.data_status == "validation_warning"
+    assert result.divergence_pct is None
+    assert "Alpaca SIP" in result.reason_ar
+
+
+def test_stale_validator_still_blocks_when_primary_is_not_sip():
+    result = verify_external_price(
+        "NVDA",
+        _quote(symbol="NVDA", provider="other", feed="iex"),
+        Settings(
+            price_verification_enabled=True,
+            price_verification_required=True,
+            price_verification_max_age_seconds=120,
+        ),
+        reference_price=200.79,
+        reference_as_of=datetime.now(timezone.utc) - timedelta(hours=2),
+    )
     assert not result.accepted
     assert result.status == "stale"
     assert result.data_status == "external_stale"
-    assert result.divergence_pct is None
 
 
 def test_tqqq_sqqq_cannot_both_survive_same_scan_batch():

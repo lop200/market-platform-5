@@ -265,7 +265,7 @@ const renderMarketState=(m)=>{
   marketStateEl.classList.toggle("closed",!m.stock_actionable);
 };
 const loadMarketState=()=>fetch("/api/v1/dashboard").then(r=>r.json())
-  .then(b=>renderMarketState(b.market)).catch(()=>{});
+  .then(b=>{renderMarketState(b.market);const feed=b.feeds?.stocks;$("#provider").textContent=feed?("المزود Alpaca / "+String(feed).toUpperCase()):"المزود غير متاح";}).catch(()=>{});
 
 latest();setInterval(latest,15000);
 loadMarketState();setInterval(loadMarketState,30000);startPriceStream();

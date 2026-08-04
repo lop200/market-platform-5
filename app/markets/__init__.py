@@ -1,0 +1,1 @@
+"""Shared market-state primitives."""
