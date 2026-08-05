@@ -118,6 +118,9 @@ def test_search_analyses_in_place_instead_of_navigating_away():
     # It must reuse the endpoints the full page already polls.
     assert "/api/v1/opportunities/symbols/" in html
     assert "/api/v1/opportunities/stocks/jobs/" in html
+    assert "[1000,2000,3000]" in html
+    assert "document.hidden" in html
+    assert "button.disabled=true" in html
 
 
 def test_inline_panel_shows_contract_odds_and_their_basis():

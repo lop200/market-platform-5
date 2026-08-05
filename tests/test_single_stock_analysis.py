@@ -116,6 +116,13 @@ def test_stock_page_renders_even_before_or_without_an_opportunity():
     assert '<div id="chart">' in response.text
     assert "lightweight-charts" in response.text
     assert 'id="decision"' in response.text
+    assert 'id="opportunityScores"' in response.text
+    assert "Final Confidence" in response.text
+    assert "احتمال نجاح الصفقة" in response.text
+    assert '?refresh=true' in response.text
+    assert "[1000,2000,3000]" in response.text
+    assert "document.hidden" in response.text
+    assert 'window.addEventListener("pagehide"' in response.text
     assert "@media(min-width:760px)" in response.text
 
 

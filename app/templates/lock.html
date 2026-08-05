@@ -4,62 +4,172 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>الدخول — منصة الذكاء التحليلي</title>
+<title>تسجيل الدخول — منصة فرص السوق</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1420; --card: #171d2e; --border: #2a3346; --text: #e8ecf4; --muted: #97a2bd;
-    --accent: #4f8cff; --bad: #e5545e;
+    --bg: #07111f;
+    --card: rgba(13, 27, 46, .92);
+    --line: rgba(148, 163, 184, .18);
+    --text: #f4f7fb;
+    --muted: #9cacbf;
+    --accent: #22c55e;
+    --accent-dark: #16a34a;
+    --danger: #fb7185;
   }
   * { box-sizing: border-box; }
   body {
-    font-family: 'Tajawal', sans-serif; background: var(--bg); color: var(--text);
-    margin: 0; padding: 24px; line-height: 1.7; min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 22px;
+    display: grid;
+    place-items: center;
+    overflow-x: hidden;
+    color: var(--text);
+    font-family: "Tajawal", system-ui, sans-serif;
+    background:
+      radial-gradient(circle at 12% 10%, rgba(34, 197, 94, .14), transparent 32rem),
+      radial-gradient(circle at 88% 90%, rgba(14, 165, 233, .12), transparent 30rem),
+      var(--bg);
   }
-  .lock-card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-    padding: 28px; max-width: 460px; width: 100%;
+  .login-card {
+    width: min(100%, 430px);
+    padding: 32px;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: var(--card);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, .38);
+    backdrop-filter: blur(18px);
   }
-  h1 { font-size: 1.25rem; margin: 0 0 4px; }
-  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 18px; }
-  .disclaimer-box {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px; font-size: 0.82rem; color: var(--muted); margin-bottom: 16px;
-    max-height: 180px; overflow-y: auto;
+  .brand { text-align: center; margin-bottom: 26px; }
+  .brand-icon {
+    width: 76px;
+    height: 76px;
+    margin: 0 auto 16px;
+    display: grid;
+    place-items: center;
+    border-radius: 22px;
+    color: #06270f;
+    background: linear-gradient(145deg, #4ade80, #16a34a);
+    box-shadow: 0 14px 36px rgba(34, 197, 94, .25);
   }
-  label.consent { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 16px; cursor: pointer; }
-  label.consent input { margin-top: 5px; }
-  .code-row { display: flex; gap: 10px; }
-  input[type="password"] {
-    flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 10px 12px; font-size: 1rem; font-family: inherit;
+  .brand-icon svg { width: 40px; height: 40px; }
+  h1 { margin: 0; font-size: 1.55rem; font-weight: 800; }
+  .subtitle { margin: 7px 0 0; color: var(--muted); font-size: .93rem; }
+  .field { margin-bottom: 15px; }
+  .field label { display: block; margin-bottom: 7px; font-size: .9rem; font-weight: 700; }
+  .input-wrap { position: relative; }
+  .input-wrap svg {
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    width: 20px;
+    height: 20px;
+    color: #718096;
+    transform: translateY(-50%);
+    pointer-events: none;
   }
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    min-height: 50px;
+    padding: 12px 46px 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    outline: none;
+    color: var(--text);
+    background: rgba(3, 11, 22, .65);
+    font: inherit;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34, 197, 94, .12); }
+  .consent {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    margin: 4px 0 18px;
+    color: var(--muted);
+    font-size: .78rem;
+    line-height: 1.65;
+    cursor: pointer;
+  }
+  .consent input { margin-top: 4px; accent-color: var(--accent); }
+  details { margin: -4px 0 15px; color: var(--muted); font-size: .76rem; }
+  details summary { cursor: pointer; }
+  .disclaimer { max-height: 90px; margin-top: 8px; padding: 10px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
   button {
-    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
-    padding: 10px 22px; font-size: 1rem; font-family: inherit; cursor: pointer;
+    width: 100%;
+    min-height: 51px;
+    border: 0;
+    border-radius: 13px;
+    color: white;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+    font: 700 1rem "Tajawal", sans-serif;
+    cursor: pointer;
+    box-shadow: 0 12px 28px rgba(34, 197, 94, .18);
   }
-  .error { color: var(--bad); font-size: 0.85rem; margin-top: 12px; }
+  button:hover { filter: brightness(1.07); }
+  .error {
+    margin: 0 0 15px;
+    padding: 10px 12px;
+    border: 1px solid rgba(251, 113, 133, .25);
+    border-radius: 10px;
+    color: var(--danger);
+    background: rgba(251, 113, 133, .08);
+    font-size: .84rem;
+  }
+  .access-note { margin-top: 17px; text-align: center; color: #718096; font-size: .74rem; }
+  @media (max-width: 480px) {
+    body { padding: 14px; }
+    .login-card { padding: 25px 20px; border-radius: 20px; }
+    .brand-icon { width: 68px; height: 68px; }
+  }
 </style>
 </head>
 <body>
-  <div class="lock-card">
-    <h1>🔒 منصة الذكاء التحليلي للأسهم والأوبشن</h1>
-    <div class="subtitle">الدخول برمز خاص فقط — أدخل رمزك ووافق على الإقرار أدناه.</div>
+  <main class="login-card">
+    <header class="brand">
+      <div class="brand-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/>
+          <path d="m3 12 5-4 5 3 7-7"/>
+        </svg>
+      </div>
+      <h1>منصة فرص السوق</h1>
+      <p class="subtitle">دخول المشتركين</p>
+    </header>
 
     <form method="post" action="/lock">
-      <div class="disclaimer-box">{{ disclaimer }}</div>
+      {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+
+      <div class="field">
+        <label for="username">اسم المستخدم</label>
+        <div class="input-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg>
+          <input id="username" type="text" name="username" autocomplete="username" placeholder="أدخل اسم المستخدم" required autofocus>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="password">كلمة المرور</label>
+        <div class="input-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          <input id="password" type="password" name="code" autocomplete="current-password" placeholder="أدخل كلمة المرور" required>
+        </div>
+      </div>
+
+      <details>
+        <summary>إخلاء المسؤولية</summary>
+        <div class="disclaimer">{{ disclaimer }}</div>
+      </details>
       <label class="consent">
         <input type="checkbox" name="consent" value="yes" required>
-        <span>قرأت الإقرار أعلاه وأوافق عليه: هذه المنصة أداة تحليل <b>تعليمية</b> لدعم القرار، لا تقدّم توصيات استثمارية، والقرار ومسؤوليته عليّ وحدي.</span>
+        <span>أوافق أن المنصة أداة تحليل تعليمية، وأن قرارات التداول مسؤوليتي.</span>
       </label>
-      <div class="code-row">
-        <input type="password" name="code" placeholder="رمز الدخول" autocomplete="off" required autofocus>
-        <button type="submit">دخول</button>
-      </div>
-      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+      <button type="submit">تسجيل الدخول</button>
     </form>
-  </div>
+    <div class="access-note">الوصول مخصص للمشتركين المصرح لهم فقط</div>
+  </main>
 </body>
 </html>

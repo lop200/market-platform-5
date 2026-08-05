@@ -50,6 +50,7 @@ def build_synthetic_review_payload(
         "review_scope": "direction_and_contracts" if contracts else "direction_only",
         "data_label": "estimated_synthetic_forward_not_official_spx",
         "source": synthetic.source,
+        "data_version": synthetic.calculation_timestamp.isoformat(),
         "synthetic_quality": {
             "provider_status": synthetic.provider_status,
             "pairs_used": synthetic.pairs_used,
@@ -70,7 +71,9 @@ def build_synthetic_review_payload(
                 "entry_condition",
             )
         },
-        "intraday_series": list(technical.get("series") or [])[-20:],
+        # The deterministic summary above contains the direction, momentum,
+        # levels and sample quality. Raw price history is intentionally kept
+        # local and is never sent to an LLM.
         "scenario": scenario,
         "trusted_news": news[:5],
         "contracts": [

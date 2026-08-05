@@ -55,6 +55,10 @@ def hash_code(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
+def _constant_time_text_equal(left: str, right: str) -> bool:
+    return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
+
+
 def _sign(subject: str, secret: str) -> str:
     return hmac.new(secret.encode("utf-8"), f"site-lock:{subject}".encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -73,17 +77,25 @@ def parse_cookie_subject(value: str | None, secret: str) -> str | None:
     return subject
 
 
-def verify_code_and_get_subject(db, code: str, settings) -> str | None:
-    """Checks a submitted code against the main env code, then active DB codes.
+def verify_credentials_and_get_subject(db, username: str, password: str, settings) -> str | None:
+    """Checks submitted credentials against the owner account, then active DB accounts.
 
     Returns the cookie subject: "main" for the env code, or the DB row's UUID (as str)
     for a per-person code. The UUID — not the human label — is the subject so the cookie
     stays latin-1 encodable (labels may be Arabic) and never leaks who the code belongs
     to."""
-    if settings.access_code_main and hmac.compare_digest(code, settings.access_code_main):
+    username_matches = _constant_time_text_equal(username, settings.site_username)
+    password_matches = bool(settings.access_code_main) and _constant_time_text_equal(
+        password, settings.access_code_main or ""
+    )
+    if username_matches and password_matches:
         return MAIN_SUBJECT
     row = db.execute(
-        select(AccessCode).where(AccessCode.code_hash == hash_code(code), AccessCode.active.is_(True))
+        select(AccessCode).where(
+            AccessCode.label == username,
+            AccessCode.code_hash == hash_code(password),
+            AccessCode.active.is_(True),
+        )
     ).scalar_one_or_none()
     return str(row.id) if row else None
 

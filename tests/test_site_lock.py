@@ -49,8 +49,8 @@ def locked_client(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
 
 
-def _login(client, code=MAIN_CODE, consent="yes"):
-    data = {"code": code}
+def _login(client, code=MAIN_CODE, consent="yes", username="lop"):
+    data = {"username": username, "code": code}
     if consent:
         data["consent"] = consent
     return client.post("/lock", data=data)
@@ -71,11 +71,17 @@ def test_lock_page_shows_consent_and_code_form(locked_client):
     response = locked_client.get("/lock")
     assert response.status_code == 200
     assert 'name="consent"' in response.text
+    assert 'name="username"' in response.text
     assert 'name="code"' in response.text
 
 
 def test_wrong_code_rejected(locked_client):
     response = _login(locked_client, code="nope")
+    assert response.status_code == 401
+
+
+def test_wrong_username_rejected(locked_client):
+    response = _login(locked_client, username="someone-else")
     assert response.status_code == 401
 
 
@@ -90,6 +96,14 @@ def test_main_code_with_consent_unlocks(locked_client):
     assert site_lock.COOKIE_NAME in response.cookies
     home = locked_client.get("/")
     assert home.status_code == 200
+
+
+def test_logout_clears_session(locked_client):
+    _login(locked_client)
+    response = locked_client.post("/logout")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/lock"
+    assert locked_client.get("/").status_code == 303
 
 
 def test_tampered_cookie_rejected(locked_client):
@@ -126,7 +140,9 @@ def test_person_code_add_use_revoke(locked_client):
     person_code = match.group(1)
 
     person = TestClient(app, follow_redirects=False)
-    response = person.post("/lock", data={"code": person_code, "consent": "yes"})
+    response = person.post(
+        "/lock", data={"username": "أبو فهد", "code": person_code, "consent": "yes"}
+    )
     assert response.status_code == 303
     assert person.get("/").status_code == 200
 

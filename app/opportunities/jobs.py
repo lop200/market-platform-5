@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from app.config import Settings, get_settings
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
-from app.db.models import AIAnalysisLog, ProviderHealth, StockCandidate, StockScanRun
+from app.db.models import CacheEntry, OpenAICallLog, ProviderHealth, StockCandidate, StockScanRun
 from app.db import repository
 from app.db.session import SessionLocal
 from app.opportunities.scanner import scan_market
 from app.opportunities.openai_review import review_single_analysis
+from app.opportunities.scoring import finalize_scorecard_with_options
 from app.options.service import analyze_options_after_stock
 from app.providers.factory import get_market_data_provider, get_option_data_provider
 from app.events.earnings import (
@@ -28,22 +31,81 @@ _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="stock-scan")
 _lock = Lock()
 
 
+def _active_job(db, key: str) -> StockScanRun | None:
+    row = db.get(CacheEntry, key)
+    if row is None:
+        return None
+    expiry = row.expires_at
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    if expiry <= datetime.now(timezone.utc):
+        db.delete(row)
+        db.commit()
+        return None
+    try:
+        run_id = uuid.UUID(str(row.value.get("run_id")))
+        run = db.get(StockScanRun, run_id)
+    except Exception:
+        run = None
+    if run is None or run.status in {"completed", "failed"}:
+        db.delete(row)
+        db.commit()
+        return None
+    return run
+
+
+def _create_claimed_run(db, key: str, *, task_type: str, symbols_total: int) -> tuple[StockScanRun, bool]:
+    active = _active_job(db, key)
+    if active is not None:
+        return active, False
+    run = StockScanRun(status="queued", task_type=task_type, symbols_total=symbols_total)
+    db.add(run)
+    db.flush()
+    db.add(
+        CacheEntry(
+            key=key,
+            value={"run_id": str(run.id), "kind": "background_job_lock"},
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=2),
+        )
+    )
+    try:
+        db.commit()
+        db.refresh(run)
+        return run, True
+    except IntegrityError:
+        db.rollback()
+        active = _active_job(db, key)
+        if active is None:
+            raise
+        return active, False
+
+
+def _release_job_key(db, key: str, run_id) -> None:
+    row = db.get(CacheEntry, key)
+    if row and str((row.value or {}).get("run_id")) == str(run_id):
+        db.delete(row)
+        db.commit()
+
+
 def create_scan(
     min_price: float | None = None,
     max_price: float | None = None,
     universe_limit: int | None = None,
 ) -> StockScanRun:
+    job_key = f"job:market-scan:{min_price}:{max_price}:{universe_limit}"
     with _lock:
         db = SessionLocal()
         try:
-            run = StockScanRun(status="queued", task_type="market_scan", symbols_total=0)
-            db.add(run)
-            db.commit()
-            db.refresh(run)
+            run, created = _create_claimed_run(
+                db, job_key, task_type="market_scan", symbols_total=0
+            )
             run_id = run.id
         finally:
             db.close()
-        _executor.submit(_execute_scan, run_id, min_price, max_price, universe_limit)
+        if created:
+            _executor.submit(
+                _execute_scan, run_id, min_price, max_price, universe_limit, job_key
+            )
     db = SessionLocal()
     try:
         return db.get(StockScanRun, run_id)
@@ -52,17 +114,19 @@ def create_scan(
 
 
 def create_symbol_analysis(symbol: str, *, refresh: bool = False) -> StockScanRun:
+    symbol = symbol.upper()
+    job_key = f"job:single-symbol:{symbol}"
     with _lock:
         db = SessionLocal()
         try:
-            run = StockScanRun(status="queued", task_type="single_symbol", symbols_total=1)
-            db.add(run)
-            db.commit()
-            db.refresh(run)
+            run, created = _create_claimed_run(
+                db, job_key, task_type="single_symbol", symbols_total=1
+            )
             run_id = run.id
         finally:
             db.close()
-        _executor.submit(_execute_symbol, run_id, symbol, refresh)
+        if created:
+            _executor.submit(_execute_symbol, run_id, symbol, refresh, job_key)
     db = SessionLocal()
     try:
         return db.get(StockScanRun, run_id)
@@ -91,15 +155,15 @@ def _complete_run(db, run, provider, health_started, telemetry_before) -> None:
     run.cache_hits = telemetry_after["cache_hits"] - telemetry_before["cache_hits"]
     run.response_ms = int((time.perf_counter() - health_started) * 1000)
     run.openai_calls = db.scalar(
-        select(func.count(AIAnalysisLog.id)).where(
-            AIAnalysisLog.created_at >= run.started_at,
-            AIAnalysisLog.status == "completed",
+        select(func.count(OpenAICallLog.id)).where(
+            OpenAICallLog.run_id == str(run.id),
+            OpenAICallLog.status.in_(("completed", "failed")),
         )
     ) or 0
     run.openai_cost_usd = db.scalar(
-        select(func.coalesce(func.sum(AIAnalysisLog.estimated_cost_usd), 0)).where(
-            AIAnalysisLog.created_at >= run.started_at,
-            AIAnalysisLog.status == "completed",
+        select(func.coalesce(func.sum(OpenAICallLog.estimated_cost_usd), 0)).where(
+            OpenAICallLog.run_id == str(run.id),
+            OpenAICallLog.status.in_(("completed", "failed")),
         )
     ) or 0
     db.add(ProviderHealth(
@@ -129,6 +193,7 @@ def _execute_scan(
     min_price: float | None,
     max_price: float | None,
     universe_limit: int | None,
+    job_key: str | None = None,
 ) -> None:
     db = SessionLocal()
     try:
@@ -146,10 +211,14 @@ def _execute_scan(
     except Exception as exc:
         _fail_run(db, run_id, exc)
     finally:
+        if job_key:
+            _release_job_key(db, job_key, run_id)
         db.close()
 
 
-def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
+def _execute_symbol(
+    run_id, symbol: str, refresh: bool = False, job_key: str | None = None
+) -> None:
     db = SessionLocal()
     try:
         run, provider, health_started, telemetry_before = _prepare_run(db, run_id)
@@ -190,6 +259,9 @@ def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
         analysis["options"] = analyze_options_after_stock(
             analysis, settings, option_provider
         ).model_dump(mode="json")
+        analysis["scorecard"] = finalize_scorecard_with_options(
+            analysis.get("scorecard") or {}, analysis["options"]
+        )
         candidate = StockCandidate(
             scan_run_id=run.id,
             symbol=symbol,
@@ -203,7 +275,9 @@ def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
         run.symbols_excluded = 0
         run.status = "reviewing" if analysis["data_quality"]["valid_for_plan"] else "running"
         db.commit()
-        analysis["ai_review"] = review_single_analysis(db, settings, analysis)
+        analysis["ai_review"] = review_single_analysis(
+            db, settings, analysis, run_id=str(run.id)
+        )
         analysis["system_usage"]["openai_calls"] = analysis["ai_review"]["ai_calls"]
         analysis["system_usage"]["openai_cost_usd"] = analysis["ai_review"]["ai_cost_estimate"]
         candidate.snapshot_json = analysis
@@ -213,6 +287,8 @@ def _execute_symbol(run_id, symbol: str, refresh: bool = False) -> None:
     except Exception as exc:
         _fail_run(db, run_id, exc)
     finally:
+        if job_key:
+            _release_job_key(db, job_key, run_id)
         db.close()
 
 

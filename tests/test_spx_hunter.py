@@ -188,7 +188,8 @@ def test_synthetic_intraday_series_builds_todays_direction(db_session):
     assert payload["review_scope"] == "direction_only"
     assert payload["data_label"] == "estimated_synthetic_forward_not_official_spx"
     assert payload["technical_direction"]["direction"] == "call"
-    assert len(payload["intraday_series"]) == 6
+    assert "intraday_series" not in payload
+    assert payload["technical_direction"]["sample_size"] == 6
     assert payload["contracts"] == []
 
 

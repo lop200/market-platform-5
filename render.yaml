@@ -211,8 +211,22 @@ services:
         value: gpt-5-mini
       - key: OPENAI_DAILY_BUDGET_USD
         value: "1.00"
+      - key: OPENAI_OPERATION_BUDGET_USD
+        value: "0.08"
+      - key: OPENAI_SCAN_BUDGET_USD
+        value: "0.20"
+      - key: OPENAI_REVIEW_CACHE_SECONDS
+        value: "45"
+      - key: OPENAI_LOCK_SECONDS
+        value: "45"
+      - key: OPENAI_FAILURE_COOLDOWN_SECONDS
+        value: "10"
+      - key: OPENAI_MAX_OUTPUT_TOKENS
+        value: "1200"
       - key: API_KEY
         sync: false
+      - key: SITE_USERNAME
+        value: "lop"
       - key: ACCESS_CODE_MAIN
         sync: false
       - key: APCA_API_KEY_ID

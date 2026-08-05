@@ -21,6 +21,7 @@ from app.opportunities.probability import (
 )
 from app.opportunities.risk import position_size, risk_reward
 from app.opportunities.schemas import MarketRegime
+from app.opportunities.scoring import build_stock_scorecard
 from app.opportunities.strategies import select_strategy
 from app.providers.base import MarketDataAdapter, Quote
 from app.stocks.quality import evaluate_plan_data
@@ -455,6 +456,20 @@ def analyze_single_stock(
     }
     trend = _timeframe_reading(alignment)
 
+    scorecard = build_stock_scorecard(
+        indicators=indicators,
+        strategy_match_pct=strategy.match_pct if strategy else 0,
+        strategy_checks=list(strategy.checks) if strategy else [],
+        spread_pct=quote.spread_pct if quote else None,
+        dollar_volume=dollar_volume,
+        quote_age_seconds=quote.age_seconds if quote else None,
+        data_valid=quality.valid_for_plan and (
+            verification is None or verification.accepted
+        ),
+        news_risk=news_raise_risk or news_prevent_entry,
+        timeframe_alignment=alignment,
+    )
+
     risk_row = _risk_settings(db, settings)
     plan = None
     if status == "conditional_entry" and entry_from and stop and targets:
@@ -593,6 +608,7 @@ def analyze_single_stock(
         },
         "status": status,
         "status_ar": status_ar,
+        "scorecard": scorecard,
         "strategy": {
             "id": strategy.strategy_id if strategy and status == "conditional_entry" else "no_trade",
             "name_ar": strategy.name_ar if strategy and status == "conditional_entry" else "لا توجد خطة قابلة للتنفيذ",

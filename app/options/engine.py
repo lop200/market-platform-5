@@ -469,6 +469,11 @@ def rank_option_chain(
         oi_score = _clamp(30 + min(oi, 5000) / 70)
         theta_score = _clamp(100 - abs(theta / max(entry, 0.01)) * 500)
         iv_score = _clamp(100 - max(0, iv - 0.45) * 100)
+        # Gamma is useful only in a controlled range. Too little gives weak
+        # convexity; too much makes the premium hypersensitive. Normalise by
+        # the underlying so contracts on different stocks remain comparable.
+        gamma_exposure = abs(gamma) * underlying
+        gamma_score = _clamp(100 - abs(gamma_exposure - 2.5) * 22)
         break_even = (
             item.strike + entry if item.option_type == OptionType.CALL else item.strike - entry
         )
@@ -554,9 +559,18 @@ def rank_option_chain(
         market_sector_score = _clamp(75 if direction_matches else 45)
         contract_fit = _clamp(
             delta_score * 0.35
-            + strike_score * 0.30
-            + dte_score * 0.20
+            + strike_score * 0.20
+            + dte_score * 0.15
             + theta_score * 0.15
+            + gamma_score * 0.15
+        )
+        options_quality = _clamp(
+            liquidity * 0.20
+            + delta_score * 0.20
+            + gamma_score * 0.15
+            + theta_score * 0.15
+            + iv_score * 0.15
+            + dte_score * 0.15
         )
         if expires_near_earnings:
             earnings_score = min(earnings_score, 25)
@@ -576,7 +590,9 @@ def rank_option_chain(
             "volume": volume_score,
             "open_interest": oi_score,
             "theta": theta_score,
+            "gamma": gamma_score,
             "iv": iv_score,
+            "options_quality": options_quality,
             "break_even": break_even_score,
             "liquidity": liquidity,
             "data_quality": 100,
@@ -587,12 +603,13 @@ def rank_option_chain(
             "news": 100 - news_penalty,
         }
         score = round(
-            stock_quality * 0.25
+            stock_quality * 0.20
             + momentum_quality * 0.15
             + news_score * 0.10
             + market_sector_score * 0.10
-            + liquidity * 0.15
-            + contract_fit * 0.15
+            + liquidity * 0.10
+            + options_quality * 0.15
+            + contract_fit * 0.10
             + rr_score * 0.10,
             2,
         )
@@ -771,6 +788,14 @@ def rank_option_chain(
                 entry_price=entry,
                 contract_cost=contract_cost,
                 suitability_score=_clamp(score),
+                options_quality_score=options_quality,
+                options_quality_reasons_ar=[
+                    f"IV {iv * 100:.1f}% أعطى {iv_score}/100.",
+                    f"Delta {delta:.3f} أعطت {delta_score}/100.",
+                    f"Theta {theta:.3f} وتآكل {theta_burn_pct:.1f}% أعطيا {theta_score}/100.",
+                    f"Gamma {gamma:.4f} أعطت {gamma_score}/100 بعد ضبطها لسعر السهم.",
+                    f"مدة {dte} DTE أعطت {dte_score}/100 والسيولة {liquidity}/100.",
+                ],
                 liquidity_score=liquidity,
                 risk_score=risk,
                 ranking_score=score,

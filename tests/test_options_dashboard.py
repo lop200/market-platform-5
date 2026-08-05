@@ -169,6 +169,17 @@ def test_dte_zero_one_and_outside_7_30_are_rejected():
     assert result.rejection_reasons["dte"] == 2
 
 
+def test_option_quality_explicitly_includes_iv_delta_theta_gamma_and_dte():
+    result = rank_option_chain(
+        stock(), [contract("QUALITY", OptionType.CALL)], enabled(), now=NOW
+    )
+    ranked = result.ranked_contracts[0]
+    for component in ("iv", "delta", "theta", "gamma", "dte", "options_quality"):
+        assert component in ranked.ranking_components
+    assert ranked.options_quality_score == ranked.ranking_components["options_quality"]
+    assert len(ranked.options_quality_reasons_ar) == 5
+
+
 def test_hard_gates_reject_bad_quotes_but_low_liquidity_is_soft_ranked():
     missing = contract("MISSING", OptionType.CALL)
     missing.delta = None

@@ -30,7 +30,7 @@ from app.security.site_lock import (
     make_cookie_value,
     parse_cookie_subject,
     revoke_access_code,
-    verify_code_and_get_subject,
+    verify_credentials_and_get_subject,
 )
 
 router = APIRouter(tags=["lock"])
@@ -59,6 +59,7 @@ def lock_page(request: Request) -> HTMLResponse:
 @router.post("/lock", response_class=HTMLResponse)
 def lock_submit(
     request: Request,
+    username: str = Form(...),
     code: str = Form(...),
     consent: str = Form(None),
     db: Session = Depends(get_db),
@@ -72,11 +73,11 @@ def lock_submit(
             {"error": "يجب الموافقة على إخلاء المسؤولية قبل الدخول.", "disclaimer": DISCLAIMER_AR},
             status_code=400,
         )
-    subject = verify_code_and_get_subject(db, code.strip(), settings)
+    subject = verify_credentials_and_get_subject(db, username.strip(), code, settings)
     if subject is None:
         return templates.TemplateResponse(
             request, "lock.html",
-            {"error": "رمز الدخول غير صحيح.", "disclaimer": DISCLAIMER_AR},
+            {"error": "اسم المستخدم أو كلمة المرور غير صحيحة.", "disclaimer": DISCLAIMER_AR},
             status_code=401,
         )
     response = RedirectResponse(url="/", status_code=303)
@@ -88,6 +89,13 @@ def lock_submit(
         samesite="lax",
         secure=settings.app_env == "production",
     )
+    return response
+
+
+@router.post("/logout")
+def logout() -> RedirectResponse:
+    response = RedirectResponse(url="/lock", status_code=303)
+    response.delete_cookie(COOKIE_NAME)
     return response
 
 

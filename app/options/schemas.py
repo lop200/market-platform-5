@@ -86,6 +86,8 @@ class RankedOptionContract(BaseModel):
     entry_price: float
     contract_cost: float
     suitability_score: int = Field(ge=0, le=100)
+    options_quality_score: int = Field(default=0, ge=0, le=100)
+    options_quality_reasons_ar: list[str] = Field(default_factory=list)
     liquidity_score: int = Field(ge=0, le=100)
     risk_score: int = Field(ge=0, le=100)
     ranking_score: float

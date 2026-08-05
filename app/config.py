@@ -241,6 +241,15 @@ class Settings(BaseSettings):
     openai_max_retries: int = Field(default=2, alias="OPENAI_MAX_RETRIES")
     openai_daily_budget_usd: float = Field(default=1.0, alias="OPENAI_DAILY_BUDGET_USD")
     openai_candidate_limit: int = Field(default=3, alias="OPENAI_CANDIDATE_LIMIT")
+    openai_operation_budget_usd: float = Field(default=0.08, alias="OPENAI_OPERATION_BUDGET_USD")
+    openai_scan_budget_usd: float = Field(default=0.20, alias="OPENAI_SCAN_BUDGET_USD")
+    openai_review_cache_seconds: int = Field(default=45, alias="OPENAI_REVIEW_CACHE_SECONDS")
+    openai_lock_seconds: int = Field(default=45, alias="OPENAI_LOCK_SECONDS")
+    openai_failure_cooldown_seconds: int = Field(default=10, alias="OPENAI_FAILURE_COOLDOWN_SECONDS")
+    openai_max_output_tokens: int = Field(default=1200, alias="OPENAI_MAX_OUTPUT_TOKENS")
+    openai_input_cost_per_million: float = Field(default=0.25, alias="OPENAI_INPUT_COST_PER_MILLION")
+    openai_cached_input_cost_per_million: float = Field(default=0.025, alias="OPENAI_CACHED_INPUT_COST_PER_MILLION")
+    openai_output_cost_per_million: float = Field(default=2.0, alias="OPENAI_OUTPUT_COST_PER_MILLION")
 
     min_avg_daily_volume: int = Field(default=250_000, alias="MIN_AVG_DAILY_VOLUME")
     min_relative_volume: float = Field(default=0.65, alias="MIN_RELATIVE_VOLUME")
@@ -312,6 +321,7 @@ class Settings(BaseSettings):
     default_monthly_cap_usd: float = Field(default=20.0, alias="DEFAULT_MONTHLY_CAP_USD")
     cost_anomaly_calls_per_minute: int = Field(default=10, alias="COST_ANOMALY_CALLS_PER_MINUTE")
     enable_self_audit_scheduler: bool = Field(default=True, alias="ENABLE_SELF_AUDIT_SCHEDULER")
+    site_username: str = Field(default="lop", alias="SITE_USERNAME")
     access_code_main: str | None = Field(default=None, alias="ACCESS_CODE_MAIN")
     site_lock_cookie_days: int = Field(default=30, alias="SITE_LOCK_COOKIE_DAYS")
 

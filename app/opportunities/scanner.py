@@ -32,6 +32,7 @@ from app.options.service import analyze_options_after_stock
 from app.opportunities.quality import evaluate_quote
 from app.opportunities.risk import position_size, risk_reward
 from app.opportunities.schemas import EntryZone, MarketRegime, OpportunityResult, OpportunityStatus, Target
+from app.opportunities.scoring import build_stock_scorecard, finalize_scorecard_with_options
 from app.opportunities.strategies import select_strategy
 from app.opportunities.universe import select_scan_universe
 from app.providers.base import MarketDataAdapter, Quote
@@ -401,13 +402,20 @@ def build_opportunity(
         f"وATR؛ الحركة المتوقعة {expected_move_pct:.2f}% خلال {hours_left:.1f} ساعة "
         f"(التذبذب السنوي المكافئ {annual_vol_pct:.0f}% للعرض فقط)"
     )
-    technical = min(
-        100,
-        round(strategy.match_pct * 0.7 + strategy.score * 0.3),
+    scorecard = build_stock_scorecard(
+        indicators=indicators,
+        strategy_match_pct=strategy.match_pct,
+        strategy_checks=list(strategy.checks),
+        spread_pct=quote.spread_pct,
+        dollar_volume=dollar_volume,
+        quote_age_seconds=quote.age_seconds,
+        data_valid=quality.accepted and verification.accepted,
+        news_risk=bool(risk_flags),
     )
-    liquidity = max(0, min(100, int(100 - float(quote.spread_pct or 100) * 15)))
+    technical = scorecard["trend_score"]
+    liquidity = scorecard["liquidity_score"]
     news_score = 50 if not news else max(0, 65 - len(risk_flags) * 25)
-    overall = round(technical * 0.55 + liquidity * 0.3 + news_score * 0.15)
+    overall = scorecard["stock_confidence_score"]
     risk_settings = _risk_settings(db, settings)
     plan = position_size(
         float(risk_settings.capital_sar), float(risk_settings.max_risk_pct),
@@ -491,6 +499,7 @@ def build_opportunity(
         liquidity_score=liquidity,
         overall_score=overall,
         confidence_label="مرتفعة" if overall >= 80 else "متوسطة" if overall >= 65 else "منخفضة",
+        scorecard=scorecard,
         reasons_ar=[strategy.reason, f"الحجم النسبي {indicators.get('relative_volume', 0):.2f}"],
         warnings_ar=warnings[:4],
         news_summary_ar="لا توجد أخبار متاحة من مزود رسمي" if not news else news[0].headline,
@@ -789,6 +798,9 @@ def scan_market(
                 "feed": item.data_feed,
             },
             "data_quality": {"valid_for_plan": True},
+            "overall_score": item.overall_score,
+            "relative_volume": item.relative_volume,
+            "indicators": {"relative_volume": item.relative_volume},
             "trade_plan": {
                 "entry_from": item.entry_zone.from_price,
                 "stop": item.stop_loss,
@@ -801,6 +813,7 @@ def scan_market(
         item.options = analyze_options_after_stock(
             stock_analysis, settings, option_provider
         ).model_dump(mode="json")
+        item.scorecard = finalize_scorecard_with_options(item.scorecard, item.options)
     reviews = review_candidates(
         db, settings,
         [
@@ -809,11 +822,16 @@ def scan_market(
                 "market_regime": item.market_regime.value,
                 "scores": {
                     "technical": item.technical_score, "news": item.news_score,
-                    "liquidity": item.liquidity_score, "overall": item.overall_score,
+                    "liquidity": item.liquidity_score, "stock_confidence": item.overall_score,
+                    "final_confidence": item.scorecard.get("final_confidence_score"),
+                    "entry_conditions": item.scorecard.get("entry_conditions_score"),
+                    "options_quality": item.scorecard.get("options_quality_score"),
                 },
                 "quote": {
                     "price": item.current_price, "bid": item.bid, "ask": item.ask,
                     "spread_pct": item.spread_pct, "age_seconds": item.quote_age_seconds,
+                    "quote_timestamp": item.quote_timestamp.isoformat(),
+                    "session": item.session,
                 },
                 "entry": item.entry_zone.model_dump(by_alias=True),
                 "stop": item.stop_loss,
@@ -826,6 +844,9 @@ def scan_market(
             }
             for item in review_shortlist
         ],
+        run_id=str(run.id),
+        operation="market_scan_review",
+        reason="batched_shortlist_after_deterministic_market_scan",
     )
     final: list[OpportunityResult] = []
     for item in finalist_pool:

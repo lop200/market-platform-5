@@ -239,6 +239,28 @@ class AIAnalysisLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class OpenAICallLog(Base):
+    """One row per actual SDK call; never stores prompts, payloads, or secrets."""
+
+    __tablename__ = "openai_call_logs"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    endpoint: Mapped[str] = mapped_column(String(80), default="/v1/responses")
+    operation: Mapped[str] = mapped_column(String(60), index=True)
+    model_name: Mapped[str] = mapped_column(String(80))
+    symbol: Mapped[str | None] = mapped_column(String(255), index=True)
+    symbols_json: Mapped[list] = mapped_column(JSONVariant, default=list)
+    run_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_cost_usd: Mapped[float] = mapped_column(Numeric(10, 6), default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    reason: Mapped[str] = mapped_column(String(160))
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class SPXHuntResult(Base):
     """Paper-only SPX analysis audit record; never represents an order."""
 

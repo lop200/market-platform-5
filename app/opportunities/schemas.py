@@ -97,6 +97,7 @@ class OpportunityResult(BaseModel):
     liquidity_score: int = Field(ge=0, le=100)
     overall_score: int = Field(ge=0, le=100)
     confidence_label: str
+    scorecard: dict = Field(default_factory=dict)
     reasons_ar: list[str]
     warnings_ar: list[str]
     news_summary_ar: str
