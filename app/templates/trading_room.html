@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <title>غرفة التداول — مرصاد</title>
+  <style>
+    :root{--bg:#07111f;--panel:#0d1b2e;--panel2:#101f34;--line:#20344c;--text:#f4f7fb;--muted:#91a3ba;--green:#35d07f;--red:#ff6878;--blue:#52a8ff;--yellow:#f5c451}
+    *{box-sizing:border-box}html,body{overflow-x:hidden}body{margin:0;background:radial-gradient(circle at 90% 0,#123251 0,transparent 32rem),var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif}.shell{width:min(1500px,100%);margin:auto;padding:10px}.card,.topbar{background:#0d1b2eee;border:1px solid var(--line);border-radius:17px;box-shadow:0 12px 40px #0003}.topbar{padding:13px;display:grid;gap:12px}.top-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.brand{display:flex;align-items:center;gap:9px}.brand-mark{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--green),var(--blue));display:grid;place-items:center;color:#041523;font-weight:900}.brand h1{font-size:1.2rem;margin:0}.brand small,.muted{color:var(--muted)}a{color:inherit;text-decoration:none}.top-actions{display:flex;gap:7px}.back,.danger,.btn{border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--text);background:#13243a;cursor:pointer;font-weight:700}.danger{border-color:#713743;background:#371722;color:#ffb2ba}.danger.active{background:var(--red);color:#21040a}.status-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.status{min-width:0;padding:10px;border-radius:12px;background:#091625;border:1px solid #1a314a}.status small{display:block;color:var(--muted);font-size:.7rem}.status b{display:block;margin-top:5px;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.good{color:var(--green)}.bad{color:var(--red)}.main-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(330px,.85fr);gap:10px;margin-top:10px}.stack{display:grid;gap:10px;align-content:start}.card{padding:15px;min-width:0}.card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}.card h2{font-size:1rem;margin:0}.badge{padding:6px 9px;border:1px solid var(--line);border-radius:999px;color:#b9c7d8;background:#0a1727;font-size:.72rem}.price-symbol{font:900 1.6rem ui-monospace,monospace;direction:ltr}.price-now{font-size:1.8rem;color:var(--green);font-weight:900}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.metric{min-width:0;padding:10px;border-radius:11px;background:#091625;border:1px solid #1a314a}.metric small{display:block;color:var(--muted);font-size:.68rem}.metric b{display:block;margin-top:4px;direction:ltr;text-align:right;overflow-wrap:anywhere}.section-label{color:var(--blue);font-size:.75rem;font-weight:800;margin:12px 0 7px}.scorebar{height:9px;background:#07101d;border-radius:99px;overflow:hidden}.scorebar span{display:block;height:100%;background:linear-gradient(90deg,var(--yellow),var(--green));width:0}.analysis-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.analysis-note{margin-top:10px;padding:10px;border-radius:11px;background:#0a1727;border-right:3px solid var(--blue)}ul{margin:6px 0 0;padding-right:18px;color:#c8d3df;font-size:.84rem;line-height:1.7}.empty{padding:14px;text-align:center;color:var(--muted);background:#091625;border-radius:11px}.table-wrap{width:100%}table{width:100%;border-collapse:collapse;font-size:.78rem}th,td{padding:9px 7px;text-align:right;border-bottom:1px solid #1c3047}th{color:var(--muted);font-size:.68rem}.symbol{font-family:ui-monospace,monospace;direction:ltr;font-weight:900}.positive{color:var(--green)}.negative{color:var(--red)}.row-actions{display:flex;gap:4px;flex-wrap:wrap}.mini{border:1px solid var(--line);background:#10223a;color:var(--text);border-radius:7px;padding:5px 7px;cursor:pointer;font-size:.67rem}.mini.sell{color:#ffadb5}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.field label{display:block;color:var(--muted);font-size:.72rem;margin-bottom:5px}.field input,.field select{width:100%;min-height:43px;border:1px solid var(--line);border-radius:10px;padding:9px;background:#081522;color:var(--text);font:inherit}.wide{grid-column:1/-1}.switch{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.8rem}.switch input{accent-color:var(--green)}.order-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}.btn.preview{color:#cbe6ff;border-color:#315b83}.btn.paper{background:linear-gradient(135deg,#1eaa66,#137e4a);border:0}.btn.live{grid-column:1/-1;background:#192333;color:#65758a;cursor:not-allowed}.btn:disabled{opacity:.55;cursor:not-allowed}.preview-box{margin-top:10px;padding:11px;border-radius:11px;background:#091625;border:1px dashed #31506f;font-size:.8rem;line-height:1.8}.paper-banner{padding:9px 12px;border-radius:11px;background:#163924;color:#91f5b9;border:1px solid #2c6d46;font-weight:800;font-size:.78rem}.toast{position:fixed;bottom:15px;left:15px;right:15px;max-width:440px;margin:auto;padding:12px;border-radius:11px;background:#163924;border:1px solid #2c6d46;display:none;z-index:20}.toast.error{background:#3a1720;border-color:#713743}.footer-note{text-align:center;color:var(--muted);font-size:.72rem;padding:14px}
+    @media(max-width:900px){.status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.main-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:620px){.shell{padding:7px}.top-head{align-items:flex-start}.brand small{display:none}.top-actions{flex-direction:column}.status-grid{grid-template-columns:1fr 1fr}.status:last-child{grid-column:1/-1}.card{padding:12px}.analysis-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid{grid-template-columns:1fr}.wide{grid-column:auto}.table-wrap table,.table-wrap tbody,.table-wrap tr,.table-wrap td{display:block;width:100%}.table-wrap thead{display:none}.table-wrap tr{padding:10px;margin-bottom:9px;border:1px solid var(--line);border-radius:12px;background:#091625}.table-wrap td{display:grid;grid-template-columns:42% 58%;gap:6px;border:0;padding:5px 0;overflow-wrap:anywhere}.table-wrap td::before{content:attr(data-label);color:var(--muted);font-size:.7rem}.row-actions{justify-content:flex-start}.order-actions{grid-template-columns:1fr}.btn.live{grid-column:auto}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <div class="top-head">
+      <div class="brand"><span class="brand-mark">M</span><div><h1>غرفة التداول</h1><small>المحفظة والتنفيذ التجريبي</small></div></div>
+      <div class="top-actions"><a class="back" href="/">الرئيسية</a><button class="danger" id="emergency">إيقاف طوارئ</button></div>
+    </div>
+    <div class="status-grid">
+      <div class="status"><small>مرصاد Bridge</small><b id="marsadState">—</b></div>
+      <div class="status"><small>منصة سهم</small><b id="sahmState">—</b></div>
+      <div class="status"><small>الرصيد النقدي</small><b id="cash">—</b></div>
+      <div class="status"><small>القوة الشرائية</small><b id="buyingPower">—</b></div>
+      <div class="status"><small>ربح/خسارة اليوم • آخر مزامنة</small><b id="dailyPnl">—</b><small id="lastSync">—</small></div>
+    </div>
+  </header>
+
+  <div class="main-grid">
+    <div class="stack">
+      <section class="card" aria-labelledby="liveTitle">
+        <div class="card-head"><h2 id="liveTitle">السعر المباشر</h2><span class="badge" id="marketSession">—</span></div>
+        <div class="card-head"><span class="price-symbol" id="symbol">—</span><span class="price-now" id="stockPrice">—</span></div>
+        <div class="section-label">السهم الأساسي</div>
+        <div class="metrics">
+          <div class="metric"><small>Bid / Ask</small><b id="stockBidAsk">—</b></div>
+          <div class="metric"><small>المصدر / عمر البيانات</small><b id="stockSource">—</b></div>
+          <div class="metric"><small>اتجاه السهم</small><b id="direction">—</b></div>
+          <div class="metric"><small>قوة الاتجاه</small><b id="trendStrength">—</b><div class="scorebar"><span id="trendBar"></span></div></div>
+        </div>
+        <div class="section-label">عقد الأوبشن المختار</div>
+        <div class="metrics">
+          <div class="metric"><small>العقد</small><b id="optionSymbol">لا يوجد عقد محدد</b></div>
+          <div class="metric"><small>السعر</small><b id="optionPrice">—</b></div>
+          <div class="metric"><small>Bid / Ask</small><b id="optionBidAsk">—</b></div>
+          <div class="metric"><small>السبريد / عمر البيانات</small><b id="optionSpread">—</b></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="analysisTitle">
+        <div class="card-head"><h2 id="analysisTitle">خطة التحليل</h2><span class="badge">حسابات مرصاد فقط</span></div>
+        <div class="analysis-grid">
+          <div class="metric"><small>نقطة الدخول</small><b id="entry">—</b></div>
+          <div class="metric"><small>الهدف القريب</small><b id="nearTarget">—</b></div>
+          <div class="metric"><small>الهدف الممتد</small><b id="extendedTarget">—</b></div>
+          <div class="metric"><small>وقف الخسارة</small><b id="stop">—</b></div>
+          <div class="metric"><small>قوة الإشارة الفنية</small><b id="technicalScore">—</b></div>
+          <div class="metric"><small>المسافة نحو الهدف</small><b id="targetProgress">—</b></div>
+          <div class="metric"><small>احتمال تاريخي للهدف</small><b id="targetProbability">بيانات غير كافية</b></div>
+          <div class="metric"><small>احتمال تاريخي للوقف</small><b id="stopProbability">بيانات غير كافية</b></div>
+          <div class="metric"><small>عدد العينات</small><b id="samples">0</b></div>
+        </div>
+        <div class="analysis-note"><b>أسباب الاتجاه</b><ul id="directionReasons"><li>لا توجد إشارة مكتملة حاليًا.</li></ul></div>
+        <div class="analysis-note" style="border-color:var(--red)"><b>شروط إلغاء الإشارة</b><ul id="cancelConditions"><li>قدم السعر أو كسر وقف الخسارة أو تغيّر سياق السوق.</li></ul></div>
+      </section>
+
+      <section class="card" aria-labelledby="portfolioTitle">
+        <div class="card-head"><h2 id="portfolioTitle">المحفظة</h2><span class="badge" id="positionCount">0 مراكز</span></div>
+        <div class="table-wrap"><table><thead><tr><th>الرمز / العقد</th><th>الكمية</th><th>متوسط الشراء</th><th>السعر</th><th>القيمة</th><th>الربح والخسارة</th><th>الهدف / الوقف</th><th>إجراء</th></tr></thead><tbody id="positions"><tr><td colspan="8"><div class="empty">لا توجد مراكز تجريبية مفتوحة.</div></td></tr></tbody></table></div>
+      </section>
+    </div>
+
+    <aside class="stack">
+      <section class="card" aria-labelledby="orderTitle">
+        <div class="card-head"><h2 id="orderTitle">تنفيذ الأمر</h2><span class="paper-banner">PAPER MODE فقط</span></div>
+        <form id="orderForm">
+          <div class="form-grid">
+            <div class="field"><label for="side">العملية</label><select id="side"><option value="buy">شراء</option><option value="sell">بيع</option></select></div>
+            <div class="field"><label for="instrument">الأداة</label><select id="instrument"><option value="stock">سهم</option><option value="option">أوبشن</option></select></div>
+            <div class="field wide"><label for="orderSymbol">الرمز أو العقد كاملًا</label><input id="orderSymbol" dir="ltr" required placeholder="NVDA أو عقد OCC"></div>
+            <div class="field"><label for="quantity">الكمية</label><input id="quantity" type="number" min="1" value="1" required></div>
+            <div class="field"><label for="limitPrice">Limit Price</label><input id="limitPrice" type="number" min="0.01" step="0.01" required></div>
+            <div class="field"><label for="takeProfit">Take Profit — الهدف القريب افتراضيًا</label><input id="takeProfit" type="number" min="0.01" step="0.01"></div>
+            <div class="field"><label for="stopLoss">Stop Loss</label><input id="stopLoss" type="number" min="0.01" step="0.01"></div>
+            <div class="field"><label for="protectAt">حماية الربح بعد تحقق %</label><input id="protectAt" type="number" min="1" max="100" step="1"></div>
+            <div class="field"><label for="trailingStop">Trailing Stop % (اختياري)</label><input id="trailingStop" type="number" min="0.1" max="50" step="0.1"></div>
+          </div>
+          <div class="preview-box" id="previewBox">أدخل الأمر ثم اضغط «معاينة». لن يخرج أي أمر إلى منصة سهم.</div>
+          <div class="order-actions">
+            <button class="btn preview" type="button" id="previewBtn">معاينة الأمر</button>
+            <button class="btn paper" type="button" id="paperBtn" disabled>تنفيذ تجريبي</button>
+            <button class="btn live" type="button" disabled>التنفيذ الحقيقي — معطل</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>قواعد الحماية</h2><span class="badge">إجبارية</span></div>
+        <ul>
+          <li>لا تنفيذ عند قدم السعر أو المحفظة.</li>
+          <li>الأوبشن يقبل Limit Order فقط.</li>
+          <li>OCO يُنشأ على الكمية المنفذة فقط.</li>
+          <li>لا بيع بأكثر من الكمية المملوكة.</li>
+          <li>التنفيذ الحقيقي غير متاح في هذه النسخة.</li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+  <div class="footer-note">مرصاد أداة تحليل ومحاكاة. لا تحفظ كلمة مرور سهم أو رمز OTP ولا ترسل أوامر حقيقية.</div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $=s=>document.querySelector(s),money=v=>v==null?"—":"$"+Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}),num=v=>v==null?"—":Number(v).toFixed(2);
+let room=null,previewed=null,orderKey=null;
+function toast(message,error=false){const box=$("#toast");box.textContent=message;box.className="toast"+(error?" error":"");box.style.display="block";setTimeout(()=>box.style.display="none",3500)}
+function list(id,items,fallback){$(id).innerHTML=(items&&items.length?items:[fallback]).map(x=>`<li>${String(x)}</li>`).join("")}
+function render(data){room=data;const bridge=data.bridge||{},account=data.account||{},analysis=data.analysis||{},quote=analysis.quote||{},history=analysis.historical_probability||{};
+ $("#marsadState").textContent=bridge.marsad_status==="connected"?"متصل":"غير متصل";$("#marsadState").className=bridge.marsad_status==="connected"?"good":"bad";
+ $("#sahmState").textContent=bridge.sahm_status==="connected"?"متصل":"غير متصل";$("#sahmState").className=bridge.sahm_status==="connected"?"good":"bad";
+ $("#cash").textContent=money(account.cash);$("#buyingPower").textContent=money(account.buying_power);$("#dailyPnl").textContent=money(account.daily_pnl);$("#dailyPnl").className=Number(account.daily_pnl)>=0?"positive":"negative";$("#lastSync").textContent=bridge.last_sync?"آخر مزامنة "+new Date(bridge.last_sync).toLocaleTimeString("ar-SA"):"لم تتم مزامنة سهم";
+ $("#emergency").classList.toggle("active",!!account.emergency_stop);$("#emergency").textContent=account.emergency_stop?"إلغاء إيقاف الطوارئ":"إيقاف طوارئ";$("#marketSession").textContent=(data.market||{}).session_label_ar||"—";
+ $("#symbol").textContent=analysis.symbol||"—";$("#stockPrice").textContent=quote.price?money(quote.price):"—";$("#stockBidAsk").textContent=quote.bid?`${num(quote.bid)} / ${num(quote.ask)}`:"—";$("#stockSource").textContent=quote.source?`${quote.source} • ${quote.age_seconds}ث`:"—";$("#direction").textContent=analysis.direction||"—";const strength=Number(analysis.technical_signal_score||0);$("#trendStrength").textContent=analysis.technical_signal_score==null?"—":strength+" / 100";$("#trendBar").style.width=strength+"%";
+ $("#entry").textContent=num(analysis.entry);$("#nearTarget").textContent=num(analysis.near_target);$("#extendedTarget").textContent=num(analysis.extended_target);$("#stop").textContent=num(analysis.stop);$("#technicalScore").textContent=analysis.technical_signal_score==null?"—":analysis.technical_signal_score+" / 100";$("#targetProgress").textContent=analysis.target_progress_pct==null?"—":analysis.target_progress_pct+"%";$("#targetProbability").textContent=history.status==="scored"?history.target_probability_pct+"%":"بيانات غير كافية";$("#stopProbability").textContent=history.status==="scored"?history.stop_probability_pct+"%":"بيانات غير كافية";$("#samples").textContent=history.samples||0;list("#directionReasons",analysis.direction_reasons,"لا توجد أسباب مكتملة.");list("#cancelConditions",analysis.cancellation_conditions,"قدم السعر أو كسر الوقف أو تغير سياق السوق.");
+ if(analysis.symbol&&!$("#orderSymbol").value){$("#orderSymbol").value=analysis.symbol;$("#limitPrice").value=analysis.entry||quote.ask||"";$("#takeProfit").value=analysis.near_target||"";$("#stopLoss").value=analysis.stop||""}
+ const positions=[...(data.positions||[]),...(data.bridge_positions||[])];$("#positionCount").textContent=positions.length+" مراكز";$("#positions").innerHTML=positions.length?positions.map(positionRow).join(""):`<tr><td colspan="8"><div class="empty">لا توجد مراكز مفتوحة.</div></td></tr>`;
+}
+function positionRow(p){const avg=p.average_price??p.avg_price,current=p.current_price,pnl=p.pnl_usd??((current-avg)*p.quantity*(p.instrument_type==="option"?100:1)),pct=p.pnl_pct??(avg?(current/avg-1)*100:0);return `<tr><td data-label="الرمز / العقد" class="symbol">${p.symbol}</td><td data-label="الكمية">${p.quantity}</td><td data-label="متوسط الشراء">${money(avg)}</td><td data-label="السعر الحالي">${money(current)}</td><td data-label="القيمة السوقية">${money(p.market_value??current*p.quantity*(p.instrument_type==="option"?100:1))}</td><td data-label="الربح والخسارة" class="${pnl>=0?"positive":"negative"}">${money(pnl)} • ${Number(pct).toFixed(2)}%</td><td data-label="الهدف / الوقف">${num(p.target_price)} / ${num(p.stop_price)}</td><td data-label="إجراء"><div class="row-actions"><button class="mini" onclick='usePosition(${JSON.stringify(JSON.stringify(p))},"edit")'>تعديل</button><button class="mini sell" onclick='usePosition(${JSON.stringify(JSON.stringify(p))},25)'>25%</button><button class="mini sell" onclick='usePosition(${JSON.stringify(JSON.stringify(p))},50)'>50%</button><button class="mini sell" onclick='usePosition(${JSON.stringify(JSON.stringify(p))},100)'>إغلاق</button></div></td></tr>`}
+window.usePosition=(raw,action)=>{const p=JSON.parse(raw);$("#instrument").value=p.instrument_type||"stock";$("#orderSymbol").value=p.symbol;$("#limitPrice").value=p.current_price||p.average_price;if(action==="edit"){$("#takeProfit").value=p.target_price||"";$("#stopLoss").value=p.stop_price||""}else{$("#side").value="sell";$("#quantity").value=Math.max(1,Math.floor(p.quantity*Number(action)/100))}invalidate();$("#orderForm").scrollIntoView({behavior:"smooth"})};
+function payload(){return {idempotency_key:orderKey||crypto.randomUUID(),side:$("#side").value,instrument_type:$("#instrument").value,symbol:$("#orderSymbol").value.trim(),quantity:Number($("#quantity").value),limit_price:Number($("#limitPrice").value),take_profit:$("#takeProfit").value?Number($("#takeProfit").value):null,stop_loss:$("#stopLoss").value?Number($("#stopLoss").value):null,trailing_stop_pct:$("#trailingStop").value?Number($("#trailingStop").value):null,profit_protection_trigger_pct:$("#protectAt").value?Number($("#protectAt").value):null}}
+function invalidate(){previewed=null;orderKey=null;$("#paperBtn").disabled=true;$("#previewBox").textContent="يلزم معاينة الأمر بعد كل تعديل."}
+async function api(path,options={}){const response=await fetch(path,{headers:{"Content-Type":"application/json"},...options});const data=await response.json();if(!response.ok)throw new Error(data.detail||"تعذر إكمال الطلب");return data}
+async function load(){try{render(await api("/api/v1/trading/room"))}catch(e){toast(e.message,true)}}
+$("#previewBtn").onclick=async()=>{try{orderKey=crypto.randomUUID();previewed=await api("/api/v1/trading/orders/preview",{method:"POST",body:JSON.stringify(payload())});$("#previewBox").innerHTML=`القيمة الإجمالية: <b>${money(previewed.total_value)}</b><br>أقصى خسارة تقديرية: <b>${money(previewed.estimated_max_loss)}</b><br>السعر: ${num(previewed.quote.bid)} / ${num(previewed.quote.ask)} • ${previewed.quote.source} • ${previewed.quote.age_seconds}ث<br>${previewed.marketable_now?"قابل للمحاكاة الآن":"سيبقى الأمر معلقًا حتى يلامس السعر المحدد"}`;$("#paperBtn").disabled=false}catch(e){toast(e.message,true)}};
+$("#paperBtn").onclick=async()=>{if(!previewed)return;try{const result=await api("/api/v1/trading/orders/paper",{method:"POST",body:JSON.stringify(payload())});toast(`تمت المحاكاة: ${result.status} • المنفذ ${result.filled_quantity||0}`);invalidate();await load()}catch(e){toast(e.message,true)}};
+$("#orderForm").addEventListener("input",invalidate);$("#emergency").onclick=async()=>{try{await api("/api/v1/trading/emergency-stop?enabled="+!(room.account||{}).emergency_stop,{method:"POST"});await load()}catch(e){toast(e.message,true)}};
+load();setInterval(()=>{if(!document.hidden)load()},15000);
+</script>
+</body>
+</html>

@@ -261,6 +261,79 @@ class OpenAICallLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
+class PaperAccount(Base):
+    """Single paper-only account. It never mirrors or authorizes a live broker account."""
+
+    __tablename__ = "paper_accounts"
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
+    cash: Mapped[float] = mapped_column(Numeric(14, 2), default=100_000)
+    buying_power: Mapped[float] = mapped_column(Numeric(14, 2), default=100_000)
+    realized_pnl_today: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    emergency_stop: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TradingPosition(Base):
+    __tablename__ = "trading_positions"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    instrument_type: Mapped[str] = mapped_column(String(10), index=True)
+    symbol: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    underlying_symbol: Mapped[str] = mapped_column(String(10), index=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+    avg_price: Mapped[float] = mapped_column(Numeric(14, 4))
+    current_price: Mapped[float] = mapped_column(Numeric(14, 4))
+    quote_as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    target_price: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    stop_price: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    profit_protection_trigger_pct: Mapped[float | None] = mapped_column(Numeric(6, 2))
+    trailing_stop_pct: Mapped[float | None] = mapped_column(Numeric(6, 2))
+    source: Mapped[str] = mapped_column(String(20), default="paper")
+    status: Mapped[str] = mapped_column(String(15), default="open", index=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class PaperOrder(Base):
+    __tablename__ = "paper_orders"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    client_order_id: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    parent_order_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("paper_orders.id"), index=True)
+    oco_group_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, index=True)
+    order_role: Mapped[str] = mapped_column(String(20), default="entry")
+    instrument_type: Mapped[str] = mapped_column(String(10))
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    side: Mapped[str] = mapped_column(String(4))
+    quantity: Mapped[int] = mapped_column(Integer)
+    filled_quantity: Mapped[int] = mapped_column(Integer, default=0)
+    limit_price: Mapped[float] = mapped_column(Numeric(14, 4))
+    take_profit: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    stop_loss: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    trailing_stop_pct: Mapped[float | None] = mapped_column(Numeric(6, 2))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    reject_reason: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TradingBridgeSnapshot(Base):
+    """Normalized broker view only; never stores Sahm passwords, OTPs, or cookies."""
+
+    __tablename__ = "trading_bridge_snapshots"
+    adapter: Mapped[str] = mapped_column(String(30), primary_key=True)
+    connection_status: Mapped[str] = mapped_column(String(20), default="disconnected")
+    account_json: Mapped[dict] = mapped_column(JSONVariant, default=dict)
+    positions_json: Mapped[list] = mapped_column(JSONVariant, default=list)
+    orders_json: Mapped[list] = mapped_column(JSONVariant, default=list)
+    quotes_json: Mapped[list] = mapped_column(JSONVariant, default=list)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class SPXHuntResult(Base):
     """Paper-only SPX analysis audit record; never represents an order."""
 

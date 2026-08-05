@@ -31,6 +31,7 @@
     }
   ],
   "shortcuts": [
+    { "name": "غرفة التداول", "url": "/trading-room" },
     { "name": "قناص SPX", "url": "/spx" },
     { "name": "نبض السوق", "url": "/news" },
     { "name": "تقويم الإعلانات", "url": "/earnings" }
