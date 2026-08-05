@@ -84,10 +84,10 @@ def lock_submit(
     response.set_cookie(
         COOKIE_NAME,
         make_cookie_value(subject, settings.api_key),
-        max_age=settings.site_lock_cookie_days * 24 * 3600,
         httponly=True,
         samesite="lax",
         secure=settings.app_env == "production",
+        path="/",
     )
     return response
 
@@ -95,7 +95,7 @@ def lock_submit(
 @router.post("/logout")
 def logout() -> RedirectResponse:
     response = RedirectResponse(url="/lock", status_code=303)
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, path="/")
     return response
 
 

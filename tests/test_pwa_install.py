@@ -41,6 +41,9 @@ def test_worker_never_caches_live_data():
     # A cached quote is a wrong quote; the API must always hit the network.
     assert 'url.pathname.startsWith("/api/")' in body
     assert 'url.pathname.startsWith("/lock")' in body
+    assert 'request.mode === "navigate"' in body
+    assert 'const CACHE = "marsad-static-v2"' in body
+    assert "cache.addAll" not in body
 
 
 def test_icons_are_real_pngs_of_the_declared_size():

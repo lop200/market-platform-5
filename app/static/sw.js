@@ -1,21 +1,13 @@
 // Service worker for the installed app.
 //
-// Deliberately minimal. This is a trading dashboard: a cached quote is a wrong
-// quote, and a stale one shown confidently is worse than no app at all. So
-// nothing under /api is ever cached or replayed — those requests go to the
-// network and fail loudly if the network is down.
-//
-// Only the page shell is kept, and only so a cold launch on a bad connection
-// shows the interface with its own "connection lost" states rather than the
-// browser's error page.
+// Protected pages and live data are always network-only. This prevents an
+// installed mobile app from reopening an old authenticated page or bypassing
+// the current login redirect with a cached shell.
 
-const CACHE = "marsad-shell-v1";
-const SHELL = ["/", "/spx", "/news", "/earnings"];
+const CACHE = "marsad-static-v2";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {
@@ -34,23 +26,27 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Live data, the price stream, and the lock screen must never be served
-  // from a cache, nor recorded into one.
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/lock")) return;
+  // Never cache navigation, authentication, market data, or job endpoints.
+  if (
+    request.mode === "navigate" ||
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/ui/") ||
+    url.pathname.startsWith("/lock")
+  ) return;
 
-  // Network first: a working connection always wins. The cache is the
-  // fallback for a launch with no signal, never the preferred answer.
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok && (request.mode === "navigate" || url.pathname.startsWith("/static/"))) {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      })
-      .catch(() =>
-        caches.match(request).then((cached) => cached || caches.match("/"))
-      )
-  );
+  // Static assets use network-first caching only. A new worker version clears
+  // every older cache during activation.
+  if (url.pathname.startsWith("/static/")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+  }
 });

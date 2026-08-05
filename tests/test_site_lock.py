@@ -94,8 +94,16 @@ def test_main_code_with_consent_unlocks(locked_client):
     response = _login(locked_client)
     assert response.status_code == 303
     assert site_lock.COOKIE_NAME in response.cookies
+    cookie_header = response.headers["set-cookie"].lower()
+    assert "max-age=" not in cookie_header
+    assert "expires=" not in cookie_header
     home = locked_client.get("/")
     assert home.status_code == 200
+
+
+def test_locked_redirect_is_never_cached(locked_client):
+    response = locked_client.get("/")
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_logout_clears_session(locked_client):

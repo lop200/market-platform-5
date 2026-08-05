@@ -323,7 +323,6 @@ class Settings(BaseSettings):
     enable_self_audit_scheduler: bool = Field(default=True, alias="ENABLE_SELF_AUDIT_SCHEDULER")
     site_username: str = Field(default="lop", alias="SITE_USERNAME")
     access_code_main: str | None = Field(default=None, alias="ACCESS_CODE_MAIN")
-    site_lock_cookie_days: int = Field(default=30, alias="SITE_LOCK_COOKIE_DAYS")
 
     @property
     def sqlalchemy_url(self) -> str:

@@ -279,7 +279,7 @@ window.addEventListener("pagehide",()=>{scanPollGeneration++;inlinePollGeneratio
 
 // Android needs a registered worker before it will offer to install the app.
 if("serviceWorker" in navigator)
-  addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+  addEventListener("load",()=>navigator.serviceWorker.register("/sw.js",{updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{}));
 </script>
 </body>
 </html>

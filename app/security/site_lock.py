@@ -151,5 +151,11 @@ class SiteLockMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api/") or path.startswith("/ui/"):
             from fastapi.responses import JSONResponse
 
-            return JSONResponse({"detail": "site locked — access code required"}, status_code=401)
-        return RedirectResponse(url="/lock", status_code=303)
+            return JSONResponse(
+                {"detail": "site locked — access code required"},
+                status_code=401,
+                headers={"Cache-Control": "no-store"},
+            )
+        return RedirectResponse(
+            url="/lock", status_code=303, headers={"Cache-Control": "no-store"}
+        )
