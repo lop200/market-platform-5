@@ -9,12 +9,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.config import Settings
-from app.db.models import PaperOrder, TradingBridgeSnapshot, TradingPosition
+from app.db.models import PaperOrder, TradeIntent, TradingBridgeSnapshot, TradingPosition
 from app.live.prices import price_book
 from app.main import app
 from app.api import routes_trading
 from app.trading.bridge import SahmAdapter
 from app.trading.engine import execute_paper_order, fill_oco_order, preview_order, room_snapshot
+from app.trading.intent import create_trade_intent, intent_payload
 from app.trading.schemas import PaperOrderRequest, SahmBridgePayload
 
 NOW = datetime(2026, 8, 5, 14, 0, tzinfo=timezone.utc)
@@ -61,11 +62,12 @@ def fresh_stock_quote(stamp=NOW):
 def test_trading_room_is_rtl_responsive_and_live_execution_is_disabled():
     html = TestClient(app).get("/trading-room").text
     assert 'dir="rtl"' in html
-    assert "غرفة التداول" in html
+    assert "مرصاد — واجهة التداول" in html
     assert "overflow-x:hidden" in html
-    assert "PAPER MODE فقط" in html
-    assert "التنفيذ الحقيقي — معطل" in html
-    assert "@media(max-width:620px)" in html
+    assert "PAPER MODE" in html
+    assert "تنفيذ في سهم" in html
+    assert "تأكيد التنفيذ" in html
+    assert "@media(max-width:760px)" in html
     assert 'href="/trading-room"' in TestClient(app).get("/").text
 
 
@@ -196,6 +198,8 @@ def test_sahm_adapter_rejects_password_otp_and_cookie_material():
     for forbidden in ("password", "otp", "cookie", "access_token"):
         with pytest.raises(ValueError, match="authentication material"):
             SahmAdapter().normalize_snapshot({**base, forbidden: "secret"})
+    with pytest.raises(ValueError, match="authentication material"):
+        SahmAdapter().normalize_snapshot({**base, "orders": [{"cookie": "secret"}]})
 
 
 def test_bridge_sync_requires_its_separate_shared_token(monkeypatch, db_session):

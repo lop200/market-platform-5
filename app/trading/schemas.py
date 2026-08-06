@@ -56,3 +56,23 @@ class SahmBridgePayload(BaseModel):
     orders: list[dict] = Field(default_factory=list, max_length=500)
     quotes: list[BridgeQuote] = Field(default_factory=list, max_length=500)
     captured_at: datetime
+
+
+class TradeIntentEdit(BaseModel):
+    """Fields the user may change after deterministic analysis and before preview."""
+
+    quantity: int = Field(gt=0, le=100_000)
+    limit_price: float = Field(gt=0)
+    take_profit: float = Field(gt=0)
+    stop_loss: float = Field(gt=0)
+    time_in_force: Literal["day", "gtc"] = "day"
+
+
+class ExtensionExecutionEvent(BaseModel):
+    status: Literal[
+        "awaiting_user_confirmation", "submitted", "open", "partially_filled",
+        "filled", "rejected", "cancelled", "error", "disconnected",
+    ]
+    message: str = Field(min_length=1, max_length=300)
+    filled_quantity: int = Field(default=0, ge=0)
+    observed_at: datetime

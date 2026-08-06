@@ -329,6 +329,10 @@ class Settings(BaseSettings):
     trading_min_backtest_samples: int = Field(default=20, alias="TRADING_MIN_BACKTEST_SAMPLES")
     trading_bridge_enabled: bool = Field(default=False, alias="TRADING_BRIDGE_ENABLED")
     trading_bridge_token: str | None = Field(default=None, alias="TRADING_BRIDGE_TOKEN")
+    trading_max_order_value_usd: float = Field(default=5_000, alias="TRADING_MAX_ORDER_VALUE_USD")
+    trading_daily_loss_limit_usd: float = Field(default=1_000, alias="TRADING_DAILY_LOSS_LIMIT_USD")
+    trading_max_open_positions: int = Field(default=1, alias="TRADING_MAX_OPEN_POSITIONS")
+    trading_confirm_mode_enabled: bool = Field(default=False, alias="TRADING_CONFIRM_MODE_ENABLED")
 
     @property
     def sqlalchemy_url(self) -> str:

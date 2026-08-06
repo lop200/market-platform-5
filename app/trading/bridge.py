@@ -13,6 +13,16 @@ FORBIDDEN_AUTH_KEYS = {
 }
 
 
+def _contains_auth_material(value: Any) -> bool:
+    if isinstance(value, dict):
+        if {str(key).lower() for key in value} & FORBIDDEN_AUTH_KEYS:
+            return True
+        return any(_contains_auth_material(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_auth_material(item) for item in value)
+    return False
+
+
 class BrokerAdapter(ABC):
     """Boundary for browser bridges. Adapters normalize data but never execute orders."""
 
@@ -27,8 +37,7 @@ class SahmAdapter(BrokerAdapter):
     name = "sahm"
 
     def normalize_snapshot(self, raw: dict[str, Any]) -> dict[str, Any]:
-        lowered = {str(key).lower() for key in raw}
-        if lowered & FORBIDDEN_AUTH_KEYS:
+        if _contains_auth_material(raw):
             raise ValueError("authentication material is not accepted by Marsad Bridge")
         payload = SahmBridgePayload.model_validate(raw)
         captured = payload.captured_at

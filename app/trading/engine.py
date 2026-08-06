@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -89,12 +89,29 @@ def validate_quote(quote: dict | None, settings: Settings, now: datetime | None 
     bid, ask = float(quote.get("bid") or 0), float(quote.get("ask") or 0)
     if bid <= 0 or ask <= 0 or ask < bid:
         raise HTTPException(409, "Bid/Ask غير صالحين، تم منع التنفيذ.")
-    return {**quote, "age_seconds": round(age, 1), "spread": round(ask - bid, 4)}
+    mid = (bid + ask) / 2
+    spread_pct = (ask - bid) / mid * 100 if mid else 100
+    if spread_pct > settings.max_spread_pct:
+        raise HTTPException(409, "السبريد أعلى من الحد المقبول؛ تم منع التنفيذ.")
+    return {
+        **quote,
+        "age_seconds": round(age, 1),
+        "spread": round(ask - bid, 4),
+        "spread_pct": round(spread_pct, 2),
+    }
 
 
 def preview_order(
     db: Session, request: PaperOrderRequest, settings: Settings, now: datetime | None = None
 ) -> dict:
+    session = market_session(_utc(now))
+    if not session.stock_actionable:
+        raise HTTPException(409, "جلسة الأسهم مغلقة؛ تم منع التنفيذ.")
+    if request.instrument_type == "option":
+        if not settings.options_enabled:
+            raise HTTPException(404, "تحليل الأوبشن معطل بواسطة OPTIONS_ENABLED.")
+        if not session.options_actionable:
+            raise HTTPException(409, "جلسة الأوبشن مغلقة؛ تم منع التنفيذ.")
     if request.instrument_type == "option" and request.limit_price <= 0:
         raise HTTPException(422, "Market Order للأوبشن غير مسموح.")
     quote = validate_quote(current_quote(db, request.symbol, request.instrument_type), settings, now)
@@ -107,6 +124,8 @@ def preview_order(
         raise HTTPException(409, "الكمية المطلوبة للبيع أكبر من الكمية المملوكة.")
     units = multiplier(request.instrument_type)
     total = round(request.quantity * request.limit_price * units, 2)
+    if total > settings.trading_max_order_value_usd:
+        raise HTTPException(409, "قيمة الصفقة تتجاوز الحد الأقصى المضبوط.")
     max_loss = total
     if request.side == "buy" and request.stop_loss is not None:
         max_loss = round(max(0, request.limit_price - request.stop_loss) * request.quantity * units, 2)
@@ -227,6 +246,19 @@ def execute_paper_order(
     if account.emergency_stop:
         raise HTTPException(423, "إيقاف الطوارئ مفعل؛ الأوامر التجريبية متوقفة.")
     preview = preview_order(db, request, settings, now)
+    if float(account.realized_pnl_today) <= -abs(settings.trading_daily_loss_limit_usd):
+        raise HTTPException(423, "تم بلوغ حد الخسارة اليومي؛ الأوامر متوقفة.")
+    existing_position = db.scalar(
+        select(TradingPosition).where(
+            TradingPosition.symbol == request.symbol,
+            TradingPosition.status == "open",
+        )
+    )
+    open_positions = db.scalar(
+        select(func.count(TradingPosition.id)).where(TradingPosition.status == "open")
+    ) or 0
+    if request.side == "buy" and existing_position is None and open_positions >= settings.trading_max_open_positions:
+        raise HTTPException(409, "بلغت الحد الأقصى للمراكز المفتوحة.")
     if request.side == "buy" and preview["total_value"] > float(account.buying_power):
         raise HTTPException(409, "القوة الشرائية غير كافية.")
     fill_qty = 0
@@ -428,6 +460,7 @@ def room_snapshot(db: Session, settings: Settings, now: datetime | None = None) 
     )
     return {
         "mode": "paper", "live_execution_enabled": False,
+        "confirm_mode_available": settings.trading_confirm_mode_enabled,
         "bridge": {"marsad_status": "connected", "sahm_status": "connected" if bridge_fresh else "disconnected", "last_sync": bridge.synced_at.isoformat() if bridge else None, "age_seconds": round(bridge_age, 1) if bridge_age is not None else None},
         "account": display_account,
         "paper_account": paper_account,

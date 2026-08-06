@@ -334,6 +334,58 @@ class TradingBridgeSnapshot(Base):
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class TradeIntent(Base):
+    """Deterministic, time-bounded order draft; never proof that an order was sent."""
+
+    __tablename__ = "trade_intents"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    idempotency_key: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("stock_opportunities.id"), index=True
+    )
+    analysis_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("stock_scan_runs.id"), index=True
+    )
+    instrument_type: Mapped[str] = mapped_column(String(10))
+    symbol: Mapped[str] = mapped_column(String(64), index=True)
+    underlying_symbol: Mapped[str] = mapped_column(String(10), index=True)
+    side: Mapped[str] = mapped_column(String(4), default="buy")
+    quantity: Mapped[int] = mapped_column(Integer)
+    limit_price: Mapped[float] = mapped_column(Numeric(14, 4))
+    take_profit: Mapped[float] = mapped_column(Numeric(14, 4))
+    stop_loss: Mapped[float] = mapped_column(Numeric(14, 4))
+    time_in_force: Mapped[str] = mapped_column(String(10), default="day")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    entry_valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    expected_holding_period: Mapped[str] = mapped_column(String(20))
+    expected_exit_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    force_exit_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    market_session: Mapped[str] = mapped_column(String(30))
+    signal_age_seconds: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="ready", index=True)
+    decision: Mapped[str] = mapped_column(String(20))
+    reason_ar: Mapped[str] = mapped_column(String(300))
+    cancellation_condition_ar: Mapped[str] = mapped_column(String(500))
+    payload_json: Mapped[dict] = mapped_column(JSONVariant, default=dict)
+
+
+class TradingAuditLog(Base):
+    """Secret-free audit trail for previews, confirmations, orders, and outcomes."""
+
+    __tablename__ = "trading_audit_logs"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    event_type: Mapped[str] = mapped_column(String(30), index=True)
+    intent_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("trade_intents.id"), index=True
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(30))
+    details_json: Mapped[dict] = mapped_column(JSONVariant, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
 class SPXHuntResult(Base):
     """Paper-only SPX analysis audit record; never represents an order."""
 
