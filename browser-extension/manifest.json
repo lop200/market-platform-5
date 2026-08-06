@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "مرصاد — جسر سهم المحلي",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "يربط تبويب مرصاد بتبويب سهم محليًا مع معاينة وتأكيد يدوي لكل أمر.",
   "permissions": ["tabs", "storage", "scripting"],
   "host_permissions": [

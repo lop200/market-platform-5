@@ -19,8 +19,8 @@ from app.trading.engine import (
     preview_order,
     room_snapshot,
 )
-from app.trading.intent import intent_from_opportunity, intent_from_run, intent_payload
-from app.trading.schemas import ExtensionExecutionEvent, PaperOrderRequest, SahmBridgePayload, TradeIntentEdit
+from app.trading.intent import intent_from_opportunity, intent_from_run, intent_payload, size_intent
+from app.trading.schemas import ExtensionExecutionEvent, IntentSizingRequest, PaperOrderRequest, SahmBridgePayload, TradeIntentEdit
 
 router = APIRouter(prefix="/api/v1/trading", tags=["trading-room"])
 
@@ -112,6 +112,18 @@ def edit_intent(intent_id: uuid.UUID, edit: TradeIntentEdit, db: Session = Depen
     db.commit()
     db.refresh(intent)
     return intent_payload(intent)
+
+
+@router.post("/intents/{intent_id}/size")
+def size_trade_intent(
+    intent_id: uuid.UUID,
+    request: IntentSizingRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    intent = db.get(TradeIntent, intent_id)
+    if intent is None:
+        raise HTTPException(404, "نية التداول غير موجودة.")
+    return size_intent(db, intent, request, get_settings())
 
 
 @router.post("/intents/{intent_id}/extension-preview")

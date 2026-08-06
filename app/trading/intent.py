@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db.models import StockCandidate, StockOpportunity, TradeIntent, TradingAuditLog
 from app.options.market_clock import market_session
+from app.trading.schemas import IntentSizingRequest
 
 
 def _utc(value: datetime | None = None) -> datetime:
@@ -156,6 +157,18 @@ def create_trade_intent(
             "options_enabled": settings.options_enabled,
             "paper_mode": True,
             "confirmation_required": True,
+            "analysis": {
+                "status_ar": analysis.get("status_ar"),
+                "trend": analysis.get("trend") or analysis.get("trade_direction"),
+                "score": analysis.get("overall_score") or analysis.get("score"),
+                "scorecard": analysis.get("scorecard") or {},
+                "indicators": analysis.get("indicators") or {},
+                "time_estimate": analysis.get("time_estimate") or {},
+                "earnings": analysis.get("earnings") or analysis.get("earnings_context") or {},
+                "news": analysis.get("news_context") or {},
+                "warnings": analysis.get("warnings") or analysis.get("risk_warnings") or [],
+                "missing_data": analysis.get("missing_data") or [],
+            },
         },
     )
     db.add(intent)
@@ -197,6 +210,57 @@ def intent_payload(intent: TradeIntent, now: datetime | None = None) -> dict:
         "estimated_loss_usd": round(loss, 2), "execution_allowed": not expired and intent.status == "ready",
         "confirmation_required": True, "payload": intent.payload_json or {},
     }
+
+
+def size_intent(
+    db: Session,
+    intent: TradeIntent,
+    request: IntentSizingRequest,
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+) -> dict:
+    """Size by both available cash and loss-at-stop; the smaller limit wins."""
+    payload = intent_payload(intent, now=now)
+    if not payload["execution_allowed"]:
+        raise HTTPException(409, "انتهت صلاحية الفرصة؛ أعد التحليل قبل حساب الحجم.")
+    units = 100 if intent.instrument_type == "option" else 1
+    available = min(float(request.buying_power), float(settings.trading_max_order_value_usd))
+    if request.max_trade_value is not None:
+        available = min(available, float(request.max_trade_value))
+    price_cost = float(intent.limit_price) * units
+    loss_per_item = abs(float(intent.limit_price) - float(intent.stop_loss)) * units
+    if price_cost <= 0 or loss_per_item <= 0:
+        raise HTTPException(409, "تعذر حساب الحجم لأن سعر الدخول أو مسافة الوقف غير صالحة.")
+    cash_quantity = int(available // price_cost)
+    risk_budget = float(request.buying_power) * float(request.risk_pct) / 100
+    risk_quantity = int(risk_budget // loss_per_item)
+    quantity = min(cash_quantity, risk_quantity)
+    if quantity < 1:
+        raise HTTPException(409, "القوة الشرائية أو ميزانية المخاطرة لا تكفي لهذه الصفقة.")
+    intent.quantity = quantity
+    saved_payload = dict(intent.payload_json or {})
+    saved_payload["sizing"] = {
+        "source": "sahm_numeric_snapshot",
+        "buying_power_usd": round(float(request.buying_power), 2),
+        "risk_pct": float(request.risk_pct),
+        "risk_budget_usd": round(risk_budget, 2),
+        "max_trade_value_usd": round(available, 2),
+        "cash_limited_quantity": cash_quantity,
+        "risk_limited_quantity": risk_quantity,
+        "estimated_only": True,
+    }
+    intent.payload_json = saved_payload
+    db.add(TradingAuditLog(
+        event_type="intent_sized",
+        intent_id=intent.id,
+        idempotency_key=intent.idempotency_key,
+        status="ready",
+        details_json={"quantity": quantity, "risk_pct": float(request.risk_pct), "available": available},
+    ))
+    db.commit()
+    db.refresh(intent)
+    return intent_payload(intent, now=now)
 
 
 def intent_from_run(db: Session, run_id: uuid.UUID, settings: Settings) -> TradeIntent:

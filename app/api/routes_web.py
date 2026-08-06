@@ -77,7 +77,11 @@ def results_dashboard(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/trading-room", response_class=HTMLResponse)
 def trading_room(request: Request):
-    return templates.TemplateResponse(request=request, name="trading_room.html", context={})
+    return templates.TemplateResponse(
+        request=request,
+        name="trading_room.html",
+        context={"symbol_catalog": autocomplete_payload()},
+    )
 
 
 @router.get("/stocks/{symbol}", response_class=HTMLResponse)

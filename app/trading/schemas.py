@@ -68,6 +68,14 @@ class TradeIntentEdit(BaseModel):
     time_in_force: Literal["day", "gtc"] = "day"
 
 
+class IntentSizingRequest(BaseModel):
+    """Numeric portfolio inputs only; no broker credentials or account identifiers."""
+
+    buying_power: float = Field(gt=0, le=100_000_000)
+    risk_pct: float = Field(default=1.0, gt=0, le=5.0)
+    max_trade_value: float | None = Field(default=None, gt=0, le=100_000_000)
+
+
 class ExtensionExecutionEvent(BaseModel):
     status: Literal[
         "awaiting_user_confirmation", "submitted", "open", "partially_filled",

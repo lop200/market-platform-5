@@ -9,7 +9,8 @@ from fastapi import HTTPException
 
 from app.config import Settings
 from app.db.models import TradeIntent, TradingAuditLog
-from app.trading.intent import create_trade_intent, intent_payload
+from app.trading.intent import create_trade_intent, intent_payload, size_intent
+from app.trading.schemas import IntentSizingRequest
 
 NOW = datetime(2026, 8, 5, 14, 0, tzinfo=timezone.utc)
 
@@ -97,11 +98,27 @@ def test_options_remain_isolated_when_feature_flag_is_off(db_session):
     assert created.instrument_type == "stock"
 
 
+def test_intent_sizing_uses_smaller_cash_and_stop_risk_limit(db_session):
+    created = create_trade_intent(db_session, valid_analysis(), settings(), now=NOW)
+    payload = size_intent(
+        db_session,
+        created,
+        IntentSizingRequest(buying_power=10_000, risk_pct=1),
+        settings(trading_max_order_value_usd=5_000),
+        now=NOW,
+    )
+    # Cash permits 49 shares; $100 risk / $2.25 loss permits 44.
+    assert payload["quantity"] == 44
+    assert payload["estimated_loss_usd"] == 99.0
+    assert payload["payload"]["sizing"]["estimated_only"] is True
+    assert payload["payload"]["analysis"]["trend"] is None
+
+
 def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     root = Path(__file__).resolve().parents[1] / "browser-extension"
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"] == 3
-    assert manifest["version"] == "0.1.3"
+    assert manifest["version"] == "0.2.0"
     assert set(manifest["permissions"]) == {"tabs", "storage", "scripting"}
     assert set(manifest["host_permissions"]) == {
         "https://market-platform-5.onrender.com/*",
@@ -110,7 +127,7 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     sahm = (root / "content-sahm.js").read_text(encoding="utf-8")
     background = (root / "background.js").read_text(encoding="utf-8")
     mirsad = (root / "content-mirsad.js").read_text(encoding="utf-8")
-    assert "تأكيد التنفيذ" in sahm
+    assert "الانتقال إلى مراجعة سهم" in sahm
     assert "confirmMode" in sahm
     assert "document.cookie" not in sahm
     assert "Market Order" not in sahm
@@ -121,3 +138,6 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     assert 'source: "marsad-extension"' in mirsad
     assert "data-marsad-extension" in mirsad
     assert "bridge_ready" in sahm
+    assert "diagnostics" in sahm
+    assert "semanticInput" in sahm
+    assert "submit.click()" not in sahm
