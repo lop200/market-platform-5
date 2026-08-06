@@ -1,6 +1,6 @@
 const SELECTORS = {
   loggedIn: ['[data-testid="account-menu"]','[data-testid="portfolio"]','a[href*="portfolio"]'],
-  search: ['input[data-testid="symbol-search"]','input[placeholder*="Symbol" i]','input[placeholder*="Ticker" i]','input[placeholder*="Search" i]','input[placeholder*="رمز"]','input[placeholder*="بحث"]','input[type="search"]'],
+  search: ['.order-search-wrapper input','[class*="order-search"] input','form [data-testid="symbol-search"]','input[data-testid="symbol-search"]','input[placeholder*="Symbol" i]','input[placeholder*="Ticker" i]','input[placeholder*="Search" i]','input[placeholder*="رمز"]','input[placeholder*="بحث"]','input[type="search"]'],
   quantity: ['input[data-testid="order-quantity"]','input[name="quantity"]','input[name*="qty" i]','input[aria-label*="Quantity" i]','input[placeholder*="Quantity" i]','input[aria-label*="الكمية"]','input[placeholder*="الكمية"]'],
   limit: ['input[data-testid="limit-price"]','input[name="limitPrice"]','input[name*="price" i]','input[aria-label*="Limit" i]','input[placeholder*="Price" i]','input[placeholder="أدخل السعر"]'],
   takeProfit: ['input[data-testid="take-profit"]','input[name="takeProfit"]','input[aria-label*="Take Profit" i]','input[placeholder*="السعر المستهدف"]','input[placeholder*="جني الأرباح"]'],
@@ -49,7 +49,7 @@ function rowsFor(selectors, kind) {
 
 function snapshot() {
   const bodyText = document.body?.innerText || "";
-  const loginVisible = !!document.querySelector('input[type="password"],input[autocomplete="current-password"]');
+  const loginVisible = all('input[type="password"],input[autocomplete="current-password"]').some(visible);
   const accountVisible = SELECTORS.loggedIn.some(selector => all(selector).length) || /Buying Power|Portfolio|Positions|القوة الشرائية|المحفظة|المراكز/i.test(bodyText);
   const loginStatus = loginVisible ? "logged_out" : accountVisible ? "logged_in" : "unknown";
   const cash = number(text(SELECTORS.cash)) ?? labeledNumber([/^cash$/i,/cash balance/i,/النقد/i,/الرصيد النقدي/i]);
@@ -105,14 +105,27 @@ async function waitForVisible(names, patterns, timeout=7000) {
 }
 
 async function ensureTradePanel() {
-  let search = firstVisible(SELECTORS.search) || semanticInput([/symbol|ticker|search/i,/رمز|بحث/i]);
+  const dedicatedSearch = () => firstVisible(['.order-search-wrapper input','[class*="order-search"] input','form [data-testid="symbol-search"]']);
+  let search = dedicatedSearch();
+  if (!search) {
+    const quantity = firstVisible(SELECTORS.quantity)||semanticInput([/quantity|qty/i,/الكمية/i]);
+    if (quantity) search = firstVisible(SELECTORS.search)||semanticInput([/symbol|ticker|search/i,/رمز|بحث/i]);
+  }
   if (search) return search;
   const skip = findButton([/^skip$/i,/^تخطي$/,/^got it$/i,/^فهمت$/]);
   if (skip) { skip.click(); await pause(250); }
   const trade = findButton([/^trade$/i,/^تداول$/]);
   if (!trade) throw new Error("لم يظهر زر Trade في صفحة سهم؛ افتح صفحة السوق ثم أعد التنفيذ");
   trade.click();
-  search = await waitForVisible(SELECTORS.search, [/symbol|ticker|search/i,/رمز|بحث/i]);
+  const until = Date.now() + 7000;
+  while (Date.now() < until && !search) {
+    search = dedicatedSearch();
+    if (!search) {
+      const quantity = firstVisible(SELECTORS.quantity)||semanticInput([/quantity|qty/i,/الكمية/i]);
+      if (quantity) search = firstVisible(SELECTORS.search)||semanticInput([/symbol|ticker|search/i,/رمز|بحث/i]);
+    }
+    if (!search) await pause(250);
+  }
   if (!search) throw new Error("فتحت الإضافة لوحة Trade لكن نموذج الأمر لم يظهر؛ أغلق الجولة الإرشادية في سهم وأعد التنفيذ");
   return search;
 }
@@ -200,7 +213,7 @@ async function prepare(intent) {
   if (snapshot().login_status === "logged_out") throw new Error("المستخدم غير مسجل الدخول في سهم");
   if (Date.parse(intent.entry_valid_until) <= Date.now()) throw new Error("انتهى وقت الدخول؛ أعد التحليل");
   const stored = await chrome.storage.local.get("confirmMode");
-  if (stored.confirmMode !== true) throw new Error("فعّل Confirm Mode من نافذة الإضافة أولًا");
+  if (stored.confirmMode === false) throw new Error("Confirm Mode معطّل من نافذة الإضافة؛ فعّله ثم أعد التنفيذ");
   await findAndFill(intent);
   activeIntent = intent;
   lastReportedOrderStatus = null;

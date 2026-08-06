@@ -1,6 +1,11 @@
 const MARSAD = "https://market-platform-5.onrender.com/*";
 const SAHM = "https://app.sahmcapital.com/*";
 
+chrome.runtime.onInstalled.addListener(async () => {
+  const stored = await chrome.storage.local.get("confirmMode");
+  if (stored.confirmMode === undefined) await chrome.storage.local.set({confirmMode: true});
+});
+
 async function tabsFor(pattern) {
   return chrome.tabs.query({ url: pattern });
 }
@@ -116,7 +121,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (message.type === "GET_POPUP_STATE") {
       const [sahm, marsad] = await Promise.all([tabsFor(SAHM), tabsFor(MARSAD)]);
       const stored = await chrome.storage.local.get(["latestSahmSnapshot", "confirmMode"]);
-      reply({ sahm_open: !!sahm.length, marsad_open: !!marsad.length, snapshot: stored.latestSahmSnapshot || null, confirm_mode: stored.confirmMode === true });
+      reply({ sahm_open: !!sahm.length, marsad_open: !!marsad.length, snapshot: stored.latestSahmSnapshot || null, confirm_mode: stored.confirmMode !== false });
     }
   })().catch(error => reply({ ok: false, error: error.message }));
   return true;
