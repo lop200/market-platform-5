@@ -107,7 +107,11 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
         "https://app.sahmcapital.com/*",
     }
     sahm = (root / "content-sahm.js").read_text(encoding="utf-8")
+    background = (root / "background.js").read_text(encoding="utf-8")
+    mirsad = (root / "content-mirsad.js").read_text(encoding="utf-8")
     assert "تأكيد التنفيذ" in sahm
     assert "confirmMode" in sahm
     assert "document.cookie" not in sahm
     assert "Market Order" not in sahm
+    assert "CONNECT_SAHM" in background
+    assert "marsad:connect-sahm" in mirsad

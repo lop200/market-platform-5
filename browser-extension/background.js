@@ -28,6 +28,17 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       reply({ connected: tabs.length > 0, label: tabs.length ? "الإضافة متصلة" : "افتح منصة سهم" });
       return;
     }
+    if (message.type === "CONNECT_SAHM") {
+      const tab = await sahmTab();
+      await chrome.tabs.update(tab.id, {active: true});
+      const {latestSahmSnapshot} = await chrome.storage.local.get("latestSahmSnapshot");
+      reply({
+        connected: true,
+        label: latestSahmSnapshot?.logged_in ? "متصل" : "سجّل الدخول في سهم",
+        snapshot: latestSahmSnapshot || null
+      });
+      return;
+    }
     if (message.type === "SAHM_SNAPSHOT") {
       const snapshot = {...message.snapshot, tab_id: sender.tab?.id, received_at: new Date().toISOString()};
       await chrome.storage.local.set({ latestSahmSnapshot: snapshot });

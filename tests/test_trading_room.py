@@ -67,6 +67,8 @@ def test_trading_room_is_rtl_responsive_and_live_execution_is_disabled():
     assert "PAPER MODE" in html
     assert "تنفيذ في سهم" in html
     assert "تأكيد التنفيذ" in html
+    assert "ربط منصة سهم" in html
+    assert "marsad:connect-sahm" in html
     assert "@media(max-width:760px)" in html
     assert 'href="/trading-room"' in TestClient(app).get("/").text
 

@@ -12,6 +12,12 @@ document.addEventListener("marsad:request-snapshot", async () => {
   if (response?.snapshot) emit("marsad:sahm-snapshot", response.snapshot);
 });
 
+document.addEventListener("marsad:connect-sahm", async () => {
+  const response = await chrome.runtime.sendMessage({type: "CONNECT_SAHM"});
+  emit("marsad:bridge-status", response || {connected: false});
+  if (response?.snapshot) emit("marsad:sahm-snapshot", response.snapshot);
+});
+
 document.addEventListener("marsad:trade-intent", async event => {
   const response = await chrome.runtime.sendMessage({type: "TRADE_INTENT", intent: event.detail});
   if (!response?.ok) emit("marsad:execution-state", {status: "error", message: response?.error || "تعذر إرسال الأمر إلى سهم"});
