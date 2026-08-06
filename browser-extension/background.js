@@ -25,16 +25,22 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   (async () => {
     if (message.type === "MARSAD_PING") {
       const tabs = await tabsFor(SAHM);
-      reply({ connected: tabs.length > 0, label: tabs.length ? "الإضافة متصلة" : "افتح منصة سهم" });
+      const probe = tabs[0] ? await send(tabs[0].id, {type: "PING_SAHM"}) : null;
+      reply({ connected: !!probe?.ok, label: probe?.ok ? "الإضافة متصلة بتبويب سهم" : tabs.length ? "حدّث تبويب سهم" : "افتح منصة سهم", snapshot: probe?.snapshot || null });
       return;
     }
     if (message.type === "CONNECT_SAHM") {
       const tab = await sahmTab();
       await chrome.tabs.update(tab.id, {active: true});
-      const {latestSahmSnapshot} = await chrome.storage.local.get("latestSahmSnapshot");
+      let probe = null;
+      for (let attempt = 0; attempt < 12 && !probe?.ok; attempt++) {
+        probe = await send(tab.id, {type: "PING_SAHM"});
+        if (!probe?.ok) await new Promise(resolve => setTimeout(resolve, 400));
+      }
+      const latestSahmSnapshot = probe?.snapshot || null;
       reply({
-        connected: latestSahmSnapshot?.logged_in === true,
-        label: latestSahmSnapshot?.logged_in ? "متصل" : "سجّل الدخول في سهم",
+        connected: latestSahmSnapshot?.bridge_ready === true,
+        label: latestSahmSnapshot?.login_status === "logged_in" ? "متصل" : latestSahmSnapshot?.login_status === "logged_out" ? "متصل — سجّل الدخول في سهم" : probe?.ok ? "متصل — حالة الدخول غير مؤكدة" : "تعذر تشغيل الإضافة داخل تبويب سهم",
         snapshot: latestSahmSnapshot || null
       });
       return;

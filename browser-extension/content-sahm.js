@@ -41,8 +41,14 @@ function rowsFor(selectors, kind) {
 }
 
 function snapshot() {
+  const bodyText = document.body?.innerText || "";
+  const loginVisible = !!document.querySelector('input[type="password"],input[autocomplete="current-password"]');
+  const accountVisible = SELECTORS.loggedIn.some(selector => document.querySelector(selector)) || /Buying Power|Portfolio|Positions|القوة الشرائية|المحفظة|المراكز/i.test(bodyText);
+  const loginStatus = loginVisible ? "logged_out" : accountVisible ? "logged_in" : "unknown";
   return {
-    logged_in: SELECTORS.loggedIn.some(selector => document.querySelector(selector)),
+    bridge_ready: true,
+    login_status: loginStatus,
+    logged_in: loginStatus === "logged_in",
     cash: number(text(SELECTORS.cash)),
     buying_power: number(text(SELECTORS.buyingPower)),
     positions: rowsFor(SELECTORS.positionRows, "positions"),
@@ -105,7 +111,7 @@ function reviewOverlay(intent) {
 }
 
 async function prepare(intent) {
-  if (!snapshot().logged_in) throw new Error("المستخدم غير مسجل الدخول في سهم");
+  if (snapshot().login_status === "logged_out") throw new Error("المستخدم غير مسجل الدخول في سهم");
   if (Date.parse(intent.entry_valid_until) <= Date.now()) throw new Error("انتهى وقت الدخول؛ أعد التحليل");
   const stored = await chrome.storage.local.get("confirmMode");
   if (stored.confirmMode !== true) throw new Error("فعّل Confirm Mode من نافذة الإضافة أولًا");
@@ -116,6 +122,7 @@ async function prepare(intent) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, reply) => {
+  if (message.type === "PING_SAHM") { reply({ok: true, snapshot: snapshot()}); return; }
   if (message.type === "CAPTURE_SNAPSHOT") { publishSnapshot().then(()=>reply({ok:true})); return true; }
   if (message.type === "PREPARE_TRADE") { prepare(message.intent).then(()=>reply({ok:true})).catch(error=>reply({ok:false,error:error.message})); return true; }
 });
