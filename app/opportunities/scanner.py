@@ -38,6 +38,11 @@ from app.opportunities.universe import select_scan_universe
 from app.providers.base import MarketDataAdapter, Quote
 from app.providers.factory import get_option_data_provider
 from app.markets.volume import resolve_volume_metrics
+from app.stocks.rules import (
+    allowed_spread_to_target_pct,
+    required_risk_reward,
+    required_strategy_match_pct,
+)
 
 
 def _volume_metrics(quote: Quote, indicators: dict | None = None) -> tuple[int, float, str]:
@@ -334,10 +339,11 @@ def build_opportunity(
     snapshot["strategy_match_pct"] = strategy.match_pct
     snapshot["strategy_classification_ar"] = strategy.classification_ar
     snapshot["strategy_checks"] = list(strategy.checks)
-    if strategy.match_pct < settings.min_strategy_match_pct:
+    required_match = required_strategy_match_pct(quote.price, settings)
+    if strategy.match_pct < required_match:
         return None, [
             f"تحقق شروط الاستراتيجية {strategy.match_pct}% وهو أقل من الحد المطلوب "
-            f"{settings.min_strategy_match_pct}%"
+            f"{required_match}%"
         ], snapshot
     atr = max(float(indicators.get("atr") or quote.price * 0.03), quote.price * 0.01)
     support = float(indicators.get("support") or quote.bid)
@@ -361,23 +367,22 @@ def build_opportunity(
         ticks = raw * 100
         return (math.floor(ticks) if bearish_plan else math.ceil(ticks)) / 100
 
-    target1 = target_tick(
-        entry + direction * risk_per_share * settings.min_risk_reward
-    )
+    required_rr = required_risk_reward(quote.price, settings)
+    target1 = target_tick(entry + direction * risk_per_share * required_rr)
     target2 = target_tick(
-        entry + direction * risk_per_share * (settings.min_risk_reward + 1)
+        entry + direction * risk_per_share * (required_rr + 1)
     )
     if target1 <= 0 or target2 <= 0:
         return None, ["الأهداف المحسوبة غير صالحة لسعر السهم"], snapshot
     rr = risk_reward(entry, stop, target1)
-    if rr < settings.min_risk_reward:
+    if rr < required_rr:
         return None, ["العائد إلى المخاطرة أقل من الحد المطلوب"], snapshot
     target_distance = abs(target1 - entry)
     spread_to_target_pct = (
         float(quote.spread or 0) / target_distance * 100 if target_distance > 0 else 100.0
     )
     snapshot["spread_to_target_pct"] = round(spread_to_target_pct, 2)
-    if spread_to_target_pct > settings.max_spread_to_target_pct:
+    if spread_to_target_pct > allowed_spread_to_target_pct(quote.price, settings):
         return None, ["السبريد يلتهم نسبة كبيرة من الهدف المتوقع"], snapshot
     valid_minutes = strategy.valid_minutes
     now = datetime.now(timezone.utc)

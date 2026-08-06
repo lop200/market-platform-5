@@ -21,6 +21,7 @@ from app.trading.engine import (
 )
 from app.trading.intent import intent_from_opportunity, intent_from_run, intent_payload, size_intent
 from app.trading.schemas import ExtensionExecutionEvent, IntentSizingRequest, PaperOrderRequest, SahmBridgePayload, TradeIntentEdit
+from app.stocks.rules import allowed_stock_spread_pct
 
 router = APIRouter(prefix="/api/v1/trading", tags=["trading-room"])
 
@@ -48,7 +49,8 @@ def today_opportunities(db: Session = Depends(get_db)) -> dict:
         result = dict(row.result_json or {})
         quote_age = max(0, int((now - (row.quote_timestamp.replace(tzinfo=timezone.utc) if row.quote_timestamp.tzinfo is None else row.quote_timestamp.astimezone(timezone.utc))).total_seconds()))
         spread = float(result.get("spread_pct") or 100)
-        if quote_age > get_settings().max_quote_age_seconds or spread > get_settings().max_spread_pct:
+        settings = get_settings()
+        if quote_age > settings.max_quote_age_seconds or spread > allowed_stock_spread_pct(row.price_at_analysis, settings):
             continue
         opportunities.append({
             "opportunity_id": str(row.id), "symbol": row.symbol,

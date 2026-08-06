@@ -131,6 +131,20 @@ services:
         value: "1.25"
       - key: MIN_STRATEGY_MATCH_PCT
         value: "50"
+      - key: SPECULATIVE_SMALL_CAP_ENABLED
+        value: "true"
+      - key: SPECULATIVE_MIN_PRICE
+        value: "0.5"
+      - key: SPECULATIVE_MAX_PRICE
+        value: "8"
+      - key: SPECULATIVE_MAX_SPREAD_PCT
+        value: "4"
+      - key: SPECULATIVE_MIN_STRATEGY_MATCH_PCT
+        value: "40"
+      - key: SPECULATIVE_MIN_RISK_REWARD
+        value: "1.15"
+      - key: SPECULATIVE_MAX_SPREAD_TO_TARGET_PCT
+        value: "40"
       - key: MIN_TARGET_PROBABILITY_PCT
         value: "1"
       - key: MAX_SPREAD_TO_TARGET_PCT

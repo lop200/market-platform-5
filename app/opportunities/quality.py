@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.config import Settings
 from app.opportunities.schemas import QualityDecision
 from app.providers.base import Quote
+from app.stocks.rules import allowed_stock_spread_pct
 
 
 def evaluate_quote(quote: Quote, settings: Settings) -> QualityDecision:
@@ -12,7 +13,7 @@ def evaluate_quote(quote: Quote, settings: Settings) -> QualityDecision:
         reasons.append("بيانات العرض أو الطلب غير مكتملة")
     elif quote.ask < quote.bid:
         reasons.append("بيانات العرض والطلب غير صالحة")
-    elif quote.spread_pct is None or quote.spread_pct > settings.max_spread_pct:
+    elif quote.spread_pct is None or quote.spread_pct > allowed_stock_spread_pct(quote.price, settings):
         reasons.append("السبريد أعلى من الحد المسموح")
     component_ages = [quote.bid_age_seconds, quote.ask_age_seconds]
     if any(age is None for age in component_ages) or max(age or 0 for age in component_ages) > settings.max_quote_age_seconds:

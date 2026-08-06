@@ -7,6 +7,7 @@ import pandas as pd
 
 from app.config import Settings
 from app.providers.base import Quote
+from app.stocks.rules import allowed_stock_spread_pct
 
 
 def _utc(value) -> datetime | None:
@@ -62,7 +63,7 @@ def evaluate_plan_data(
             reasons.append("Ask غير متوفر أو غير صالح")
         if quote.bid and quote.ask and quote.ask < quote.bid:
             reasons.append("Ask أقل من Bid")
-        if quote.spread_pct is None or quote.spread_pct > settings.max_spread_pct:
+        if quote.spread_pct is None or quote.spread_pct > allowed_stock_spread_pct(quote.price, settings):
             reasons.append("السبريد أعلى من الحد المسموح")
         if price_age is None or price_age > settings.max_quote_age_seconds:
             reasons.append("أحدث سعر من Trade/Quote/Bar أقدم من الحد المسموح")

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db.models import StockCandidate, StockOpportunity, TradeIntent, TradingAuditLog
 from app.options.market_clock import market_session
+from app.stocks.rules import allowed_stock_spread_pct
 from app.trading.fees import estimate_sahm_us_stock_round_trip_fees
 from app.trading.schemas import IntentSizingRequest
 
@@ -84,7 +85,8 @@ def _validate_stock_gate(analysis: dict, settings: Settings, now: datetime) -> N
         raise HTTPException(409, "Bid/Ask غير صالحين؛ تم منع إنشاء نية التداول.")
     if age > settings.max_quote_age_seconds:
         raise HTTPException(409, "السعر قديم؛ أعد التحليل قبل التنفيذ.")
-    if spread_pct > settings.max_spread_pct:
+    price = float(quote.get("price") or analysis.get("current_price") or ask)
+    if spread_pct > allowed_stock_spread_pct(price, settings):
         raise HTTPException(409, "السبريد أعلى من الحد المقبول؛ لا توجد فرصة قابلة للتنفيذ.")
     expires_at = _parsed_time((analysis.get("trade_plan") or {}).get("expires_at") or analysis.get("expires_at"), now)
     if expires_at <= now:

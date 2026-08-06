@@ -80,6 +80,21 @@ def _select_strategy(
     if price <= (ind.get("support") or price) * 1.025 and rv >= 0.7:
         support = ind.get("support") or price
         return StrategyChoice("support_bounce", "ارتداد من دعم", "Support Bounce", 70, "السعر قريب من دعم جلسة مثبت", f"شمعة رفض صاعدة فوق {support:.2f} مع زيادة الحجم", f"كسر الدعم {support:.2f}")
+    if 0.5 <= price <= 8 and rv >= 0.5 and (ind.get("momentum") or 0) > 0 and price >= vwap * 0.99:
+        return StrategyChoice(
+            "small_cap_momentum", "زخم سهم صغير", "Small-cap Momentum", 66,
+            "زخم موجب وسيولة مضاربية قرب VWAP في سهم صغير",
+            f"ثبات فوق VWAP {vwap:.2f} مع استمرار الحجم لمدة شمعة 5 دقائق",
+            f"فقدان VWAP {vwap:.2f} أو اتساع السبريد", valid_minutes=5,
+        )
+    if 0.5 <= price <= 8 and rv >= 0.5 and price <= (ind.get("support") or price) * 1.04 and rsi < 60:
+        support = ind.get("support") or price
+        return StrategyChoice(
+            "small_cap_support", "ارتداد مضاربي من دعم", "Small-cap Support Bounce", 62,
+            "السهم الصغير قريب من الدعم مع حجم يسمح بالمراقبة المضاربية",
+            f"شمعة رفض فوق الدعم {support:.2f} مع زخم غير سلبي",
+            f"كسر الدعم {support:.2f} أو اتساع السبريد", valid_minutes=5,
+        )
     return StrategyChoice("no_trade", "لا صفقة", "No Trade", 0, "الإشارات متضاربة أو لا يوجد مستوى دخول واضح", "انتظر تأكيدًا جديدًا", "لا يوجد دخول", 5)
 
 
@@ -175,6 +190,20 @@ def _evidence(
             ("زخم غير سلبي", momentum >= 0, 15),
             ("RSI دون 65", rsi < 65, 15),
         ]),
+        "small_cap_momentum": ("مضاربة زخم قصير", [
+            ("السعر فوق أو قرب VWAP", price >= vwap * .99, 25),
+            ("الزخم موجب", momentum > 0, 25),
+            ("الحجم النسبي 0.5 أو أكثر", rv >= .5, 20),
+            ("سعر السهم 8$ أو أقل", price <= 8, 15),
+            ("RSI دون 75", rsi < 75, 15),
+        ]),
+        "small_cap_support": ("مضاربة ارتداد قصير", [
+            ("السعر قريب من الدعم", price <= support * 1.04, 30),
+            ("الحجم النسبي 0.5 أو أكثر", rv >= .5, 20),
+            ("الزخم ليس سلبيًا بقوة", momentum >= -.5, 15),
+            ("RSI دون 60", rsi < 60, 20),
+            ("سعر السهم 8$ أو أقل", price <= 8, 15),
+        ]),
     }
     setup_class, checks = specs.get(strategy_id, ("غير مصنف", []))
     rows = tuple(
@@ -202,7 +231,7 @@ def select_strategy(
         classification_ar=_classification(score),
         setup_class_ar=setup_class,
         checks=checks,
-        valid_minutes=min(choice.valid_minutes, 5) if price <= 5 else choice.valid_minutes,
+        valid_minutes=min(choice.valid_minutes, 5) if price <= 8 else choice.valid_minutes,
     )
 
 
@@ -218,6 +247,8 @@ STRATEGY_REGISTRY = {
         ("opening_range_breakout", "اختراق نطاق الافتتاح"),
         ("oversold_reversal", "انعكاس مبالغ فيه"),
         ("support_breakdown", "كسر دعم مع اتجاه هابط"),
+        ("small_cap_momentum", "زخم سهم صغير"),
+        ("small_cap_support", "ارتداد مضاربي من دعم"),
         ("no_trade", "لا صفقة"),
     ]
 }

@@ -37,3 +37,11 @@ def test_rejects_stale_quote_and_warns_for_iex():
     assert not decision.accepted
     assert any("قديم" in reason for reason in decision.reasons)
     assert any("IEX" in warning for warning in decision.warnings)
+
+
+def test_small_cap_speculative_profile_allows_only_a_bounded_four_percent_spread():
+    settings = Settings(max_spread_pct=2.5, speculative_max_spread_pct=4)
+    assert evaluate_quote(quote(price=2, bid=1.965, ask=2.035), settings).accepted
+    rejected = evaluate_quote(quote(price=2, bid=1.95, ask=2.05), settings)
+    assert not rejected.accepted
+    assert any("السبريد" in reason for reason in rejected.reasons)

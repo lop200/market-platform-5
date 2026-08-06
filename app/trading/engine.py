@@ -21,6 +21,7 @@ from app.db.models import (
 from app.live.prices import price_book
 from app.options.market_clock import market_session
 from app.trading.schemas import PaperOrderRequest
+from app.stocks.rules import allowed_stock_spread_pct
 
 
 def _utc(value: datetime | None = None) -> datetime:
@@ -91,7 +92,7 @@ def validate_quote(quote: dict | None, settings: Settings, now: datetime | None 
         raise HTTPException(409, "Bid/Ask غير صالحين، تم منع التنفيذ.")
     mid = (bid + ask) / 2
     spread_pct = (ask - bid) / mid * 100 if mid else 100
-    if spread_pct > settings.max_spread_pct:
+    if spread_pct > allowed_stock_spread_pct(quote.get("price"), settings):
         raise HTTPException(409, "السبريد أعلى من الحد المقبول؛ تم منع التنفيذ.")
     return {
         **quote,

@@ -49,6 +49,21 @@ def test_strategy_reports_weighted_verification_not_a_win_rate():
     assert sum(item["weight"] for item in choice.checks) == 100
 
 
+def test_small_cap_momentum_is_a_five_minute_speculative_setup():
+    choice = select_strategy(
+        {
+            "relative_volume": .6, "vwap": 3.0, "momentum": .2,
+            "rsi": 62, "support": 2.7, "resistance": 3.4,
+        },
+        3.02,
+        MarketRegime.CHOPPY,
+    )
+    assert choice.strategy_id == "small_cap_momentum"
+    assert choice.match_pct >= 40
+    assert choice.valid_minutes == 5
+    assert "small_cap_momentum" in STRATEGY_REGISTRY
+
+
 def test_stop_before_target_never_counts_as_success():
     now = datetime.now(timezone.utc)
     outcome = evaluate_timeline(

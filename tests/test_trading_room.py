@@ -77,14 +77,15 @@ def test_trading_room_is_rtl_responsive_and_live_execution_is_disabled():
     assert "صافي الربح المقدر" in html
     assert "احتمال لمس الهدف" in html
     assert "?refresh=true" in html
-    assert "اقتناص حسب السيولة" in html
+    assert "اقتناص مضاربي" in html
     assert "sniperBudget" in html
     assert 'all_prices:"false"' in html
     assert "target_probability_pct" in html
-    assert "وضع محفظة صغيرة" in html
+    assert "سهمان على الأقل" in html
     assert "renderWatchlist" in html
     assert 'value="5">5% — محفظة صغيرة' in html
     assert "minShares=small?2:10" in html
+    assert "سبريد أقصى 4%" in html
     assert "@media(max-width:760px)" in html
     assert 'href="/trading-room"' in TestClient(app).get("/").text
 

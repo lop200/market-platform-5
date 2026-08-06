@@ -9,6 +9,7 @@ from app.config import Settings
 from app.opportunities.scanner import build_opportunity
 from app.opportunities.schemas import MarketRegime, OpportunityResult
 from app.providers.base import MarketDataAdapter, Quote
+from app.stocks.rules import required_risk_reward
 
 
 class FakeProvider(MarketDataAdapter):
@@ -69,7 +70,7 @@ def test_builds_schema_valid_entry_stop_targets(db_session):
     OpportunityResult.model_validate(result.model_dump(by_alias=True))
     assert result.entry_zone.from_price > result.stop_loss
     assert result.targets[0].price > result.entry_zone.from_price
-    assert result.risk_reward >= settings.min_risk_reward
+    assert result.risk_reward >= required_risk_reward(result.current_price, settings)
     assert result.expires_at > datetime.now(timezone.utc)
 
 

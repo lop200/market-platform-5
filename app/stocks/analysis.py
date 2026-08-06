@@ -25,6 +25,11 @@ from app.opportunities.scoring import build_stock_scorecard
 from app.opportunities.strategies import select_strategy
 from app.providers.base import MarketDataAdapter, Quote
 from app.stocks.quality import evaluate_plan_data
+from app.stocks.rules import (
+    allowed_spread_to_target_pct,
+    required_risk_reward,
+    required_strategy_match_pct,
+)
 
 
 def _safe_number(value, digits: int = 4):
@@ -354,13 +359,14 @@ def analyze_single_stock(
             stop = round(max(.01, min(support - .01, entry_from - atr * .8)), 2)
         if entry_from != stop:
             risk = abs(entry_from - stop)
+            required_rr = required_risk_reward(price, settings)
             target_prices = [
-                round(entry_from + (-1 if bearish_plan else 1) * risk * settings.min_risk_reward, 2),
-                round(entry_from + (-1 if bearish_plan else 1) * risk * (settings.min_risk_reward + 1), 2),
+                round(entry_from + (-1 if bearish_plan else 1) * risk * required_rr, 2),
+                round(entry_from + (-1 if bearish_plan else 1) * risk * (required_rr + 1), 2),
             ]
             extension = round(
                 entry_from + (-1 if bearish_plan else 1)
-                * risk * (settings.min_risk_reward + 1.8),
+                * risk * (required_rr + 1.8),
                 2,
             )
             if extension > 0:
@@ -378,7 +384,7 @@ def analyze_single_stock(
             if (
                 strategy
                 and strategy.strategy_id != "no_trade"
-                and strategy.match_pct >= settings.min_strategy_match_pct
+                and strategy.match_pct >= required_strategy_match_pct(price, settings)
                 and quality.valid_for_plan
                 and (verification is None or verification.accepted)
             ):
@@ -419,7 +425,7 @@ def analyze_single_stock(
         if (
             target_touch_probability is None
             or as_percent(target_touch_probability) < settings.min_target_probability_pct
-            or spread_to_target > settings.max_spread_to_target_pct
+            or spread_to_target > allowed_spread_to_target_pct(price, settings)
         ):
             status = "no_trade"
             status_ar = "لا دخول — احتمال الهدف أو تكلفة السبريد غير صالحين"
