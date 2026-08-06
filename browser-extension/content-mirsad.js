@@ -1,3 +1,9 @@
+const EXTENSION_VERSION = chrome.runtime.getManifest().version;
+function markReady() {
+  document.documentElement?.setAttribute("data-marsad-extension", EXTENSION_VERSION);
+}
+markReady();
+
 function emit(name, detail) {
   document.dispatchEvent(new CustomEvent(name, {detail}));
 }
@@ -38,4 +44,4 @@ chrome.runtime.onMessage.addListener(message => {
   if (message.type === "EXECUTION_STATE") emit("marsad:execution-state", message.state);
 });
 
-addEventListener("DOMContentLoaded", () => document.dispatchEvent(new CustomEvent("marsad:ping")));
+addEventListener("DOMContentLoaded", () => {markReady();document.dispatchEvent(new CustomEvent("marsad:ping"))});

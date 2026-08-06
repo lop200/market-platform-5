@@ -101,6 +101,7 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     root = Path(__file__).resolve().parents[1] / "browser-extension"
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"] == 3
+    assert manifest["version"] == "0.1.2"
     assert set(manifest["permissions"]) == {"tabs", "storage", "scripting"}
     assert set(manifest["host_permissions"]) == {
         "https://market-platform-5.onrender.com/*",
@@ -117,3 +118,4 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     assert "marsad:connect-sahm" in mirsad
     assert 'event.data.type === "CONNECT_SAHM"' in mirsad
     assert 'source: "marsad-extension"' in mirsad
+    assert "data-marsad-extension" in mirsad
