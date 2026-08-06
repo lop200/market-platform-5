@@ -81,6 +81,10 @@ def test_trading_room_is_rtl_responsive_and_live_execution_is_disabled():
     assert "sniperBudget" in html
     assert 'all_prices:"false"' in html
     assert "target_probability_pct" in html
+    assert "وضع محفظة صغيرة" in html
+    assert "renderWatchlist" in html
+    assert 'value="5">5% — محفظة صغيرة' in html
+    assert "minShares=small?2:10" in html
     assert "@media(max-width:760px)" in html
     assert 'href="/trading-room"' in TestClient(app).get("/").text
 
