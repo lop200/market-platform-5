@@ -115,3 +115,5 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     assert "Market Order" not in sahm
     assert "CONNECT_SAHM" in background
     assert "marsad:connect-sahm" in mirsad
+    assert 'event.data.type === "CONNECT_SAHM"' in mirsad
+    assert 'source: "marsad-extension"' in mirsad

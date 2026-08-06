@@ -18,6 +18,15 @@ document.addEventListener("marsad:connect-sahm", async () => {
   if (response?.snapshot) emit("marsad:sahm-snapshot", response.snapshot);
 });
 
+window.addEventListener("message", async event => {
+  if (event.source !== window || event.data?.source !== "marsad-page") return;
+  if (event.data.type === "CONNECT_SAHM") {
+    const response = await chrome.runtime.sendMessage({type: "CONNECT_SAHM"});
+    window.postMessage({source: "marsad-extension", type: "BRIDGE_STATUS", detail: response || {connected: false}}, "*");
+    if (response?.snapshot) window.postMessage({source: "marsad-extension", type: "SAHM_SNAPSHOT", detail: response.snapshot}, "*");
+  }
+});
+
 document.addEventListener("marsad:trade-intent", async event => {
   const response = await chrome.runtime.sendMessage({type: "TRADE_INTENT", intent: event.detail});
   if (!response?.ok) emit("marsad:execution-state", {status: "error", message: response?.error || "تعذر إرسال الأمر إلى سهم"});

@@ -33,7 +33,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       await chrome.tabs.update(tab.id, {active: true});
       const {latestSahmSnapshot} = await chrome.storage.local.get("latestSahmSnapshot");
       reply({
-        connected: true,
+        connected: latestSahmSnapshot?.logged_in === true,
         label: latestSahmSnapshot?.logged_in ? "متصل" : "سجّل الدخول في سهم",
         snapshot: latestSahmSnapshot || null
       });
