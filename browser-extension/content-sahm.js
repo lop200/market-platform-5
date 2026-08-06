@@ -138,4 +138,4 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
   if (message.type === "PREPARE_TRADE") { prepare(message.intent).then(()=>reply({ok:true})).catch(error=>reply({ok:false,error:error.message})); return true; }
 });
 
-publishSnapshot();setInterval(()=>{if(!document.hidden)publishSnapshot()},10000);
+publishSnapshot();setInterval(publishSnapshot,10000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)publishSnapshot()});

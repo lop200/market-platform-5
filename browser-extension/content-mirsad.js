@@ -1,6 +1,7 @@
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 function markReady() {
-  document.documentElement?.setAttribute("data-marsad-extension", EXTENSION_VERSION);
+  if (!document.documentElement) { setTimeout(markReady, 0); return; }
+  document.documentElement.setAttribute("data-marsad-extension", EXTENSION_VERSION);
 }
 markReady();
 

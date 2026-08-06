@@ -118,7 +118,7 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     root = Path(__file__).resolve().parents[1] / "browser-extension"
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"] == 3
-    assert manifest["version"] == "0.2.0"
+    assert manifest["version"] == "0.2.1"
     assert set(manifest["permissions"]) == {"tabs", "storage", "scripting"}
     assert set(manifest["host_permissions"]) == {
         "https://market-platform-5.onrender.com/*",
@@ -141,3 +141,5 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     assert "diagnostics" in sahm
     assert "semanticInput" in sahm
     assert "submit.click()" not in sahm
+    assert "setInterval(publishSnapshot,10000)" in sahm
+    assert "portfolio_captured_at" in background

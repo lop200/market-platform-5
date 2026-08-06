@@ -26,7 +26,8 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (message.type === "MARSAD_PING") {
       const tabs = await tabsFor(SAHM);
       const probe = tabs[0] ? await send(tabs[0].id, {type: "PING_SAHM"}) : null;
-      reply({ connected: !!probe?.ok, label: probe?.ok ? "الإضافة متصلة بتبويب سهم" : tabs.length ? "حدّث تبويب سهم" : "افتح منصة سهم", snapshot: probe?.snapshot || null });
+      const stored = await chrome.storage.local.get("latestSahmSnapshot");
+      reply({ connected: !!probe?.ok, label: probe?.ok ? "الإضافة متصلة بتبويب سهم" : tabs.length ? "حدّث تبويب سهم" : "افتح منصة سهم", snapshot: stored.latestSahmSnapshot || probe?.snapshot || null });
       return;
     }
     if (message.type === "CONNECT_SAHM") {
@@ -38,15 +39,30 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         if (!probe?.ok) await new Promise(resolve => setTimeout(resolve, 400));
       }
       const latestSahmSnapshot = probe?.snapshot || null;
+      const stored = await chrome.storage.local.get("latestSahmSnapshot");
+      const displaySnapshot = stored.latestSahmSnapshot || latestSahmSnapshot;
       reply({
         connected: latestSahmSnapshot?.bridge_ready === true,
         label: latestSahmSnapshot?.login_status === "logged_in" ? "متصل" : latestSahmSnapshot?.login_status === "logged_out" ? "متصل — سجّل الدخول في سهم" : probe?.ok ? "متصل — حالة الدخول غير مؤكدة" : "تعذر تشغيل الإضافة داخل تبويب سهم",
-        snapshot: latestSahmSnapshot || null
+        snapshot: displaySnapshot || null
       });
       return;
     }
     if (message.type === "SAHM_SNAPSHOT") {
-      const snapshot = {...message.snapshot, tab_id: sender.tab?.id, received_at: new Date().toISOString()};
+      const stored = await chrome.storage.local.get("latestSahmSnapshot");
+      const previous = stored.latestSahmSnapshot || {};
+      const previousAge = Date.now() - Date.parse(previous.portfolio_captured_at || previous.captured_at || 0);
+      const mayReusePortfolio = message.snapshot?.login_status !== "logged_out" && previousAge < 5 * 60 * 1000;
+      const hasPortfolio = message.snapshot?.cash != null || message.snapshot?.buying_power != null || (message.snapshot?.positions || []).length > 0;
+      const snapshot = {
+        ...message.snapshot,
+        cash: message.snapshot?.cash ?? (mayReusePortfolio ? previous.cash : null),
+        buying_power: message.snapshot?.buying_power ?? (mayReusePortfolio ? previous.buying_power : null),
+        positions: (message.snapshot?.positions || []).length ? message.snapshot.positions : (mayReusePortfolio ? previous.positions || [] : []),
+        portfolio_captured_at: hasPortfolio ? message.snapshot.captured_at : (mayReusePortfolio ? previous.portfolio_captured_at || previous.captured_at : null),
+        tab_id: sender.tab?.id,
+        received_at: new Date().toISOString()
+      };
       await chrome.storage.local.set({ latestSahmSnapshot: snapshot });
       await routeToMarsad({ type: "SAHM_SNAPSHOT", snapshot });
       reply({ ok: true });
