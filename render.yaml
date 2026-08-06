@@ -127,6 +127,10 @@ services:
         value: "1"
       - key: MAX_PRICE_SOURCE_DIVERGENCE_PCT
         value: "1"
+      - key: MIN_RISK_REWARD
+        value: "1.25"
+      - key: MIN_STRATEGY_MATCH_PCT
+        value: "50"
       - key: MIN_TARGET_PROBABILITY_PCT
         value: "1"
       - key: MAX_SPREAD_TO_TARGET_PCT

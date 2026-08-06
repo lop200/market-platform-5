@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db.models import StockCandidate, StockOpportunity, TradeIntent, TradingAuditLog
 from app.options.market_clock import market_session
+from app.trading.fees import estimate_sahm_us_stock_round_trip_fees
 from app.trading.schemas import IntentSizingRequest
 
 
@@ -164,6 +165,7 @@ def create_trade_intent(
                 "scorecard": analysis.get("scorecard") or {},
                 "indicators": analysis.get("indicators") or {},
                 "time_estimate": analysis.get("time_estimate") or {},
+                "probabilities": analysis.get("probabilities") or {},
                 "earnings": analysis.get("earnings") or analysis.get("earnings_context") or {},
                 "news": analysis.get("news_context") or {},
                 "warnings": analysis.get("warnings") or analysis.get("risk_warnings") or [],
@@ -192,6 +194,15 @@ def intent_payload(intent: TradeIntent, now: datetime | None = None) -> dict:
     cost = float(intent.limit_price) * intent.quantity * units
     profit = abs(float(intent.take_profit) - float(intent.limit_price)) * intent.quantity * units
     loss = abs(float(intent.limit_price) - float(intent.stop_loss)) * intent.quantity * units
+    fees = (
+        estimate_sahm_us_stock_round_trip_fees(
+            float(intent.limit_price), float(intent.take_profit), intent.quantity
+        )
+        if intent.instrument_type == "stock" else
+        {"total_usd": 0.0, "buy_usd": 0.0, "sell_usd": 0.0, "vat_usd": 0.0, "estimated": True}
+    )
+    net_profit = profit - float(fees["total_usd"])
+    cost = float(intent.limit_price) * intent.quantity * units
     return {
         "id": str(intent.id), "idempotency_key": intent.idempotency_key,
         "instrument_type": intent.instrument_type, "symbol": intent.symbol,
@@ -207,7 +218,12 @@ def intent_payload(intent: TradeIntent, now: datetime | None = None) -> dict:
         "status": "expired" if expired else intent.status, "decision": intent.decision,
         "reason_ar": intent.reason_ar, "cancellation_condition_ar": intent.cancellation_condition_ar,
         "estimated_cost_usd": round(cost, 2), "estimated_profit_usd": round(profit, 2),
-        "estimated_loss_usd": round(loss, 2), "execution_allowed": not expired and intent.status == "ready",
+        "estimated_loss_usd": round(loss, 2),
+        "estimated_fees_usd": fees,
+        "estimated_net_profit_usd": round(net_profit, 2),
+        "estimated_net_target_return_pct": round(net_profit / cost * 100, 2) if cost else 0.0,
+        "target_touch_probability_pct": (intent.payload_json or {}).get("analysis", {}).get("probabilities", {}).get("target_1"),
+        "execution_allowed": not expired and intent.status == "ready" and net_profit > 0,
         "confirmation_required": True, "payload": intent.payload_json or {},
     }
 
@@ -222,7 +238,7 @@ def size_intent(
 ) -> dict:
     """Size by both available cash and loss-at-stop; the smaller limit wins."""
     payload = intent_payload(intent, now=now)
-    if not payload["execution_allowed"]:
+    if payload["status"] != "ready":
         raise HTTPException(409, "انتهت صلاحية الفرصة؛ أعد التحليل قبل حساب الحجم.")
     units = 100 if intent.instrument_type == "option" else 1
     available = min(float(request.buying_power), float(settings.trading_max_order_value_usd))

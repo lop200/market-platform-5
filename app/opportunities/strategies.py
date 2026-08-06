@@ -202,6 +202,7 @@ def select_strategy(
         classification_ar=_classification(score),
         setup_class_ar=setup_class,
         checks=checks,
+        valid_minutes=min(choice.valid_minutes, 5) if price <= 5 else choice.valid_minutes,
     )
 
 

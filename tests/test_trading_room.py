@@ -73,6 +73,10 @@ def test_trading_room_is_rtl_responsive_and_live_execution_is_disabled():
     assert "symbolCatalog" in html
     assert "/api/v1/opportunities/scans" in html
     assert "احسب الكمية من رصيد سهم" in html
+    assert "renderObservation" in html
+    assert "صافي الربح المقدر" in html
+    assert "احتمال لمس الهدف" in html
+    assert "?refresh=true" in html
     assert "@media(max-width:760px)" in html
     assert 'href="/trading-room"' in TestClient(app).get("/").text
 

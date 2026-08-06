@@ -52,6 +52,8 @@ def test_temporal_trade_intent_is_deterministic_after_stock_gate(db_session):
     assert payload["signal_age_seconds"] == 2
     assert payload["execution_allowed"] is True
     assert payload["confirmation_required"] is True
+    assert payload["estimated_fees_usd"]["total_usd"] > 0
+    assert payload["estimated_net_profit_usd"] < payload["estimated_profit_usd"]
     assert db_session.query(TradingAuditLog).filter_by(event_type="intent_created").count() == 1
 
 
@@ -112,6 +114,24 @@ def test_intent_sizing_uses_smaller_cash_and_stop_risk_limit(db_session):
     assert payload["estimated_loss_usd"] == 99.0
     assert payload["payload"]["sizing"]["estimated_only"] is True
     assert payload["payload"]["analysis"]["trend"] is None
+    assert payload["estimated_net_profit_usd"] > 0
+
+
+def test_portfolio_sizing_can_rescue_a_one_share_plan_that_does_not_cover_fees(db_session):
+    created = create_trade_intent(db_session, valid_analysis(), settings(), now=NOW)
+    created.quantity = 1
+    created.take_profit = 101.5
+    db_session.commit()
+    assert intent_payload(created, now=NOW)["execution_allowed"] is False
+    resized = size_intent(
+        db_session,
+        created,
+        IntentSizingRequest(buying_power=10_000, risk_pct=1),
+        settings(trading_max_order_value_usd=5_000),
+        now=NOW,
+    )
+    assert resized["quantity"] == 44
+    assert resized["execution_allowed"] is True
 
 
 def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
