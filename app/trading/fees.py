@@ -11,8 +11,9 @@ def estimate_sahm_us_stock_round_trip_fees(
     quantity: int,
     *,
     vat_pct: float = 15.0,
+    conservative_round_trip_floor_usd: float = 4.0,
 ) -> dict:
-    """Deterministic estimate from Sahm's published U.S. stock fee schedule."""
+    """Deterministic schedule estimate with a conservative observed-cost floor."""
     if entry_price <= 0 or exit_price <= 0 or quantity <= 0:
         return {"total_usd": 0.0, "buy_usd": 0.0, "sell_usd": 0.0, "vat_usd": 0.0}
 
@@ -37,11 +38,16 @@ def estimate_sahm_us_stock_round_trip_fees(
     vat = (buy_before_vat + sell_before_vat) * vat_pct / 100
     buy_total = round(buy_before_vat * (1 + vat_pct / 100), 2)
     sell_total = round(sell_before_vat * (1 + vat_pct / 100), 2)
+    schedule_total = round(buy_total + sell_total, 2)
+    conservative_total = max(schedule_total, round(conservative_round_trip_floor_usd, 2))
     return {
         "buy_usd": buy_total,
         "sell_usd": sell_total,
         "vat_usd": round(vat, 2),
-        "total_usd": round(buy_total + sell_total, 2),
+        "schedule_total_usd": schedule_total,
+        "total_usd": conservative_total,
+        "conservative_floor_usd": round(conservative_round_trip_floor_usd, 2),
+        "conservative_floor_applied": conservative_total > schedule_total,
         "schedule": "sahm_us_stock_reference",
         "estimated": True,
     }

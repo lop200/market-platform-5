@@ -23,14 +23,19 @@ const firstVisible = names => names.flatMap(all).find(visible) || null;
 const text = names => first(names)?.textContent?.trim() || "";
 const number = value => { const cleaned=String(value??"").replace(/[^0-9.-]/g, "");if(!cleaned||cleaned==="-"||cleaned===".")return null;const parsed=Number(cleaned);return Number.isFinite(parsed)?parsed:null; };
 const setInput = (element, value) => {
-  const Input = element.ownerDocument?.defaultView?.HTMLInputElement || HTMLInputElement;
+  const View = element.ownerDocument?.defaultView || window;
+  const Input = View.HTMLInputElement || HTMLInputElement;
   const setter = Object.getOwnPropertyDescriptor(Input.prototype, "value")?.set;
+  element.click(); element.focus();
   setter ? setter.call(element, String(value)) : element.value = String(value);
-  element.dispatchEvent(new Event("input", {bubbles: true}));
-  element.dispatchEvent(new Event("change", {bubbles: true}));
+  const inputEvent = View.InputEvent ? new View.InputEvent("input", {bubbles:true,inputType:"insertText",data:String(value)}) : new View.Event("input", {bubbles:true});
+  element.dispatchEvent(inputEvent);
+  element.dispatchEvent(new View.Event("change", {bubbles: true}));
+  element.dispatchEvent(new View.KeyboardEvent("keyup", {key:String(value).slice(-1),bubbles:true}));
 };
 const visible = element => !!(element && element.getClientRects().length && !element.disabled);
-const findButton = patterns => all("button,[role=button]").find(button => visible(button) && patterns.some(pattern => pattern.test((button.textContent || "").trim())));
+const findClickable = patterns => all('button,a,label,[role="button"],[role="tab"],[role="option"],li').find(element => visible(element) && patterns.some(pattern => pattern.test((element.textContent || "").trim())));
+const findButton = patterns => findClickable(patterns);
 const semanticInput = patterns => all('input:not([type="password"]):not([autocomplete="current-password"])').find(input => {const context=[input.name,input.id,input.placeholder,input.getAttribute("aria-label"),input.closest("label,fieldset,section,div")?.innerText?.slice(0,160)].filter(Boolean).join(" ");return visible(input)&&patterns.some(pattern=>pattern.test(context))})||null;
 function labeledNumber(patterns){for(const el of all("[data-testid],dt,dd,span,p,div")){const own=(el.childElementCount?"":el.textContent||"").trim();if(!own||own.length>80||!patterns.some(pattern=>pattern.test(own)))continue;for(const candidate of [el.nextElementSibling,el.parentElement,el.parentElement?.nextElementSibling]){const values=String(candidate?.innerText||candidate?.textContent||"").match(/-?[\d,]+(?:\.\d+)?/g)||[];for(const value of values){const parsed=number(value);if(parsed!==null)return parsed}}}return null}
 
@@ -94,6 +99,15 @@ function state(intent, status, message, extra={}) {
 }
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function typeSearch(element, value) {
+  setInput(element, ""); await pause(80);
+  let typed = "";
+  for (const character of String(value)) { typed += character; setInput(element, typed); await pause(55); }
+}
+function pressKey(element, key) {
+  const View = element.ownerDocument?.defaultView || window;
+  for (const type of ["keydown","keypress","keyup"]) element.dispatchEvent(new View.KeyboardEvent(type,{key,code:key,bubbles:true}));
+}
 async function waitForVisible(names, patterns, timeout=7000) {
   const until = Date.now() + timeout;
   while (Date.now() < until) {
@@ -132,16 +146,19 @@ async function ensureTradePanel() {
 
 async function chooseStock(search, intent) {
   const symbol = String(intent.underlying_symbol || intent.symbol).toUpperCase();
-  setInput(search, symbol);
-  await pause(500);
+  await typeSearch(search, symbol);
+  await pause(350);
   let exact = null;
-  for (let attempt=0; attempt<12 && !exact; attempt++) {
-    exact = all("button,a,[role=option],[role=row],li").find(el => visible(el) && (el.textContent || "").toUpperCase().split(/\s+/).includes(symbol));
+  const resultSelectors = '[role="option"],.n-base-select-option,[class*="search-result"],[class*="suggest"],[class*="dropdown"] li,li';
+  for (let attempt=0; attempt<16 && !exact; attempt++) {
+    const leaf = all(`${resultSelectors},${resultSelectors} span,${resultSelectors} div`).find(el => visible(el) && (el.textContent || "").trim().toUpperCase().split(/\s+/).includes(symbol));
+    exact = leaf?.closest('[role="option"],button,a,li,.n-base-select-option,[class*="search-result"],[class*="suggest"]') || leaf;
     if (!exact) await pause(250);
   }
-  if (!exact) throw new Error(`لم يظهر ${symbol} في نتائج بحث سهم؛ لم يُجهز الأمر`);
-  exact.click();
-  await pause(700);
+  if (exact) exact.click();
+  else { pressKey(search,"ArrowDown"); await pause(100); pressKey(search,"Enter"); }
+  await pause(900);
+  if (!(document.body?.innerText || "").toUpperCase().includes(symbol) && String(search.value||"").toUpperCase() !== symbol) throw new Error(`لم تستطع الإضافة تثبيت رمز ${symbol} داخل أمر سهم`);
 }
 
 async function selectBuyLimitAndProtection() {
@@ -168,11 +185,13 @@ async function findAndFill(intent) {
   let protection = await selectBuyLimitAndProtection();
   const quantity = await waitForVisible(SELECTORS.quantity, [/quantity|qty/i,/الكمية/i]), limit = await waitForVisible(SELECTORS.limit, [/limit|price/i,/السعر|محدد/i]);
   if (![quantity,limit].every(visible)) throw new Error("تعذر التحقق من حقلي الكمية وLimit؛ لم يُرسل أمر");
-  setInput(quantity, intent.quantity); setInput(limit, intent.limit_price);
+  setInput(quantity, intent.quantity); setInput(limit, intent.limit_price); await pause(250);
+  if (Math.trunc(number(quantity.value)||0)!==Math.trunc(Number(intent.quantity)) || Math.abs((number(limit.value)||0)-Number(intent.limit_price))>.011) throw new Error("رفض نموذج سهم تثبيت الكمية أو سعر Limit؛ لم يُرسل الأمر");
   if (!visible(protection.takeProfit)||!visible(protection.stopLoss)) { await pause(250); protection = await selectBuyLimitAndProtection(); }
   const {takeProfit,stopLoss} = protection;
   if (!visible(takeProfit)||!visible(stopLoss)) throw new Error("تم اختيار السهم، لكن حقول Attached Order للهدف والوقف لم تظهر؛ فعّلها في سهم ثم أعد التنفيذ");
-  setInput(takeProfit, intent.take_profit); setInput(stopLoss, intent.stop_loss);
+  setInput(takeProfit, intent.take_profit); setInput(stopLoss, intent.stop_loss); await pause(250);
+  if (Math.abs((number(takeProfit.value)||0)-Number(intent.take_profit))>.011 || Math.abs((number(stopLoss.value)||0)-Number(intent.stop_loss))>.011) throw new Error("رفض نموذج سهم تثبيت الهدف أو وقف الخسارة؛ لم يُرسل الأمر");
   return {quantity,limit,takeProfit,stopLoss};
 }
 

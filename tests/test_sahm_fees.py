@@ -13,4 +13,6 @@ def test_sahm_fee_estimate_includes_both_sides_regulatory_fees_and_vat():
 def test_low_price_commission_uses_low_price_schedule():
     low = estimate_sahm_us_stock_round_trip_fees(3, 3.25, 10)
     high = estimate_sahm_us_stock_round_trip_fees(30, 32.5, 10)
+    assert low["total_usd"] >= 4.0
+    assert low["conservative_floor_applied"] is True
     assert low["total_usd"] < high["total_usd"]

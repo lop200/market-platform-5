@@ -138,7 +138,7 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     root = Path(__file__).resolve().parents[1] / "browser-extension"
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"] == 3
-    assert manifest["version"] == "0.3.2"
+    assert manifest["version"] == "0.4.0"
     assert set(manifest["permissions"]) == {"tabs", "storage", "scripting"}
     assert set(manifest["host_permissions"]) == {
         "https://market-platform-5.onrender.com/*",
@@ -164,6 +164,10 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     assert "ensureTradePanel" in sahm
     assert "dedicatedSearch" in sahm
     assert ".some(visible)" in sahm
+    assert "InputEvent" in sahm
+    assert "typeSearch" in sahm
+    assert "n-base-select-option" in sahm
+    assert 'pressKey(search,"ArrowDown")' in sahm
     assert "chooseStock" in sahm
     assert "Attached Order" in sahm
     assert 'intent.instrument_type !== "stock"' in sahm
