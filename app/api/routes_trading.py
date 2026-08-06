@@ -52,6 +52,8 @@ def today_opportunities(db: Session = Depends(get_db)) -> dict:
             continue
         opportunities.append({
             "opportunity_id": str(row.id), "symbol": row.symbol,
+            "current_price": float(row.price_at_analysis),
+            "entry_zone": {"from": float(row.entry_from), "to": float(row.entry_to)},
             "direction": result.get("trend") or result.get("trade_direction") or "متذبذب",
             "decision": "دخول الآن" if row.status == "conditional_entry" else "انتظار",
             "historical_probability_pct": None,
@@ -59,6 +61,8 @@ def today_opportunities(db: Session = Depends(get_db)) -> dict:
             "holding_period": result.get("holding_window_ar") or "حسب التحليل",
             "entry_valid_until": row.expires_at.isoformat(),
             "score": row.overall_score,
+            "target_probability_pct": result.get("target_probability_pct"),
+            "valid_for_minutes": result.get("valid_for_minutes"),
         })
         if len(opportunities) == 3:
             break

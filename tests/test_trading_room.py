@@ -77,6 +77,10 @@ def test_trading_room_is_rtl_responsive_and_live_execution_is_disabled():
     assert "صافي الربح المقدر" in html
     assert "احتمال لمس الهدف" in html
     assert "?refresh=true" in html
+    assert "اقتناص حسب السيولة" in html
+    assert "sniperBudget" in html
+    assert 'all_prices:"false"' in html
+    assert "target_probability_pct" in html
     assert "@media(max-width:760px)" in html
     assert 'href="/trading-room"' in TestClient(app).get("/").text
 
@@ -89,6 +93,11 @@ def test_empty_room_never_invents_historical_probability(db_session):
     assert history["samples"] == 0
     assert history["target_probability_pct"] is None
     assert payload["live_execution_enabled"] is False
+    assert payload["risk_limits"] == {
+        "max_order_value_usd": 5_000,
+        "default_risk_pct": 1.0,
+        "style": "intraday_sniper",
+    }
 
 
 def test_fresh_paper_buy_creates_position_and_linked_oco(db_session):

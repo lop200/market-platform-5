@@ -461,6 +461,11 @@ def room_snapshot(db: Session, settings: Settings, now: datetime | None = None) 
     return {
         "mode": "paper", "live_execution_enabled": False,
         "confirm_mode_available": settings.trading_confirm_mode_enabled,
+        "risk_limits": {
+            "max_order_value_usd": settings.trading_max_order_value_usd,
+            "default_risk_pct": settings.default_risk_pct,
+            "style": "intraday_sniper",
+        },
         "bridge": {"marsad_status": "connected", "sahm_status": "connected" if bridge_fresh else "disconnected", "last_sync": bridge.synced_at.isoformat() if bridge else None, "age_seconds": round(bridge_age, 1) if bridge_age is not None else None},
         "account": display_account,
         "paper_account": paper_account,
