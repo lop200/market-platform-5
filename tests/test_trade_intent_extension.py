@@ -138,7 +138,7 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     root = Path(__file__).resolve().parents[1] / "browser-extension"
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"] == 3
-    assert manifest["version"] == "0.2.1"
+    assert manifest["version"] == "0.3.0"
     assert set(manifest["permissions"]) == {"tabs", "storage", "scripting"}
     assert set(manifest["host_permissions"]) == {
         "https://market-platform-5.onrender.com/*",
@@ -147,7 +147,7 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     sahm = (root / "content-sahm.js").read_text(encoding="utf-8")
     background = (root / "background.js").read_text(encoding="utf-8")
     mirsad = (root / "content-mirsad.js").read_text(encoding="utf-8")
-    assert "الانتقال إلى مراجعة سهم" in sahm
+    assert "إرسال الأمر الآن" in sahm
     assert "confirmMode" in sahm
     assert "document.cookie" not in sahm
     assert "Market Order" not in sahm
@@ -160,6 +160,10 @@ def test_manifest_v3_extension_uses_minimum_hosts_and_manual_confirmation():
     assert "bridge_ready" in sahm
     assert "diagnostics" in sahm
     assert "semanticInput" in sahm
-    assert "submit.click()" not in sahm
+    assert "verifyFilledOrder(intent)" in sahm
+    assert 'let stage="review"' in sahm
+    assert 'if(stage==="review")' in sahm
+    assert "finalSubmit.click()" in sahm
+    assert "password.value" not in sahm
     assert "setInterval(publishSnapshot,10000)" in sahm
     assert "portfolio_captured_at" in background

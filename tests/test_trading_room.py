@@ -65,8 +65,8 @@ def test_trading_room_is_rtl_responsive_and_live_execution_is_disabled():
     assert "مرصاد — واجهة التداول" in html
     assert "overflow-x:hidden" in html
     assert "PAPER MODE" in html
-    assert "تجهيز الأمر في سهم" in html
-    assert "الإرسال النهائي" in html
+    assert "تنفيذ في سهم" in html
+    assert "إرسال الأمر الآن" in html
     assert "ربط منصة سهم" in html
     assert 'window.open("https://app.sahmcapital.com/"' in html
     assert 'source:"marsad-page",type:"CONNECT_SAHM"' in html

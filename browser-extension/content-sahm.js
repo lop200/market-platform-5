@@ -106,18 +106,36 @@ async function findAndFill(intent) {
   return {quantity,limit,takeProfit,stopLoss};
 }
 
+function verifyFilledOrder(intent) {
+  const quantity = first(SELECTORS.quantity)||semanticInput([/quantity|qty/i,/الكمية/i]);
+  const limit = first(SELECTORS.limit)||semanticInput([/limit|price/i,/السعر|محدد/i]);
+  if (![quantity,limit].every(visible)) throw new Error("تعذر إعادة فحص الكمية وLimit؛ لم يُرسل الأمر");
+  if (Math.trunc(number(quantity.value) || 0) !== Math.trunc(Number(intent.quantity))) throw new Error("كمية سهم لا تطابق أمر مرصاد؛ توقف الإرسال");
+  if (Math.abs((number(limit.value) || 0) - Number(intent.limit_price)) > .011) throw new Error("سعر Limit لا يطابق أمر مرصاد؛ توقف الإرسال");
+  if (!(document.body?.innerText || "").toUpperCase().includes(String(intent.symbol).toUpperCase())) throw new Error("رمز السهم غير ظاهر في صفحة الأمر؛ توقف الإرسال");
+}
+
 function reviewOverlay(intent) {
   closeOverlay();
   const overlay = document.createElement("section");
   overlay.id = "marsad-confirm-overlay";
-  overlay.innerHTML = `<div class="marsad-review"><button class="marsad-close" aria-label="إغلاق">×</button><h2>معاينة مرصاد الأخيرة</h2><p class="marsad-warning">هذه تعبئة لأمر حقيقي. راجع القيم ثم أكمل Unlock Trade وكلمة مرور التداول والتأكيد داخل سهم بنفسك.</p><dl><dt>الأداة</dt><dd dir="ltr">${intent.symbol}</dd><dt>الكمية</dt><dd>${intent.quantity}</dd><dt>Buy Limit</dt><dd>${intent.limit_price}</dd><dt>Take Profit</dt><dd>${intent.take_profit}</dd><dt>Stop Loss</dt><dd>${intent.stop_loss}</dd><dt>صالح حتى</dt><dd>${new Date(intent.entry_valid_until).toLocaleString("ar-SA")}</dd></dl><label class="marsad-check"><input type="checkbox"> راجعت الرمز والكمية والأسعار وسأؤكد الأمر بنفسي داخل سهم</label><button class="marsad-confirm" disabled>الانتقال إلى مراجعة سهم</button><p class="marsad-note">الإضافة لا تضغط زر الإرسال النهائي، ولا تقرأ كلمة المرور أو OTP أو cookies.</p></div>`;
+  overlay.innerHTML = `<div class="marsad-review"><button class="marsad-close" aria-label="إغلاق">×</button><h2>تأكيد أمر سهم الحقيقي</h2><p class="marsad-warning">راجع القيم. بعد كلمة المرور ستضغط «إرسال الأمر الآن» وينفذ الأمر في سهم.</p><dl><dt>الأداة</dt><dd dir="ltr">${intent.symbol}</dd><dt>الكمية</dt><dd>${intent.quantity}</dd><dt>Buy Limit</dt><dd>${intent.limit_price}</dd><dt>Take Profit</dt><dd>${intent.take_profit}</dd><dt>Stop Loss</dt><dd>${intent.stop_loss}</dd><dt>صالح حتى</dt><dd>${new Date(intent.entry_valid_until).toLocaleString("ar-SA")}</dd></dl><button class="marsad-confirm">راجعت الأمر — فتح كلمة المرور</button><p class="marsad-note">لن تقرأ أو تحفظ الإضافة كلمة المرور أو OTP أو cookies. لا يوجد تنفيذ بلا ضغطك النهائي.</p></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector(".marsad-close").onclick=()=>{state(intent,"cancelled","ألغى المستخدم المعاينة");closeOverlay()};
-  const check=overlay.querySelector("input"),confirm=overlay.querySelector(".marsad-confirm");check.onchange=()=>confirm.disabled=!check.checked;
+  const confirm=overlay.querySelector(".marsad-confirm"),warning=overlay.querySelector(".marsad-warning"),reviewBox=overlay.querySelector(".marsad-review");let stage="review";
   confirm.onclick=async()=>{confirm.disabled=true;try{
     if(Date.parse(intent.entry_valid_until)<=Date.now())throw new Error("انتهى وقت الدخول؛ أعد التحليل");
-    const review=first(SELECTORS.review)||findButton([/review/i,/preview/i,/معاينة/,/مراجعة/,/unlock trade/i,/فتح التداول/i]);if(review){review.click();await new Promise(resolve=>setTimeout(resolve,700));}
-    state(intent,"awaiting_user_confirmation","أكمل Unlock Trade وكلمة مرور التداول والتأكيد النهائي داخل سهم؛ لم ترسل الإضافة الأمر",{filled_quantity:0});closeOverlay();setTimeout(publishSnapshot,1500);
+    if(stage==="review"){
+      verifyFilledOrder(intent);
+      const review=first(SELECTORS.review)||findButton([/review/i,/preview/i,/معاينة/,/مراجعة/,/unlock trade/i,/فتح التداول/i]);
+      if(!review)throw new Error("لم يظهر زر Review أو Unlock Trade؛ لم يُرسل الأمر");
+      review.click();await new Promise(resolve=>setTimeout(resolve,700));
+      stage="submit";overlay.style.cssText="place-items:end start;background:transparent;pointer-events:none";reviewBox.style.cssText="width:min(390px,calc(100vw - 28px));pointer-events:auto";warning.textContent="أدخل كلمة مرور التداول في سهم، ثم اضغط الزر الأخضر هنا.";confirm.textContent="إرسال الأمر الآن";confirm.disabled=false;
+      state(intent,"awaiting_user_confirmation","أدخل كلمة مرور التداول ثم اضغط إرسال الأمر الآن",{filled_quantity:0});return;
+    }
+    const finalSubmit=first(SELECTORS.submit)||findButton([/^place order$/i,/^submit order$/i,/^إرسال الأمر$/,/^تأكيد الشراء$/,/^تنفيذ الأمر$/]);
+    if(!finalSubmit)throw new Error("أكمل كلمة المرور وUnlock Trade حتى يظهر زر إرسال الأمر");
+    finalSubmit.click();state(intent,"submitted","تم ضغط إرسال الأمر في سهم؛ تتم مراقبة حالته",{filled_quantity:0});closeOverlay();setTimeout(publishSnapshot,1500);
   }catch(error){state(intent,"error",error.message);confirm.disabled=false;}}
 }
 
