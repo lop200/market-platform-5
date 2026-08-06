@@ -1,10 +1,10 @@
 const SELECTORS = {
   loggedIn: ['[data-testid="account-menu"]','[data-testid="portfolio"]','a[href*="portfolio"]'],
   search: ['input[data-testid="symbol-search"]','input[placeholder*="Symbol" i]','input[placeholder*="Ticker" i]','input[placeholder*="Search" i]','input[placeholder*="رمز"]','input[placeholder*="بحث"]','input[type="search"]'],
-  quantity: ['input[data-testid="order-quantity"]','input[name="quantity"]','input[name*="qty" i]','input[aria-label*="Quantity" i]','input[placeholder*="Quantity" i]','input[aria-label*="الكمية"]'],
-  limit: ['input[data-testid="limit-price"]','input[name="limitPrice"]','input[name*="price" i]','input[aria-label*="Limit" i]','input[placeholder*="Price" i]'],
-  takeProfit: ['input[data-testid="take-profit"]','input[name="takeProfit"]','input[aria-label*="Take Profit" i]'],
-  stopLoss: ['input[data-testid="stop-loss"]','input[name="stopLoss"]','input[aria-label*="Stop Loss" i]'],
+  quantity: ['input[data-testid="order-quantity"]','input[name="quantity"]','input[name*="qty" i]','input[aria-label*="Quantity" i]','input[placeholder*="Quantity" i]','input[aria-label*="الكمية"]','input[placeholder*="الكمية"]'],
+  limit: ['input[data-testid="limit-price"]','input[name="limitPrice"]','input[name*="price" i]','input[aria-label*="Limit" i]','input[placeholder*="Price" i]','input[placeholder="أدخل السعر"]'],
+  takeProfit: ['input[data-testid="take-profit"]','input[name="takeProfit"]','input[aria-label*="Take Profit" i]','input[placeholder*="السعر المستهدف"]','input[placeholder*="جني الأرباح"]'],
+  stopLoss: ['input[data-testid="stop-loss"]','input[name="stopLoss"]','input[aria-label*="Stop Loss" i]','input[placeholder*="سعر الإيقاف"]','input[placeholder*="وقف الخسارة"]'],
   review: ['button[data-testid="review-order"]','button[data-testid="preview-order"]'],
   submit: ['button[data-testid="place-order"]','button[data-testid="submit-order"]'],
   cash: ['[data-testid="cash-balance"]','[data-testid="cash"]','[data-testid*="cash" i]'],
@@ -19,16 +19,18 @@ let rootsCache={at:0,value:[document]};
 const roots = () => { if(Date.now()-rootsCache.at<500)return rootsCache.value;const found=[document];for(let i=0;i<found.length;i++){for(const el of found[i].querySelectorAll?.("*")||[]){if(el.shadowRoot)found.push(el.shadowRoot);if(el.tagName==="IFRAME"){try{if(el.contentDocument)found.push(el.contentDocument)}catch{}}}}rootsCache={at:Date.now(),value:found};return found; };
 const all = selector => roots().flatMap(root => {try{return [...root.querySelectorAll(selector)]}catch{return []}});
 const first = names => names.flatMap(all).find(Boolean) || null;
+const firstVisible = names => names.flatMap(all).find(visible) || null;
 const text = names => first(names)?.textContent?.trim() || "";
 const number = value => { const cleaned=String(value??"").replace(/[^0-9.-]/g, "");if(!cleaned||cleaned==="-"||cleaned===".")return null;const parsed=Number(cleaned);return Number.isFinite(parsed)?parsed:null; };
 const setInput = (element, value) => {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  const Input = element.ownerDocument?.defaultView?.HTMLInputElement || HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(Input.prototype, "value")?.set;
   setter ? setter.call(element, String(value)) : element.value = String(value);
   element.dispatchEvent(new Event("input", {bubbles: true}));
   element.dispatchEvent(new Event("change", {bubbles: true}));
 };
 const visible = element => !!(element && element.getClientRects().length && !element.disabled);
-const findButton = patterns => all("button,[role=button]").find(button => visible(button) && patterns.some(pattern => pattern.test(button.textContent || "")));
+const findButton = patterns => all("button,[role=button]").find(button => visible(button) && patterns.some(pattern => pattern.test((button.textContent || "").trim())));
 const semanticInput = patterns => all('input:not([type="password"]):not([autocomplete="current-password"])').find(input => {const context=[input.name,input.id,input.placeholder,input.getAttribute("aria-label"),input.closest("label,fieldset,section,div")?.innerText?.slice(0,160)].filter(Boolean).join(" ");return visible(input)&&patterns.some(pattern=>pattern.test(context))})||null;
 function labeledNumber(patterns){for(const el of all("[data-testid],dt,dd,span,p,div")){const own=(el.childElementCount?"":el.textContent||"").trim();if(!own||own.length>80||!patterns.some(pattern=>pattern.test(own)))continue;for(const candidate of [el.nextElementSibling,el.parentElement,el.parentElement?.nextElementSibling]){const values=String(candidate?.innerText||candidate?.textContent||"").match(/-?[\d,]+(?:\.\d+)?/g)||[];for(const value of values){const parsed=number(value);if(parsed!==null)return parsed}}}return null}
 
@@ -53,9 +55,9 @@ function snapshot() {
   const cash = number(text(SELECTORS.cash)) ?? labeledNumber([/^cash$/i,/cash balance/i,/النقد/i,/الرصيد النقدي/i]);
   const buyingPower = number(text(SELECTORS.buyingPower)) ?? labeledNumber([/buying power/i,/available to trade/i,/purchasing power/i,/القوة الشرائية/i,/متاح للتداول/i]);
   const positions = rowsFor(SELECTORS.positionRows, "positions");
-  const searchField = first(SELECTORS.search) || semanticInput([/symbol|ticker|search/i,/رمز|بحث/i]);
-  const quantityField = first(SELECTORS.quantity) || semanticInput([/quantity|qty/i,/الكمية/i]);
-  const limitField = first(SELECTORS.limit) || semanticInput([/limit|price/i,/السعر|محدد/i]);
+  const searchField = firstVisible(SELECTORS.search) || semanticInput([/symbol|ticker|search/i,/رمز|بحث/i]);
+  const quantityField = firstVisible(SELECTORS.quantity) || semanticInput([/quantity|qty/i,/الكمية/i]);
+  const limitField = firstVisible(SELECTORS.limit) || semanticInput([/limit|price/i,/السعر|محدد/i]);
   return {
     bridge_ready: true,
     login_status: loginStatus,
@@ -91,24 +93,79 @@ function state(intent, status, message, extra={}) {
   chrome.runtime.sendMessage({type: "EXECUTION_STATE", idempotency_key: intent.idempotency_key, state: {status, message, idempotency_key: intent.idempotency_key, at: new Date().toISOString(), ...extra}});
 }
 
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function waitForVisible(names, patterns, timeout=7000) {
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    const match = firstVisible(names) || semanticInput(patterns);
+    if (match) return match;
+    await pause(250);
+  }
+  return null;
+}
+
+async function ensureTradePanel() {
+  let search = firstVisible(SELECTORS.search) || semanticInput([/symbol|ticker|search/i,/رمز|بحث/i]);
+  if (search) return search;
+  const skip = findButton([/^skip$/i,/^تخطي$/,/^got it$/i,/^فهمت$/]);
+  if (skip) { skip.click(); await pause(250); }
+  const trade = findButton([/^trade$/i,/^تداول$/]);
+  if (!trade) throw new Error("لم يظهر زر Trade في صفحة سهم؛ افتح صفحة السوق ثم أعد التنفيذ");
+  trade.click();
+  search = await waitForVisible(SELECTORS.search, [/symbol|ticker|search/i,/رمز|بحث/i]);
+  if (!search) throw new Error("فتحت الإضافة لوحة Trade لكن نموذج الأمر لم يظهر؛ أغلق الجولة الإرشادية في سهم وأعد التنفيذ");
+  return search;
+}
+
+async function chooseStock(search, intent) {
+  const symbol = String(intent.underlying_symbol || intent.symbol).toUpperCase();
+  setInput(search, symbol);
+  await pause(500);
+  let exact = null;
+  for (let attempt=0; attempt<12 && !exact; attempt++) {
+    exact = all("button,a,[role=option],[role=row],li").find(el => visible(el) && (el.textContent || "").toUpperCase().split(/\s+/).includes(symbol));
+    if (!exact) await pause(250);
+  }
+  if (!exact) throw new Error(`لم يظهر ${symbol} في نتائج بحث سهم؛ لم يُجهز الأمر`);
+  exact.click();
+  await pause(700);
+}
+
+async function selectBuyLimitAndProtection() {
+  const buy = findButton([/^buy$/i,/^شراء$/]);
+  if (buy) { buy.click(); await pause(150); }
+  const limitType = findButton([/^limit price$/i,/^limit$/i,/^سعر محدد$/]);
+  if (limitType) { limitType.click(); await pause(150); }
+  let takeProfit = firstVisible(SELECTORS.takeProfit)||semanticInput([/take profit|target/i,/جني الأرباح|السعر المستهدف|الهدف/i]);
+  let stopLoss = firstVisible(SELECTORS.stopLoss)||semanticInput([/stop loss|stop price/i,/وقف الخسارة|سعر الإيقاف/i]);
+  if (!takeProfit || !stopLoss) {
+    const attachedLabel = all('button,label,span,div,[role="switch"],[role="checkbox"]').find(el => visible(el) && /attached order|oco|أمر مرفق|الأمر المرفق|الأوامر المرفقة|إرفاق أمر/i.test((el.childElementCount ? "" : el.textContent)||"").trim());
+    const attached = attachedLabel?.closest('button,label,[role="switch"],[role="checkbox"]') || attachedLabel?.parentElement?.querySelector('button,input,[role="switch"],[role="checkbox"]') || attachedLabel;
+    if (attached) { attached.click(); await pause(350); }
+    takeProfit = firstVisible(SELECTORS.takeProfit)||semanticInput([/take profit|target/i,/جني الأرباح|السعر المستهدف|الهدف/i]);
+    stopLoss = firstVisible(SELECTORS.stopLoss)||semanticInput([/stop loss|stop price/i,/وقف الخسارة|سعر الإيقاف/i]);
+  }
+  return {takeProfit,stopLoss};
+}
+
 async function findAndFill(intent) {
-  const search = first(SELECTORS.search) || semanticInput([/symbol|ticker|search/i,/رمز|بحث/i]);
-  if (!search) throw new Error("لم تتعرف الإضافة على خانة البحث في نسخة سهم الحالية");
-  setInput(search, intent.symbol);
-  await new Promise(resolve => setTimeout(resolve, 900));
-  const exact = all("button,a,[role=option]").find(el => visible(el) && (el.textContent || "").trim().toUpperCase().includes(intent.symbol));
-  if (exact) exact.click();
-  await new Promise(resolve => setTimeout(resolve, 900));
-  const quantity = first(SELECTORS.quantity)||semanticInput([/quantity|qty/i,/الكمية/i]), limit = first(SELECTORS.limit)||semanticInput([/limit|price/i,/السعر|محدد/i]), takeProfit = first(SELECTORS.takeProfit)||semanticInput([/take profit|target/i,/جني الأرباح|الهدف/i]), stopLoss = first(SELECTORS.stopLoss)||semanticInput([/stop loss|stop price/i,/وقف الخسارة/i]);
+  if (intent.instrument_type !== "stock") throw new Error("التنفيذ الحي للعقود غير مفعّل؛ استخدم معاينة Paper للعقد");
+  const search = await ensureTradePanel();
+  await chooseStock(search, intent);
+  let protection = await selectBuyLimitAndProtection();
+  const quantity = await waitForVisible(SELECTORS.quantity, [/quantity|qty/i,/الكمية/i]), limit = await waitForVisible(SELECTORS.limit, [/limit|price/i,/السعر|محدد/i]);
   if (![quantity,limit].every(visible)) throw new Error("تعذر التحقق من حقلي الكمية وLimit؛ لم يُرسل أمر");
   setInput(quantity, intent.quantity); setInput(limit, intent.limit_price);
-  if (visible(takeProfit)&&visible(stopLoss)) { setInput(takeProfit, intent.take_profit); setInput(stopLoss, intent.stop_loss); }
+  if (!visible(protection.takeProfit)||!visible(protection.stopLoss)) { await pause(250); protection = await selectBuyLimitAndProtection(); }
+  const {takeProfit,stopLoss} = protection;
+  if (!visible(takeProfit)||!visible(stopLoss)) throw new Error("تم اختيار السهم، لكن حقول Attached Order للهدف والوقف لم تظهر؛ فعّلها في سهم ثم أعد التنفيذ");
+  setInput(takeProfit, intent.take_profit); setInput(stopLoss, intent.stop_loss);
   return {quantity,limit,takeProfit,stopLoss};
 }
 
 function verifyFilledOrder(intent) {
-  const quantity = first(SELECTORS.quantity)||semanticInput([/quantity|qty/i,/الكمية/i]);
-  const limit = first(SELECTORS.limit)||semanticInput([/limit|price/i,/السعر|محدد/i]);
+  const quantity = firstVisible(SELECTORS.quantity)||semanticInput([/quantity|qty/i,/الكمية/i]);
+  const limit = firstVisible(SELECTORS.limit)||semanticInput([/limit|price/i,/السعر|محدد/i]);
   if (![quantity,limit].every(visible)) throw new Error("تعذر إعادة فحص الكمية وLimit؛ لم يُرسل الأمر");
   if (Math.trunc(number(quantity.value) || 0) !== Math.trunc(Number(intent.quantity))) throw new Error("كمية سهم لا تطابق أمر مرصاد؛ توقف الإرسال");
   if (Math.abs((number(limit.value) || 0) - Number(intent.limit_price)) > .011) throw new Error("سعر Limit لا يطابق أمر مرصاد؛ توقف الإرسال");
@@ -127,13 +184,13 @@ function reviewOverlay(intent) {
     if(Date.parse(intent.entry_valid_until)<=Date.now())throw new Error("انتهى وقت الدخول؛ أعد التحليل");
     if(stage==="review"){
       verifyFilledOrder(intent);
-      const review=first(SELECTORS.review)||findButton([/review/i,/preview/i,/معاينة/,/مراجعة/,/unlock trade/i,/فتح التداول/i]);
+      const review=firstVisible(SELECTORS.review)||findButton([/review/i,/preview/i,/معاينة/,/مراجعة/,/unlock trade/i,/فتح التداول/i]);
       if(!review)throw new Error("لم يظهر زر Review أو Unlock Trade؛ لم يُرسل الأمر");
       review.click();await new Promise(resolve=>setTimeout(resolve,700));
       stage="submit";overlay.style.cssText="place-items:end start;background:transparent;pointer-events:none";reviewBox.style.cssText="width:min(390px,calc(100vw - 28px));pointer-events:auto";warning.textContent="أدخل كلمة مرور التداول في سهم، ثم اضغط الزر الأخضر هنا.";confirm.textContent="إرسال الأمر الآن";confirm.disabled=false;
       state(intent,"awaiting_user_confirmation","أدخل كلمة مرور التداول ثم اضغط إرسال الأمر الآن",{filled_quantity:0});return;
     }
-    const finalSubmit=first(SELECTORS.submit)||findButton([/^place order$/i,/^submit order$/i,/^إرسال الأمر$/,/^تأكيد الشراء$/,/^تنفيذ الأمر$/]);
+    const finalSubmit=firstVisible(SELECTORS.submit)||findButton([/^place order$/i,/^submit order$/i,/^إرسال الأمر$/,/^تأكيد الشراء$/,/^تنفيذ الأمر$/]);
     if(!finalSubmit)throw new Error("أكمل كلمة المرور وUnlock Trade حتى يظهر زر إرسال الأمر");
     finalSubmit.click();state(intent,"submitted","تم ضغط إرسال الأمر في سهم؛ تتم مراقبة حالته",{filled_quantity:0});closeOverlay();setTimeout(publishSnapshot,1500);
   }catch(error){state(intent,"error",error.message);confirm.disabled=false;}}

@@ -17,7 +17,10 @@ async function routeToMarsad(message) {
 
 async function sahmTab() {
   const tabs = await tabsFor(SAHM);
-  if (tabs.length) return tabs[0];
+  if (tabs.length) {
+    const {latestSahmSnapshot} = await chrome.storage.local.get("latestSahmSnapshot");
+    return tabs.find(tab => tab.id === latestSahmSnapshot?.tab_id) || tabs.find(tab => tab.active) || tabs[0];
+  }
   return chrome.tabs.create({ url: "https://app.sahmcapital.com/", active: true });
 }
 
@@ -81,7 +84,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if (Date.parse(intent.entry_valid_until) <= Date.now()) throw new Error("انتهى وقت الدخول؛ أعد التحليل");
       const key = `intent:${intent.idempotency_key}`;
       const existing = await chrome.storage.local.get(key);
-      if (existing[key]) throw new Error("تم استقبال هذا الأمر سابقًا؛ مُنع التكرار");
+      const previousState = existing[key]?.status || existing[key]?.state;
+      const receivedAge = Date.now() - Date.parse(existing[key]?.received_at || 0);
+      if (["awaiting_user_confirmation","submitted","open","partially_filled","filled"].includes(previousState) || (previousState === "received" && receivedAge < 30000)) {
+        throw new Error("هذا الأمر قيد التجهيز أو أُرسل سابقًا؛ مُنع التكرار");
+      }
       await chrome.storage.local.set({[key]: {state: "received", received_at: new Date().toISOString()}});
       const tab = await sahmTab();
       await chrome.tabs.update(tab.id, { active: true });
@@ -90,7 +97,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         accepted = await send(tab.id, { type: "PREPARE_TRADE", intent });
         if (!accepted) await new Promise(resolve => setTimeout(resolve, 500));
       }
-      if (!accepted?.ok) throw new Error(accepted?.error || "تعذر تجهيز الأمر داخل سهم");
+      if (!accepted?.ok) {
+        const error = accepted?.error || "تعذر تجهيز الأمر داخل سهم";
+        await chrome.storage.local.set({[key]: {state: "error", error, failed_at: new Date().toISOString()}});
+        throw new Error(error);
+      }
       reply({ ok: true });
       return;
     }
