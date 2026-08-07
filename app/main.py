@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api import routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_prices, routes_spx, routes_trading, routes_web
+from app.api import routes_cost, routes_dashboard, routes_debug, routes_lock, routes_opportunities, routes_prices, routes_spx, routes_web
 from app.config import get_settings
 from app.db.session import (
     database_backend,
@@ -94,7 +94,6 @@ app.include_router(routes_debug.router)
 app.include_router(routes_dashboard.router)
 app.include_router(routes_prices.router)
 app.include_router(routes_spx.router)
-app.include_router(routes_trading.router)
 app.include_router(routes_web.router)
 app.mount(
     "/static",

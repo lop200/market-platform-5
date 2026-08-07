@@ -53,6 +53,14 @@ def test_stock_page_keeps_best_option_in_the_same_analysis_page():
     assert "ranked_contracts" in html
 
 
+def test_trading_room_and_api_are_not_published():
+    paths = set(app.openapi()["paths"])
+    assert not any(path.startswith("/api/v1/trading") for path in paths)
+    response = TestClient(app).get("/trading-room")
+    assert response.status_code == 404
+    assert 'href="/trading-room"' not in TestClient(app).get("/").text
+
+
 def test_results_page_is_arabic_rtl_and_factual():
     response = TestClient(app).get("/results")
     assert response.status_code == 200

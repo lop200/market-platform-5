@@ -330,16 +330,6 @@ class Settings(BaseSettings):
     enable_self_audit_scheduler: bool = Field(default=True, alias="ENABLE_SELF_AUDIT_SCHEDULER")
     site_username: str = Field(default="lop", alias="SITE_USERNAME")
     access_code_main: str | None = Field(default=None, alias="ACCESS_CODE_MAIN")
-    trading_room_enabled: bool = Field(default=True, alias="TRADING_ROOM_ENABLED")
-    trading_paper_starting_cash: float = Field(default=100_000, alias="TRADING_PAPER_STARTING_CASH")
-    trading_max_data_age_seconds: int = Field(default=15, alias="TRADING_MAX_DATA_AGE_SECONDS")
-    trading_min_backtest_samples: int = Field(default=20, alias="TRADING_MIN_BACKTEST_SAMPLES")
-    trading_bridge_enabled: bool = Field(default=False, alias="TRADING_BRIDGE_ENABLED")
-    trading_bridge_token: str | None = Field(default=None, alias="TRADING_BRIDGE_TOKEN")
-    trading_max_order_value_usd: float = Field(default=5_000, alias="TRADING_MAX_ORDER_VALUE_USD")
-    trading_daily_loss_limit_usd: float = Field(default=1_000, alias="TRADING_DAILY_LOSS_LIMIT_USD")
-    trading_max_open_positions: int = Field(default=1, alias="TRADING_MAX_OPEN_POSITIONS")
-    trading_confirm_mode_enabled: bool = Field(default=False, alias="TRADING_CONFIRM_MODE_ENABLED")
 
     @property
     def sqlalchemy_url(self) -> str:
